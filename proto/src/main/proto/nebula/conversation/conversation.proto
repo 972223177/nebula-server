@@ -7,62 +7,81 @@ option java_package = "com.nebula.chat.conversation";
 
 import "nebula/group/group.proto";
 
+// ---- conversation/list ----
+// 获取会话列表请求
 message ConvListReq {
-  int32 limit = 1;
-  int64 cursor = 2;
+  int32 limit = 1;                    // 拉取条数上限
+  int64 cursor = 2;                   // 游标分页，基于会话最后更新时间
 }
 
+// 获取会话列表响应
 message ConvListResp {
-  repeated ConversationBrief conversations = 1;
-  bool has_more = 2;
+  repeated ConversationBrief conversations = 1; // 会话简要信息列表
+  bool has_more = 2;                            // 是否还有更多数据
 }
 
+// ---- conversation/create_group ----
+// 创建群聊请求
 message CreateGroupReq {
-  string name = 1;
-  repeated int64 member_uids = 2;
+  string name = 1;                    // 群名称
+  repeated int64 member_uids = 2;     // 初始成员 UID 列表
 }
 
+// 创建群聊响应
 message CreateGroupResp {
-  string conversation_id = 1;
-  string name = 2;
+  string conversation_id = 1;         // 新群会话ID
+  string name = 2;                    // 群名称
 }
 
+// ---- conversation/invite_member ----
+// 邀请成员加入群聊
 message InviteMemberReq {
-  string conversation_id = 1;
-  repeated int64 uids = 2;
+  string conversation_id = 1;         // 会话ID
+  repeated int64 uids = 2;            // 被邀请者 UID 列表
 }
 
+// ---- conversation/leave_group ----
+// 主动退出群聊
 message LeaveGroupReq {
-  string conversation_id = 1;
+  string conversation_id = 1;         // 会话ID
 }
 
+// ---- conversation/kick_member ----
+// 踢出群成员
 message KickMemberReq {
-  string conversation_id = 1;
-  int64 uid = 2;
+  string conversation_id = 1;         // 会话ID
+  int64 uid = 2;                      // 被踢成员 UID
 }
 
+// ---- conversation/edit_group_info ----
+// 编辑群资料（名称/头像）
 message EditGroupReq {
-  string conversation_id = 1;
-  optional string name = 2;
-  optional string avatar_url = 3;
+  string conversation_id = 1;         // 会话ID
+  optional string name = 2;           // 新群名称，不传则不修改
+  optional string avatar_url = 3;     // 新群头像 URL，不传则不修改
 }
 
+// ---- conversation/group_members ----
+// 获取群成员列表
 message GroupMembersReq {
-  string conversation_id = 1;
+  string conversation_id = 1;         // 会话ID
 }
 
+// 获取群成员列表响应
 message GroupMembersResp {
-  repeated com.nebula.chat.group.GroupMember members = 1;
+  repeated com.nebula.chat.group.GroupMember members = 1; // 群成员列表
 }
 
+// 会话简要信息
+// 未读数由客户端根据 last_read_msg_id 自行计算
 message ConversationBrief {
-  string conversation_id = 1;
-  string type = 2;
-  string name = 3;
-  string avatar_url = 4;
-  int64 last_message_id = 5;
-  string last_message_preview = 6;
-  int64 last_message_ts = 7;
-  int64 last_updated_at = 8;
-  int64 last_read_msg_id = 9;
+  string conversation_id = 1;         // 会话ID
+  string type = 2;                    // 会话类型：private / group
+  string name = 3;                    // 会话名称
+  string avatar_url = 4;              // 会话头像 URL
+  int64 last_message_id = 5;          // 最后一条消息 ID
+  string last_message_preview = 6;    // 最后一条消息的文本预览
+  int64 last_message_ts = 7;          // 最后一条消息的时间戳
+  int64 last_updated_at = 8;          // 会话最后更新时间
+  int64 last_read_msg_id = 9;         // 用户在此会话的最后已读消息 ID
 }

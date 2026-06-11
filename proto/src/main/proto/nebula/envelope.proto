@@ -7,40 +7,45 @@ option java_package = "com.nebula.chat";
 
 import "nebula/message_type.proto";
 
+// 通信方向枚举
 enum Direction {
-  DIRECTION_UNSPECIFIED = 0;
-  REQUEST = 1;
-  RESPONSE = 2;
-  PUSH = 3;
-  PING = 4;
-  PONG = 5;
+  DIRECTION_UNSPECIFIED = 0;  // 未知类型，不应使用
+  REQUEST = 1;                // 客户端 → 服务端：发起业务请求
+  RESPONSE = 2;               // 服务端 → 客户端：对请求的响应
+  PUSH = 3;                   // 服务端 → 客户端：服务器主动推送事件（如新消息、踢出通知）
+  PING = 4;                   // 客户端 → 服务端：心跳探测，保持连接活跃
+  PONG = 5;                   // 服务端 → 客户端：心跳应答
 }
 
+// 消息信封：双向流中所有消息的外层包装，用于区分通信方向与负载类型
 message Envelope {
-  Direction direction = 1;
-  string request_id = 2;
-  int32 protocol_version = 3;
+  Direction direction = 1;        // 通信方向，标识当前消息是请求、响应、推送还是心跳
+  string request_id = 2;          // 请求唯一ID，用于请求与响应的配对关联，推送和心跳时可为空
+  int32 protocol_version = 3;     // 协议版本号，初始值 = 1，用于后续协议升级的兼容性判断
   oneof payload {
-    Request request = 10;
-    Response response = 11;
-    Message message = 12;
+    Request request = 10;         // 客户端发起的请求负载
+    Response response = 11;       // 服务端返回的响应负载
+    Message message = 12;         // 服务端主动推送的消息负载（用于 PUSH 方向）
   }
 }
 
+// 请求消息：客户端发起的业务调用
 message Request {
-  string method = 1;
-  bytes params = 2;
+  string method = 1;              // 接口路由标识，格式为 "业务模块/接口名称"，如 "user/login"、"chat/send"
+  bytes params = 2;               // 请求参数，通过 method 找到对应的 protobuf 消息类型进行序列化/反序列化
 }
 
+// 响应消息：服务端对请求的应答
 message Response {
-  int32 code = 1;
-  string msg = 2;
-  string method = 3;
-  bytes result = 4;
+  int32 code = 1;                 // 响应状态码，200 表示成功，其他值为各类业务错误码
+  string msg = 2;                 // 响应附带的消息提示，成功时可为空，失败时描述错误原因
+  string method = 3;              // 原样返回请求的 method，方便客户端匹配请求与响应
+  bytes result = 4;               // 响应附带的数据负载，具体类型由 method 决定，反序列化方式与请求参数一致
 }
 
+// 推送消息：服务端主动下发给客户端的事件
 message Message {
-  MessageType messageType = 1;
-  string content = 2;
-  bytes payload = 3;
+  MessageType messageType = 1;    // 消息/事件类型，用于区分文本消息、系统通知、踢出等场景
+  string content = 2;             // 消息的文本内容，可以是聊天文本、JSON 字符串或通知文案
+  bytes payload = 3;              // 消息附带的额外结构化数据，根据 messageType 使用对应的 protobuf 类型解析
 }

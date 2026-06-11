@@ -5,58 +5,71 @@ package com.nebula.chat.friend;
 option java_multiple_files = true;
 option java_package = "com.nebula.chat.friend";
 
-import "nebula/common/common.proto";
-
+// ---- friend/add ----
+// 发送好友申请
 message FriendAddReq {
-  int64 to_uid = 1;
-  string message = 2;
+  int64 to_uid = 1;                   // 目标用户 UID
+  string message = 2;                 // 好友申请附言
 }
 
+// 好友申请响应
 message FriendAddResp {
-  int64 request_id = 1;
+  int64 request_id = 1;               // 好友申请 ID
 }
 
+// ---- friend/accept ----
+// 同意好友申请
 message FriendAcceptReq {
-  int64 request_id = 1;
+  int64 request_id = 1;               // 好友申请 ID
 }
 
+// ---- friend/reject ----
+// 拒绝好友申请
 message FriendRejectReq {
-  int64 request_id = 1;
+  int64 request_id = 1;               // 好友申请 ID
 }
 
+// ---- friend/delete ----
+// 删除好友
 message FriendDeleteReq {
-  int64 uid = 1;
+  int64 uid = 1;                      // 好友 UID
 }
 
-message FriendListReq {
-}
+// ---- friend/list ----
+// 获取好友列表
+message FriendListReq {}
 
+// 好友列表响应
 message FriendListResp {
-  repeated FriendBrief friends = 1;
+  repeated FriendBrief friends = 1;   // 好友简要信息列表
 }
 
+// 好友简要信息
 message FriendBrief {
-  int64 uid = 1;
-  string username = 2;
-  string display_name = 3;
-  string avatar_url = 4;
-  int32 status = 5;
-  int64 created_at = 6;
+  int64 uid = 1;                      // 好友 UID
+  string username = 2;                // 好友用户名
+  string display_name = 3;            // 好友显示昵称
+  string avatar_url = 4;              // 好友头像 URL
+  int32 status = 5;                   // 在线状态：0=离线 1=在线 2=隐藏
+  int64 created_at = 6;               // 成为好友的时间（毫秒时间戳）
 }
 
-message FriendRequestsReq {
-}
+// ---- friend/requests ----
+// 获取好友申请列表
+message FriendRequestsReq {}
 
+// 好友申请列表响应
 message FriendRequestsResp {
-  repeated FriendRequestItem requests = 1;
+  repeated FriendRequestItem requests = 1; // 好友申请列表
 }
 
+// 好友申请条目
 message FriendRequestItem {
-  int64 request_id = 1;
-  int64 from_uid = 2;
-  string from_username = 3;
-  string from_avatar = 4;
-  string message = 5;
-  string status = 6;
-  int64 created_at = 7;
+  int64 request_id = 1;               // 申请 ID
+  int64 from_uid = 2;                 // 申请人 UID
+  string from_username = 3;           // 申请人用户名
+  string from_avatar = 4;             // 申请人头像 URL
+  string message = 5;                 // 申请附言
+  string status = 6;                  // 申请状态：pending / accepted / rejected
+  int64 created_at = 7;               // 申请时间（毫秒时间戳）
 }

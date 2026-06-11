@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 4
-name: Core Proto Files Exist
+number: 5
+name: envelope.proto Message Definitions
 expected: |
-  3 proto files exist under `proto/src/main/proto/nebula/`: `envelope.proto`, `common/common.proto`, `message_type.proto`. All use correct java_package (com.nebula.chat).
+  `envelope.proto` contains Direction enum (UNSPECIFIED, REQUEST, RESPONSE, PUSH, PING, PONG) and messages: Envelope (direction, request_id, protocol_version, oneof payload), Request (method, params), Response (code, msg, method, result), Message (messageType, content, payload).
 awaiting: user response
 
 ## Tests
@@ -33,7 +33,10 @@ result: pass
 
 ### 4. Core Proto Files Exist
 expected: 3 proto files exist under `proto/src/main/proto/nebula/`: `envelope.proto`, `common/common.proto`, `message_type.proto`. All use correct java_package (com.nebula.chat).
-result: [pending]
+result: issue
+reported: "有生成对应的 java 代码，有个问题就是设计文档中的 proto，每条和对应的字段都有对应的中文注释的，我看本项目全部丢失了"
+severity: major
+fix: "已为全部 10 个 proto 文件添加中文注释（枚举值、消息、字段），编译验证通过"
 
 ### 5. envelope.proto Message Definitions
 expected: `envelope.proto` contains Direction enum (UNSPECIFIED, REQUEST, RESPONSE, PUSH, PING, PONG) and messages: Envelope (direction, request_id, protocol_version, oneof payload), Request (method, params), Response (code, msg, method, result), Message (messageType, content, payload).
@@ -71,8 +74,8 @@ result: [pending]
 
 total: 12
 passed: 2
-issues: 1
-pending: 9
+issues: 2
+pending: 8
 skipped: 0
 
 ## Gaps
@@ -83,3 +86,10 @@ skipped: 0
   severity: major
   test: 2
   fix: "root build.gradle.kts 和 proto/build.gradle.kts 均改用 alias(libs.plugins...)，javax-annotation-api 纳入 catalog，编译验证通过"
+
+- truth: "Proto 文件中每条消息、每个枚举值和每个字段均有中文注释"
+  status: fixed
+  reason: "User reported: 有生成对应的 java 代码，有个问题就是设计文档中的 proto，每条和对应的字段都有对应的中文注释的，我看本项目全部丢失了"
+  severity: major
+  test: 4
+  fix: "全部 10 个 proto 文件已添加中文注释（枚举值注释、消息注释、字段注释），编译验证通过"

@@ -6,34 +6,39 @@ option java_multiple_files = true;
 option java_package = "com.nebula.chat.message";
 
 import "nebula/message_type.proto";
-import "nebula/common/common.proto";
 
+// ---- message/pull ----
+// 拉取消息请求：客户端分页拉取会话历史消息
 message PullMessagesReq {
-  string conversation_id = 1;
-  int64 cursor = 2;
-  int32 limit = 3;
-  string direction = 4;
+  string conversation_id = 1;         // 会话ID
+  int64 cursor = 2;                   // 游标，基于消息 ID 的分页
+  int32 limit = 3;                    // 拉取条数上限
+  string direction = 4;               // 拉取方向："forward" 新消息 / "backward" 历史消息
 }
 
+// 拉取消息响应
 message PullMessagesResp {
-  repeated ChatMessage messages = 1;
-  bool has_more = 2;
+  repeated ChatMessage messages = 1;  // 消息列表
+  bool has_more = 2;                  // 是否还有更多数据
 }
 
+// 聊天消息结构
 message ChatMessage {
-  int64 msg_id = 1;
-  string conversation_id = 2;
-  int64 sender_uid = 3;
-  string sender_username = 4;
-  string sender_avatar = 5;
-  MessageType message_type = 6;
-  string content = 7;
-  bytes payload = 8;
-  int64 client_ts = 9;
-  int64 server_ts = 10;
+  int64 msg_id = 1;                   // 消息 ID
+  string conversation_id = 2;         // 所属会话ID
+  int64 sender_uid = 3;               // 发送者 UID
+  string sender_username = 4;         // 发送者用户名
+  string sender_avatar = 5;           // 发送者头像 URL
+  MessageType message_type = 6;       // 消息类型
+  string content = 7;                 // 消息文本内容
+  bytes payload = 8;                  // 消息附加数据
+  int64 client_ts = 9;                // 客户端发送时间戳（毫秒）
+  int64 server_ts = 10;               // 服务端接收时间戳（毫秒）
 }
 
+// ---- message/read ----
+// 已读报告请求：客户端上报已读到哪条消息
 message ReadReportReq {
-  string conversation_id = 1;
-  int64 last_read_msg_id = 2;
+  string conversation_id = 1;         // 会话ID
+  int64 last_read_msg_id = 2;         // 最后一条已读消息 ID
 }

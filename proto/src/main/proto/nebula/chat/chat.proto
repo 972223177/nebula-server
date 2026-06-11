@@ -7,16 +7,19 @@ option java_package = "com.nebula.chat.chat";
 
 import "nebula/message_type.proto";
 
+// ---- chat/send ----
+// 发送消息请求
 message SendMessageReq {
-  string conversation_id = 1;
-  MessageType message_type = 2;
-  string content = 3;
-  bytes payload = 4;
-  int64 client_ts = 5;
-  string client_message_id = 6;
+  string conversation_id = 1;         // 会话ID，标识消息所属会话
+  MessageType message_type = 2;       // 消息类型，如 TEXT、IMAGE 等
+  string content = 3;                 // 消息文本内容
+  bytes payload = 4;                  // 消息附带的结构化数据，根据 message_type 解析
+  int64 client_ts = 5;                // 客户端发送时间戳（毫秒），用于消息排序与去重
+  string client_message_id = 6;       // 客户端消息幂等标识（UUID），服务端用于防重试重复入库
 }
 
+// 发送消息响应
 message SendMessageResp {
-  int64 msg_id = 1;
-  int64 server_ts = 2;
+  int64 msg_id = 1;                   // 服务端分配的消息 ID
+  int64 server_ts = 2;                // 服务端接收时间戳（毫秒）
 }

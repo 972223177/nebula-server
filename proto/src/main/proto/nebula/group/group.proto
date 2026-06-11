@@ -5,11 +5,12 @@ package com.nebula.chat.group;
 option java_multiple_files = true;
 option java_package = "com.nebula.chat.group";
 
+// 群成员信息
 message GroupMember {
-  int64 uid = 1;
-  string username = 2;
-  string display_name = 3;
-  string avatar_url = 4;
-  string role = 5;
-  int64 joined_at = 6;
+  int64 uid = 1;                      // 成员 UID
+  string username = 2;                // 成员用户名
+  string display_name = 3;            // 成员显示昵称
+  string avatar_url = 4;              // 成员头像 URL
+  string role = 5;                    // 成员角色：owner / admin / member
+  int64 joined_at = 6;                // 加入时间（毫秒时间戳）
 }
