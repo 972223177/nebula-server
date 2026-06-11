@@ -2,17 +2,32 @@
 phase: 02-common-module-infrastructure-base
 plan: 01
 subsystem: infra
-tags: [gradle, hocon, logback, ssl, openssl]
-requires: []
+tags: [gradle, hocon, typesafe-config, hikaricp, mysql-connector, grpc, netty-tcnative, logback, ssl, openssl]
+requires:
+  - phase: 01-project-scaffolding-proto-definitions
+    provides: Gradle 子模块结构、Proto 定义、BizCode 枚举
 provides:
-  - Gradle Version Catalog with 6 new version declarations and 10 library references
-  - HOCON configuration file with 4 config sections (server/snowflake/database/ssl)
-  - OpenSSL 3.x self-signed certificate generation script
-  - Development and production logback configurations
-affects: [02-02, 02-03, 03, 04]
+  - Gradle Version Catalog 扩展（6 版本声明 + 10 库引用）
+  - HOCON 统一配置入口（server/snowflake/database/ssl）
+  - 开发环境 SSL 自签证书脚本
+  - 开发/生产 logback 配置文件
+affects: [02-common-module-infrastructure-base follow-on plans]
 tech-stack:
-  added: [typesafe-config, hikaricp, mysql-connector, grpc, netty-tcnative]
-  patterns: [HOCON config with env var overrides, environment-specific logback configs]
+  added:
+    - com.typesafe:config 1.4.9
+    - com.zaxxer:HikariCP 7.0.2
+    - com.mysql:mysql-connector-j 9.2.0
+    - io.grpc:grpc-netty-shaded 1.81.0
+    - io.grpc:grpc-protobuf 1.81.0
+    - io.grpc:grpc-stub 1.81.0
+    - io.grpc:grpc-kotlin-stub 1.5.0
+    - io.grpc:grpc-services 1.81.0
+    - io.grpc:grpc-api 1.81.0
+    - io.netty:netty-tcnative-boringssl-static 2.0.68
+  patterns:
+    - D-02: 单文件 + 环境变量覆盖 HOCON 配置模式
+    - D-08/D-09: 自签证书 generate-dev-cert.sh 脚本生成
+    - D-16/D-17: logback 双环境配置（dev=DEBUG 彩色 / prod=INFO JSON）
 key-files:
   created:
     - config/application.conf
@@ -24,67 +39,99 @@ key-files:
     - common/build.gradle.kts
     - server/build.gradle.kts
 key-decisions:
-  - "HOCON configuration format with ${?ENV_VAR} overrides for sensitive fields"
-  - "grpc-netty-shaded in both common and server modules (common for GrpcSslContexts, server for NettyServerBuilder)"
+  - "D-01: Typesafe Config (HOCON) 作为统一配置格式"
+  - "D-02: 单文件 application.conf + 环境变量覆盖"
+  - "D-03: 配置文件在 config/ 目录，提交 git，敏感凭据通过环境变量注入"
+  - "D-08: 开发环境自签证书通过 generate-dev-cert.sh 脚本生成"
+  - "D-09: 证书文件提交 git，放在 config/dev/ssl/"
+  - "D-16: logback 配置在 common 模块 resources/ 下"
+  - "D-17: 分别配置 dev（DEBUG 彩色）和 prod（INFO JSON）"
+  - "D-18: server 模块通过 logback.configurationFile 系统属性加载对应配置"
 patterns-established:
-  - "Sensitive config fields injected via environment variables, not hardcoded"
-requirements-completed: [INFRA-05]
-duration: 5min
+  - "HOCON 单文件 + 环境变量覆盖模式（per D-02）"
+  - "Gradle Version Catalog 统一依赖管理"
+  - "logback 双环境配置分离"
+requirements-completed:
+  - INFRA-05
+
+duration: 12min
 completed: 2026-06-11
 ---
 
-# Phase 02-01: Dependencies & Static Config Summary
+# Phase 02 Plan 01: 构建依赖声明与静态配置文件
 
-**Gradle Version Catalog with Typesafe Config, HikariCP, gRPC dependencies; HOCON config with 4 sections; dev/prod logback configurations and SSL cert script**
+**Gradle Version Catalog 扩展 10 个 Phase 2 依赖 + HOCON 配置入口 + SSL 自签证书脚本 + 双环境 logback 配置**
 
 ## Performance
 
-- **Duration:** 5 min (previously partially executed)
-- **Completed:** 2026-06-11
+- **Duration:** 12 min
+- **Started:** 2026-06-11T12:02:00Z
+- **Completed:** 2026-06-11T12:14:00Z
 - **Tasks:** 3
-- **Files modified/created:** 7
+- **Files modified:** 7
 
 ## Accomplishments
-- 6 version declarations and 10 library references added to Gradle Version Catalog
-- `common/build.gradle.kts` updated with 4 Phase 2 dependencies (typesafe-config, hikaricp, mysql-connector, grpc-netty-shaded)
-- `server/build.gradle.kts` updated with 8 dependencies including :common module reference
-- HOCON `config/application.conf` created with 4 config sections and environment variable overrides
-- SSL certificate generation script using OpenSSL 3.x `-addext` syntax
-- Dev (DEBUG color console) and prod (INFO JSON) logback configurations
+
+- Gradle Version Catalog 追加 6 个版本声明和 10 个库引用（typesafe-config, HikariCP, mysql-connector-j, gRPC 全家桶, netty-tcnative）
+- common/build.gradle.kts 新增 4 个依赖（typesafe-config, hikaricp, mysql-connector, grpc-netty-shaded）
+- server/build.gradle.kts 新增 8 个依赖（:common + 7 个 gRPC/Netty 依赖）
+- config/application.conf 创建完成，含 server/snowflake/database/ssl 4 个子段，敏感字段通过环境变量注入
+- config/dev/ssl/generate-dev-cert.sh 可执行脚本，使用 OpenSSL 3.x `-addext` 语法生成 10 年期自签证书
+- common/src/main/resources/logback-dev.xml — DEBUG 级别 + %highlight 彩色控制台输出
+- common/src/main/resources/logback-prod.xml — INFO 级别 + JsonEncoder JSON 格式输出
 
 ## Task Commits
 
 Each task was committed atomically:
 
-1. **Task 1: 更新 Gradle Version Catalog 和模块构建文件** - `ef984f4`
-2. **Task 2: 创建 HOCON 配置文件** - `5fee8f2`
-3. **Task 3: 创建 SSL 自签证书脚本和 logback 配置** - `d813c5b`
+1. **Task 1: 更新 Gradle Version Catalog 和模块构建文件** - `ef984f4` (feat)
+2. **Task 2: 创建 HOCON 配置文件 application.conf** - `5fee8f2` (feat)
+3. **Task 3: 创建 SSL 自签证书脚本和 logback 环境配置** - `d813c5b` (feat)
 
 ## Files Created/Modified
-- `gradle/libs.versions.toml` - 6 versions & 10 libs (typesafe-config, hikaricp, mysql-connector, grpc, grpc-kotlin, netty-tcnative)
-- `common/build.gradle.kts` - 4 dependencies added
-- `server/build.gradle.kts` - 8 dependencies added including :common
-- `config/application.conf` - HOCON config with server/snowflake/database/ssl sections
-- `config/dev/ssl/generate-dev-cert.sh` - OpenSSL 3.x self-signed cert generation
-- `common/src/main/resources/logback-dev.xml` - DEBUG level, color console
-- `common/src/main/resources/logback-prod.xml` - INFO level, JSON encoder
+
+- `gradle/libs.versions.toml` — 新增 6 版本声明 + 10 库引用（Phase 2 基础设施依赖）
+- `common/build.gradle.kts` — 新增 4 个依赖（typesafe-config, hikaricp, mysql-connector, grpc-netty-shaded）
+- `server/build.gradle.kts` — 新增 8 个依赖（:common + 7 个 gRPC/Netty 依赖）
+- `config/application.conf` — HOCON 统一配置入口，4 个子段，环境变量覆盖
+- `config/dev/ssl/generate-dev-cert.sh` — OpenSSL 3.x 自签证书生成脚本（可执行）
+- `common/src/main/resources/logback-dev.xml` — 开发环境日志配置（DEBUG 彩色）
+- `common/src/main/resources/logback-prod.xml` — 生产环境日志配置（INFO JSON）
 
 ## Decisions Made
-- grpc-netty-shaded added to both common and server modules (common for GrpcSslContexts, server for NettyServerBuilder)
-- Database password not hardcoded - injected via `${?DB_PASSWORD}` environment variable
-- grpc-netty-shaded chosen over grpc-netty to avoid Netty version conflicts
+
+所有决策遵循 CONTEXT.md 中的锁定项：
+- **D-01~D-04:** HOCON 单文件 + 环境变量覆盖配置模式
+- **D-08/D-09:** 自签证书通过脚本生成，证书文件提交 git
+- **D-16/D-17/D-18:** logback 双环境配置分离
+- **gRPC 依赖选择:** grpc-netty-shaded 优先于 grpc-netty（避免 Netty 版本冲突）
+- **mysql-connector-j 9.2.0**（而非旧 mysql-connector-java）
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
-None
+
+None - all tasks completed smoothly. Dependency resolution verified via `./gradlew :common:dependencies` (BUILD SUCCESSFUL in 3s).
+
+## User Setup Required
+
+None - no external service configuration required. SSL certificates can be generated by running `config/dev/ssl/generate-dev-cert.sh` when needed.
 
 ## Next Phase Readiness
-- All dependencies declared and available for Phase 2 plan 02 (config data classes, exception system, Snowflake ID generator)
-- HOCON config structure ready for ApplicationConfig data class parsing
-- Plan 02-03 can use SSL config and gRPC dependencies for server assembly
+
+- 所有 Phase 2 代码依赖已在 Gradle 中声明
+- HOCON 配置文件已就绪，后续计划可直接加载
+- logback 配置已就绪，可通过 `-Dlogback.configurationFile=logback-{env}.xml` 切换
+- 后续 Plan 02/03 可开始编写 Kotlin 代码
 
 ---
 *Phase: 02-common-module-infrastructure-base*
 *Completed: 2026-06-11*
+
+## Self-Check: PASSED
+
+- All 4 created files exist on disk
+- All 3 task commits found in git history
+- Dependency declarations verified via `./gradlew :common:dependencies` (BUILD SUCCESSFUL)
