@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 01-project-scaffolding-proto-definitions
 source: 01-01-SUMMARY.md, 01-02-SUMMARY.md, 01-03-SUMMARY.md, 01-04-SUMMARY.md, 01-05-SUMMARY.md
 started: 2026-06-11T17:50:00+08:00
@@ -8,11 +8,7 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 12
-name: Module Dependency Direction
-expected: |
-  Module dependencies follow enforced direction: proto (no deps) <- common <- repository <- service <- gateway <- server. Each module's build.gradle.kts only depends on the layer below or adjacent.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -68,14 +64,17 @@ result: pass
 
 ### 12. Module Dependency Direction
 expected: Module dependencies follow enforced direction: proto (no deps) <- common <- repository <- service <- gateway <- server. Each module's build.gradle.kts only depends on the layer below or adjacent.
-result: [pending]
+result: issue
+reported: "proto 模块，在另外几个模块有些有引用有些没有引用，这是为什么，如果 proto 模块上的层模块都需要 proto，api 合适吗？有没有编译性能问题"
+severity: major
+fix: "统一分层依赖：repository->common 和 service->repository 改为 api 透传；repository 和 service 均加 implementation(project(':proto')) 显式声明 proto 依赖。编译验证通过。"
 
 ## Summary
 
 total: 12
 passed: 9
-issues: 2
-pending: 1
+issues: 3
+pending: 0
 skipped: 0
 
 ## Gaps
@@ -93,3 +92,10 @@ skipped: 0
   severity: major
   test: 4
   fix: "全部 10 个 proto 文件已添加中文注释（枚举值注释、消息注释、字段注释），编译验证通过"
+
+- truth: "模块依赖方向一致且合理：repository->common/service->repository 用 api 透传，各层显式声明 proto 依赖"
+  status: fixed
+  reason: "User reported: proto 模块，在另外几个模块有些有引用有些没有引用，中间层是否需要 proto，api vs implementation 选择"
+  severity: major
+  test: 12
+  fix: "repository 和 service 加 proto dep；repository->common 和 service->repository 改用 api。编译验证通过。"

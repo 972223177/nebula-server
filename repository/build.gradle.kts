@@ -12,5 +12,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":common"))
+    api(project(":common"))
+    implementation(project(":proto"))
 }

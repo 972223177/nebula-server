@@ -12,5 +12,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":repository"))
+    api(project(":repository"))
+    implementation(project(":proto"))
 }
