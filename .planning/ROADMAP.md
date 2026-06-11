@@ -99,6 +99,19 @@ Plans:
 8. Read receipt updates last_read_message_id
 9. Offline message store and push on reconnect
 
+**Plans:** 4 plans in 3 waves
+
+Plans:
+**Wave 1** *(parallel — no dependencies)*
+- [ ] 03-01-PLAN.md — MySQL DDL + JPA Entity + Repository 接口 + JpaConfig/Flyway 引导 (DB-01)
+- [ ] 03-02-PLAN.md — Redis 存储结构：Session/Stream队列/在线状态 Lettuce 封装 (DB-02)
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 03-03-PLAN.md — 消息核心路径：Redis Stream写入 + 异步批量刷MySQL + Cursor分页拉取 + docker-compose (DB-03, DB-04)
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 03-04-PLAN.md — 消息周边：离线消息PEL支持 + 未读计数 + 已读回执 (DB-05, DB-06, DB-07)
+
 ---
 
 ## Phase 4: Handler Framework
