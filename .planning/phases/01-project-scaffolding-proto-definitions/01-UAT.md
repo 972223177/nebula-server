@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 6
-name: common.proto and message_type.proto
+number: 7
+name: Domain Proto Files Exist
 expected: |
-  `common.proto` has DeviceType enum (MOBILE, DESKTOP, WEB) only in package com.nebula.chat.common. `message_type.proto` has MessageType enum with 14 values from TEXT=0 to DELIVERY_ACK=14.
+  7 domain proto files exist under `proto/src/main/proto/nebula/`: `user/user.proto`, `auth/auth.proto`, `chat/chat.proto`, `message/message.proto`, `conversation/conversation.proto`, `group/group.proto`, `friend/friend.proto`. Package declarations match directory structure.
 awaiting: user response
 
 ## Tests
@@ -44,7 +44,7 @@ result: pass
 
 ### 6. common.proto and message_type.proto
 expected: `common.proto` has DeviceType enum (MOBILE, DESKTOP, WEB) only in package com.nebula.chat.common. `message_type.proto` has MessageType enum with 14 values from TEXT=0 to DELIVERY_ACK=14.
-result: [pending]
+result: pass
 
 ### 7. Domain Proto Files Exist
 expected: 7 domain proto files exist under `proto/src/main/proto/nebula/`: `user/user.proto`, `auth/auth.proto`, `chat/chat.proto`, `message/message.proto`, `conversation/conversation.proto`, `group/group.proto`, `friend/friend.proto`. Package declarations match directory structure.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 3
+passed: 4
 issues: 2
-pending: 7
+pending: 6
 skipped: 0
 
 ## Gaps
