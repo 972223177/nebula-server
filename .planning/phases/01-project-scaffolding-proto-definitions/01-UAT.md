@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 3
-name: Project Scaffolding Files
+number: 4
+name: Core Proto Files Exist
 expected: |
-  `.gitignore`, `.editorconfig`, `.gitattributes`, `README.md`, `LICENSE` and `.idea/` config files exist with expected content.
+  3 proto files exist under `proto/src/main/proto/nebula/`: `envelope.proto`, `common/common.proto`, `message_type.proto`. All use correct java_package (com.nebula.chat).
 awaiting: user response
 
 ## Tests
@@ -29,7 +29,7 @@ fix: "已修复 root build.gradle.kts 和 proto/build.gradle.kts 改用 alias(li
 
 ### 3. Project Scaffolding Files
 expected: `.gitignore`, `.editorconfig`, `.gitattributes`, `README.md`, `LICENSE` and `.idea/` config files exist with expected content.
-result: [pending]
+result: pass
 
 ### 4. Core Proto Files Exist
 expected: 3 proto files exist under `proto/src/main/proto/nebula/`: `envelope.proto`, `common/common.proto`, `message_type.proto`. All use correct java_package (com.nebula.chat).
@@ -70,9 +70,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 1
+passed: 2
 issues: 1
-pending: 10
+pending: 9
 skipped: 0
 
 ## Gaps
