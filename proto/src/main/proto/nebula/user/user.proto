@@ -6,13 +6,12 @@ option java_multiple_files = true;
 option java_package = "com.nebula.chat.user";
 
 import "nebula/common/common.proto";
-import "nebula/auth/auth.proto";
 
 message LoginReq {
   optional string username = 1;
   optional string password = 2;
   optional string token = 3;
-  DeviceType device_type = 4;
+  common.DeviceType device_type = 4;
   int64 last_received_global_id = 5;
 }
 
