@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package com.nebula.chat.group;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.group";
+
+message GroupMember {
+  int64 uid = 1;
+  string username = 2;
+  string display_name = 3;
+  string avatar_url = 4;
+  string role = 5;
+  int64 joined_at = 6;
+}

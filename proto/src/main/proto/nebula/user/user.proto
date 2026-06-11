@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package com.nebula.chat.user;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.user";
+
+import "nebula/common/common.proto";
+import "nebula/auth/auth.proto";
+
+message LoginReq {
+  optional string username = 1;
+  optional string password = 2;
+  optional string token = 3;
+  DeviceType device_type = 4;
+  int64 last_received_global_id = 5;
+}
+
+message LoginResp {
+  int64 user_id = 1;
+  int64 uid = 2;
+  string token = 3;
+  int64 server_now = 4;
+  map<string, int64> last_read_info = 5;
+  int64 server_last_msg_id = 6;
+}
+
+message SearchUserReq {
+  string keyword = 1;
+}
+
+message SearchUserResp {
+  repeated UserBrief users = 1;
+}
+
+message GetProfileReq {
+  int64 uid = 1;
+}
+
+message GetProfileResp {
+  int64 uid = 1;
+  string username = 2;
+  string display_name = 3;
+  string avatar_url = 4;
+  int32 gender = 5;
+  string bio = 6;
+  int64 created_at = 7;
+}
+
+message BatchIdRequest {
+  repeated int64 uids = 1;
+}
+
+message BatchGetUserResp {
+  repeated UserBrief users = 1;
+}
+
+message BatchGetStatusResp {
+  repeated UserOnlineStatus statuses = 1;
+}
+
+message SetPrivacyReq {
+  bool hide_online_status = 1;
+}
+
+message GetPrivacyResp {
+  bool hide_online_status = 1;
+}
+
+message UserBrief {
+  int64 uid = 1;
+  string username = 2;
+  string display_name = 3;
+  string avatar_url = 4;
+}
+
+message UserOnlineStatus {
+  int64 uid = 1;
+  int32 status = 2;
+  int64 last_active_at = 3;
+}

@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package com.nebula.chat.message;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.message";
+
+import "nebula/message_type.proto";
+import "nebula/common/common.proto";
+
+message PullMessagesReq {
+  string conversation_id = 1;
+  int64 cursor = 2;
+  int32 limit = 3;
+  string direction = 4;
+}
+
+message PullMessagesResp {
+  repeated ChatMessage messages = 1;
+  bool has_more = 2;
+}
+
+message ChatMessage {
+  int64 msg_id = 1;
+  string conversation_id = 2;
+  int64 sender_uid = 3;
+  string sender_username = 4;
+  string sender_avatar = 5;
+  MessageType message_type = 6;
+  string content = 7;
+  bytes payload = 8;
+  int64 client_ts = 9;
+  int64 server_ts = 10;
+}
+
+message ReadReportReq {
+  string conversation_id = 1;
+  int64 last_read_msg_id = 2;
+}
