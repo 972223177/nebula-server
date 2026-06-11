@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 8
-name: Domain Proto Methods Coverage
+number: 9
+name: Proto Code Generation Succeeds
 expected: |
-  Domain proto files define 23 API methods across all domains. Each method has both Request and Response messages. Import paths use `nebula/` prefix.
+  `./gradlew :proto:generateProto` completes successfully. Generated Java stubs exist in `proto/build/generated/source/proto/main/java/`.
 awaiting: user response
 
 ## Tests
@@ -52,7 +52,7 @@ result: pass
 
 ### 8. Domain Proto Methods Coverage
 expected: Domain proto files define 23 API methods across all domains. Each method has both Request and Response messages. Import paths use `nebula/` prefix.
-result: [pending]
+result: pass
 
 ### 9. Proto Code Generation Succeeds
 expected: `./gradlew :proto:generateProto` completes successfully. Generated Java stubs exist in `proto/build/generated/source/proto/main/java/`.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 5
+passed: 6
 issues: 2
-pending: 5
+pending: 4
 skipped: 0
 
 ## Gaps
