@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package com.nebula.chat;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat";
+
+import "nebula/message_type.proto";
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  REQUEST = 1;
+  RESPONSE = 2;
+  PUSH = 3;
+  PING = 4;
+  PONG = 5;
+}
+
+message Envelope {
+  Direction direction = 1;
+  string request_id = 2;
+  int32 protocol_version = 3;
+  oneof payload {
+    Request request = 10;
+    Response response = 11;
+    Message message = 12;
+  }
+}
+
+message Request {
+  string method = 1;
+  bytes params = 2;
+}
+
+message Response {
+  int32 code = 1;
+  string msg = 2;
+  string method = 3;
+  bytes result = 4;
+}
+
+message Message {
+  MessageType messageType = 1;
+  string content = 2;
+  bytes payload = 3;
+}

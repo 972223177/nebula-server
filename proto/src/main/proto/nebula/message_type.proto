@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package com.nebula.chat;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat";
+
+enum MessageType {
+  TEXT = 0;
+  TEXT_AND_IMAGE = 1;
+  FRIEND_REQUEST = 3;
+  LOGOUT = 4;
+  FRIEND_ACCEPTED = 5;
+  GROUP_CREATED = 6;
+  GROUP_INVITED = 7;
+  GROUP_DISSOLVED = 8;
+  GROUP_UPDATED = 9;
+  MEMBER_JOINED = 10;
+  MEMBER_LEFT = 11;
+  MEMBER_KICKED = 12;
+  READ_RECEIPT = 13;
+  DELIVERY_ACK = 14;
+}
