@@ -30,7 +30,6 @@ class SnowflakeIdGenerator(
         }
     }
 
-    @Volatile
     private var lastTimestamp = -1L
     private var sequence = 0L
 
@@ -58,7 +57,6 @@ class SnowflakeIdGenerator(
                 sequence
     }
 
-    @Synchronized
     private fun waitNextMillis(lastTimestamp: Long): Long {
         var timestamp = currentTimeMillis()
         while (timestamp <= lastTimestamp) {

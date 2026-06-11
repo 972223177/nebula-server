@@ -36,6 +36,6 @@ class HikariDataSourceProvider(
                 "?sslMode=PREFERRED" +
                 "&useUnicode=true" +
                 "&characterEncoding=utf8mb4" +
-                "&serverTimezone=Asia/Shanghai"
+                "&serverTimezone=UTC"
     }
 }
