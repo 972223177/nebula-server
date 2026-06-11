@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 2
-name: Version Catalog and Root Build
+number: 3
+name: Project Scaffolding Files
 expected: |
-  `gradle/libs.versions.toml` exists with kotlin 2.1.20, protobuf 4.29.3, protobuf-plugin 0.10.0. Root `build.gradle.kts` declares kotlin-jvm and protobuf plugins (apply false), group = "com.nebula", version = "1.0.0-SNAPSHOT".
+  `.gitignore`, `.editorconfig`, `.gitattributes`, `README.md`, `LICENSE` and `.idea/` config files exist with expected content.
 awaiting: user response
 
 ## Tests
@@ -22,7 +22,10 @@ result: pass
 
 ### 2. Version Catalog and Root Build
 expected: `gradle/libs.versions.toml` exists with kotlin 2.1.20, protobuf 4.29.3, protobuf-plugin 0.10.0. Root `build.gradle.kts` declares kotlin-jvm and protobuf plugins (apply false), group = "com.nebula", version = "1.0.0-SNAPSHOT".
-result: [pending]
+result: issue
+reported: "虽然在libs.versions.toml中声明了，但到各个模块的 build.gradle查看并没有应用 toml 中的声明，特别是 plugin"
+severity: major
+fix: "已修复 root build.gradle.kts 和 proto/build.gradle.kts 改用 alias(libs.plugins...) 引用 catalog。javax.annotation-api 已纳入 catalog。build 验证通过。"
 
 ### 3. Project Scaffolding Files
 expected: `.gitignore`, `.editorconfig`, `.gitattributes`, `README.md`, `LICENSE` and `.idea/` config files exist with expected content.
@@ -68,10 +71,15 @@ result: [pending]
 
 total: 12
 passed: 1
-issues: 0
-pending: 11
+issues: 1
+pending: 10
 skipped: 0
 
 ## Gaps
 
-[none yet]
+- truth: "Root build.gradle.kts 和子模块使用 alias() 引用 version catalog 声明"
+  status: fixed
+  reason: "User reported: 虽然在libs.versions.toml中声明了，但到各个模块的 build.gradle查看并没有应用 toml 中的声明，特别是 plugin"
+  severity: major
+  test: 2
+  fix: "root build.gradle.kts 和 proto/build.gradle.kts 均改用 alias(libs.plugins...)，javax-annotation-api 纳入 catalog，编译验证通过"

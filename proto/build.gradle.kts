@@ -1,14 +1,14 @@
 import com.google.protobuf.gradle.*
 
 plugins {
-    id("org.jetbrains.kotlin.jvm")
-    id("com.google.protobuf")
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.protobuf)
 }
 
 dependencies {
     implementation(libs.protobuf.java)
     implementation(libs.protobuf.kotlin)
-    implementation("javax.annotation:javax.annotation-api:1.3.2")
+    implementation(libs.javax.annotation.api)
 }
 
 protobuf {
