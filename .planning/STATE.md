@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase-1-context-gathered
-last_updated: "2026-06-11T09:32:50.903Z"
+last_updated: "2026-06-11T09:39:28.347Z"
 progress:
   total_phases: 11
   completed_phases: 0
@@ -19,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** Phase 1 — Project Scaffolding & Proto Definitions
+**Current focus:** Phase 1 — project-scaffolding-proto-definitions
 **Phase count:** 11
 **Requirements:** 70 v1 requirements mapped
 

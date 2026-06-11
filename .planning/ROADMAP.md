@@ -9,7 +9,7 @@
 
 | Phase | Name | Requirements | Success Criteria |
 |-------|------|--------------|------------------|
-| 1 | Project Scaffolding & Proto Definitions | INFRA-01, INFRA-06, PROTO-01~07 | 6 .proto files, 23 method defs, build passes |
+| 1 | 1/5 | In Progress|  |
 | 2 | Common Module & Infrastructure Base | INFRA-02~05 | Snowflake ID, HikariCP, SSL dual-mode, Netty bootstrap |
 | 3 | Database Schema & Repository Layer | DB-01~07 | 6 MySQL tables, 3 Redis structures, message persistence |
 | 4 | Handler Framework | HNDL-01~06 | Generic Handler, Dispatcher, Koin DI, Pipeline, Exceptions |
@@ -38,12 +38,12 @@
 5. Gradle protobuf plugin generates Kotlin code from .proto files
 6. Build order enforces proto <- common <- repository <- service <- gateway <- server
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Gradle multi-module scaffolding + project init files
+- [x] 01-01-PLAN.md — Gradle multi-module scaffolding + project init files
 - [ ] 01-02-PLAN.md — Proto core: envelope.proto, common.proto, message_type.proto
 - [ ] 01-03-PLAN.md — Proto domain: 7 domain .proto files covering 23 methods
 
