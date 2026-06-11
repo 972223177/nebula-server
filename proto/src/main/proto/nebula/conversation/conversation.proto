@@ -52,7 +52,7 @@ message GroupMembersReq {
 }
 
 message GroupMembersResp {
-  repeated GroupMember members = 1;
+  repeated com.nebula.chat.group.GroupMember members = 1;
 }
 
 message ConversationBrief {

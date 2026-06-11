@@ -9,6 +9,6 @@ import "nebula/common/common.proto";
 
 message SessionInfo {
   int64 uid = 1;
-  DeviceType device_type = 2;
+  common.DeviceType device_type = 2;
   int64 login_at = 3;
 }
