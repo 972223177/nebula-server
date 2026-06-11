@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 9
-name: Proto Code Generation Succeeds
+number: 10
+name: Common Module Compilation
 expected: |
-  `./gradlew :proto:generateProto` completes successfully. Generated Java stubs exist in `proto/build/generated/source/proto/main/java/`.
+  `./gradlew :common:compileKotlin` compiles successfully against generated proto stubs. BizCode.kt with 30 error code constants compiles without errors.
 awaiting: user response
 
 ## Tests
@@ -56,7 +56,7 @@ result: pass
 
 ### 9. Proto Code Generation Succeeds
 expected: `./gradlew :proto:generateProto` completes successfully. Generated Java stubs exist in `proto/build/generated/source/proto/main/java/`.
-result: [pending]
+result: pass
 
 ### 10. Common Module Compilation
 expected: `./gradlew :common:compileKotlin` compiles successfully against generated proto stubs. BizCode.kt with 30 error code constants compiles without errors.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 6
+passed: 7
 issues: 2
-pending: 4
+pending: 3
 skipped: 0
 
 ## Gaps
