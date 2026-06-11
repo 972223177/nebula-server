@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 5
-name: envelope.proto Message Definitions
+number: 6
+name: common.proto and message_type.proto
 expected: |
-  `envelope.proto` contains Direction enum (UNSPECIFIED, REQUEST, RESPONSE, PUSH, PING, PONG) and messages: Envelope (direction, request_id, protocol_version, oneof payload), Request (method, params), Response (code, msg, method, result), Message (messageType, content, payload).
+  `common.proto` has DeviceType enum (MOBILE, DESKTOP, WEB) only in package com.nebula.chat.common. `message_type.proto` has MessageType enum with 14 values from TEXT=0 to DELIVERY_ACK=14.
 awaiting: user response
 
 ## Tests
@@ -40,7 +40,7 @@ fix: "已为全部 10 个 proto 文件添加中文注释（枚举值、消息、
 
 ### 5. envelope.proto Message Definitions
 expected: `envelope.proto` contains Direction enum (UNSPECIFIED, REQUEST, RESPONSE, PUSH, PING, PONG) and messages: Envelope (direction, request_id, protocol_version, oneof payload), Request (method, params), Response (code, msg, method, result), Message (messageType, content, payload).
-result: [pending]
+result: pass
 
 ### 6. common.proto and message_type.proto
 expected: `common.proto` has DeviceType enum (MOBILE, DESKTOP, WEB) only in package com.nebula.chat.common. `message_type.proto` has MessageType enum with 14 values from TEXT=0 to DELIVERY_ACK=14.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 2
+passed: 3
 issues: 2
-pending: 8
+pending: 7
 skipped: 0
 
 ## Gaps
