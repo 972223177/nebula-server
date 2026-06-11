@@ -69,6 +69,16 @@ Plans:
 5. Configuration loaded from environment or config file (dev/prod profiles)
 6. Common error codes and BizException defined
 
+**Plans:** 3 plans in 2 waves
+
+Plans:
+**Wave 1** *(parallel — no dependencies)*
+- [ ] 02-01-PLAN.md — 构建依赖声明（libs.versions.toml/buid.gradle.kts）+ HOCON 配置 + SSL 证书脚本 + logback
+- [ ] 02-02-PLAN.md — Common 模块：配置数据类 + BizException 异常体系 + SnowflakeIdGenerator
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 02-03-PLAN.md — DataSourceProvider/HikariCP + buildSslContext + ConfigLoader + ChatServer + NebulaServer
+
 ---
 
 ## Phase 3: Database Schema & Repository Layer

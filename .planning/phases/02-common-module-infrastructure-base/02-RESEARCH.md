@@ -866,22 +866,13 @@ class ChatServer(
 | A3 | NettyServerBuilder 的 Netty 传输默认启用 autoFlowControl | Pitfalls | 标准行为，文档默认启用；有极端需求时需显式配置 `autoFlowControl(true)` |
 | A4 | HikariCP 7.0.2 与 JDK 21 完全兼容 | Standard Stack | HikariCP 7.x 要求 Java 21+，已满足；但 7.0.2 可能存在 minor bug，可降级到 6.3.x |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Snowflake epoch 时间选择**
-   - What we know: 设计文档 9.4 使用 `1700000000000L`（2023-11-15 00:00:00 UTC）
-   - What's unclear: 是否使用这个默认 epoch 还是根据项目实际情况调整
-   - Recommendation: 使用设计文档的默认值 `1700000000000L`，约可使用到 2096 年（41 位时间戳覆盖 ~69 年）
+1. **Snowflake epoch 时间选择** — **RESOLVED:** 使用设计文档默认值 `1700000000000L`（2023-11-15 00:00:00 UTC），约可用到 2096 年。已在 SnowflakeConfig 和 SnowflakeIdGenerator 的默认参数中实现。
 
-2. **server 模块依赖 common 模块 — 是否已在 build.gradle.kts 中声明**
-   - What we know: 当前 `server/build.gradle.kts` 只依赖 `:gateway` 和 `:proto`
-   - What's unclear: `:gateway` 是否已经传递依赖 `:service` → `:repository` → `:common`？D-15 的 ApplicationConfig 在 common 模块，server 需要直接构建 ApplicationConfig 因此需要直接依赖 `:common`
-   - Recommendation: server 应该显式依赖 `:common` 模块（即使依赖链可传递，显式更清晰）
+2. **server 模块依赖 common 模块 — 是否已在 build.gradle.kts 中声明** — **RESOLVED:** server 模块显式依赖 `:common` 模块（`implementation(project(":common"))`），已在 Plan 01 的 server/build.gradle.kts 中声明。
 
-3. **logback 配置文件加载方式**
-   - What we know: logback.xml 放在 common 模块的 resources/ 下（D-16），通过 system property `logback.configurationFile` 加载
-   - What's unclear: server 模块启动时如何确保 logback.system property 在 ConfigLoader 之前设置
-   - Recommendation: 在 `NebulaServer.kt` 的 `main()` 函数最顶部设置 `System.setProperty("logback.configurationFile", "logback-$env.xml")`，然后再加载配置
+3. **logback 配置文件加载方式** — **RESOLVED:** 在 `NebulaServer.kt` 的 `main()` 函数最顶部设置 `System.setProperty("logback.configurationFile", "logback-$env.xml")`，然后再加载配置。已在 Plan 03 的 NebulaServer.kt 实现中落实。
 
 ## Environment Availability
 
