@@ -3,7 +3,7 @@ package com.nebula.server.server
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.config.buildSslContext
 import io.grpc.Server
-import io.grpc.netty.NettyServerBuilder
+import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import java.util.concurrent.TimeUnit
 
 class ChatServer(private val config: ApplicationConfig) {
