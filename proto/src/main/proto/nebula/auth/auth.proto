@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package com.nebula.chat.auth;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.auth";
+
+import "nebula/common/common.proto";
+
+message SessionInfo {
+  int64 uid = 1;
+  DeviceType device_type = 2;
+  int64 login_at = 3;
+}
