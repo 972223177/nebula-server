@@ -11,7 +11,7 @@ import "nebula/message_type.proto";
 // 发送消息请求
 message SendMessageReq {
   string conversation_id = 1;         // 会话ID，标识消息所属会话
-  MessageType message_type = 2;       // 消息类型，如 TEXT、IMAGE 等
+  ChatContentType message_type = 2;      // 消息内容类型，如 TEXT、TEXT_AND_IMAGE 等
   string content = 3;                 // 消息文本内容
   bytes payload = 4;                  // 消息附带的结构化数据，根据 message_type 解析
   int64 client_ts = 5;                // 客户端发送时间戳（毫秒），用于消息排序与去重

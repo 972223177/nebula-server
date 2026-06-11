@@ -49,6 +49,15 @@
 
 - **D-10:** 消息 ID 使用 **雪花算法**，利用 Phase 2 已有的 SnowflakeIdGenerator。全局唯一、时间有序，天然适合 cursor 分页排序
 
+### MessageType 枚举重构（Proto 协议级变更）
+
+- **D-15:** 将原 `MessageType` 枚举拆分为两个独立枚举，职责分离：
+  - **`PushEventType`** — 描述 `envelope.Message.eventType`，指示 payload 结构是 ChatMessage、FriendRequestPayload 等。值从 1 开始（0 = PUSH_EVENT_UNSPECIFIED）
+  - **`ChatContentType`** — 描述 `ChatMessage.message_type` 和 `SendMessageReq.message_type`，表示聊天消息正文的格式（TEXT = 0, TEXT_AND_IMAGE = 1）
+- **D-16:** `envelope.Message.messageType` 改名为 `eventType`，类型从 `MessageType` 改为 `PushEventType`
+- **D-17:** Push `CHAT_MESSAGE` 时，`envelope.Message.payload` 包含完整的 `ChatMessage` 序列化字节；`content` 字段作为通知栏预览文本（免反序列化）
+- **理由：** 原有 `MessageType` 同时承担 Push 事件路由和聊天内容格式两个职责，导致 `envelope.Message.messageType` 找不到合适的值指示"payload 是 ChatMessage"
+
 ### 消息写入路径
 
 - **D-11:** 异步刷写策略：**定时触发**，间隔 **500ms**，单次批处理阈值 **30 条**
@@ -93,10 +102,15 @@
 ### 设计文档
 
 - `设计文档/后端架构设计v1.2/09-基础设施设计/9.5-HikariCP连接池.md` — HikariCP 参数配置和 DataSource 初始化
-- `设计文档/后端架构设计v1.2/08-Handler层设计/8.5-数据访问层设计.md` — 数据访问层架构和 Repository 模式
-- `设计文档/后端架构设计v1.2/03-通信协议/3.3-内层消息与Payload/` — 消息结构体定义，影响消息表设计
 - `设计文档/后端架构设计v1.2/05-数据结构设计/5.1-数据库设计.md` — MySQL 6 张核心表结构定义
 - `设计文档/后端架构设计v1.2/05-数据结构设计/5.2-Redis设计.md` — Redis 缓存结构和 key 设计
+
+### Proto 协议定义
+
+- `proto/src/main/proto/nebula/message_type.proto` — `ChatContentType` + `PushEventType` 枚举定义（D-15）
+- `proto/src/main/proto/nebula/envelope.proto` — `Message.eventType` 使用 `PushEventType`（D-16）
+- `proto/src/main/proto/nebula/chat/chat.proto` — `SendMessageReq.message_type` 使用 `ChatContentType`
+- `proto/src/main/proto/nebula/message/message.proto` — `ChatMessage.message_type` 使用 `ChatContentType`
 
 ### 项目规划
 
