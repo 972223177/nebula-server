@@ -30,12 +30,27 @@
 **Requirements:** INFRA-01, INFRA-06, PROTO-01, PROTO-02, PROTO-03, PROTO-04, PROTO-05, PROTO-06, PROTO-07
 
 **Success Criteria:**
+
 1. `gradle build` passes for all 6 modules
 2. `envelope.proto` defines Direction, Envelope, Request, Response, Message
 3. `common.proto` defines MessageType enum with all 23 method entries
 4. Method proto files (user.proto, chat.proto, conversation.proto, message.proto, friend.proto) define all Request/Response messages
 5. Gradle protobuf plugin generates Kotlin code from .proto files
 6. Build order enforces proto <- common <- repository <- service <- gateway <- server
+
+**Plans:** 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 01-01-PLAN.md — Gradle multi-module scaffolding + project init files
+- [ ] 01-02-PLAN.md — Proto core: envelope.proto, common.proto, message_type.proto
+- [ ] 01-03-PLAN.md — Proto domain: 7 domain .proto files covering 23 methods
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 01-04-PLAN.md — Proto build integration: protobuf plugin + git submodule
+- [ ] 01-05-PLAN.md — Common module: BizCode error codes + kotlin-logging
 
 ---
 
@@ -46,6 +61,7 @@
 **Requirements:** INFRA-02, INFRA-03, INFRA-04, INFRA-05
 
 **Success Criteria:**
+
 1. SnowflakeIdGenerator produces unique IDs, handles clock drift with configurable fallback
 2. HikariCP configured with validated production parameters
 3. SSL SslContext loads self-signed cert for dev, configurable Let's Encrypt for production
@@ -62,6 +78,7 @@
 **Requirements:** DB-01, DB-02, DB-03, DB-04, DB-05, DB-06, DB-07
 
 **Success Criteria:**
+
 1. 6 MySQL tables created with proper indexes and foreign keys
 2. Redis session key structure with TTL
 3. Redis message pending queue
@@ -81,6 +98,7 @@
 **Requirements:** HNDL-01, HNDL-02, HNDL-03, HNDL-04, HNDL-05, HNDL-06
 
 **Success Criteria:**
+
 1. Generic Handler<ReqT, RespT> interface with method() binding
 2. Dispatcher deserializes payload, routes to correct Handler, serializes response
 3. Koin module registers all Handlers by method string
@@ -98,6 +116,7 @@
 **Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, BIZ-USER-01, BIZ-USER-02, BIZ-USER-03, BIZ-USER-04, BIZ-USER-05, BIZ-USER-06
 
 **Success Criteria:**
+
 1. user/login authenticates with password or token
 2. Token generated with expiration, stored in Redis
 3. Reconnect validates existing token, skips re-auth
@@ -118,6 +137,7 @@
 **Requirements:** BIZ-CHAT-01, BIZ-CHAT-02, BIZ-MSG-01, BIZ-MSG-02
 
 **Success Criteria:**
+
 1. chat/send validates message, generates client_message_id
 2. Online members receive push via gRPC stream
 3. Offline members get stored for pull-on-reconnect
@@ -134,6 +154,7 @@
 **Requirements:** BIZ-CONV-01, BIZ-CONV-02, BIZ-CONV-03, BIZ-CONV-04, BIZ-CONV-05, BIZ-CONV-06, BIZ-CONV-07, BIZ-CONV-08
 
 **Success Criteria:**
+
 1. conversation/list returns all conversations with last message
 2. create_group creates group with creator as sole owner
 3. invite_member adds member directly (no approval)
@@ -152,6 +173,7 @@
 **Requirements:** BIZ-FRIEND-01, BIZ-FRIEND-02, BIZ-FRIEND-03, BIZ-FRIEND-04, BIZ-FRIEND-05, BIZ-FRIEND-06, BIZ-STATUS-01, BIZ-STATUS-02, BIZ-STATUS-03
 
 **Success Criteria:**
+
 1. friend/add sends or auto-accepts reciprocal request
 2. friend/accept creates friend record and auto-creates conversation
 3. friend/reject removes pending request
@@ -171,6 +193,7 @@
 **Requirements:** RECON-01, RECON-02, RECON-03, RECON-04, RECON-05
 
 **Success Criteria:**
+
 1. Reconnect state machine: INITIAL -> BACKOFF -> CONNECTING -> CONNECTED
 2. Exponential backoff with configurable max retries
 3. Heartbeat recovery after reconnect
@@ -187,6 +210,7 @@
 **Requirements:** REL-01, REL-02, REL-03, REL-04
 
 **Success Criteria:**
+
 1. Message state transitions: sent -> delivered -> read
 2. Server push on state change
 3. client_message_id dedup via Redis (TTL-based)
@@ -204,6 +228,7 @@
 **Requirements:** PERF-01, PERF-02, PERF-03, PERF-04, PERF-05
 
 **Success Criteria:**
+
 1. 5 benchmark scenarios defined and runnable
 2. 8 metrics collected per test run
 3. Testing tool selected and configured
