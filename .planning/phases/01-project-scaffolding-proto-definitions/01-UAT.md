@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 10
-name: Common Module Compilation
+number: 11
+name: BizCode.kt Error Codes
 expected: |
-  `./gradlew :common:compileKotlin` compiles successfully against generated proto stubs. BizCode.kt with 30 error code constants compiles without errors.
+  `common/src/main/kotlin/com/nebula/common/BizCode.kt` exists with 30 error code constants across 7 categories (General 200/1000-1004, Auth 1100-1103, User 1200-1201, Friend 1300-1305, Conversation 1400-1405, Message 1500-1503, System 9000-9002). Includes `fromCode()` factory method.
 awaiting: user response
 
 ## Tests
@@ -60,7 +60,7 @@ result: pass
 
 ### 10. Common Module Compilation
 expected: `./gradlew :common:compileKotlin` compiles successfully against generated proto stubs. BizCode.kt with 30 error code constants compiles without errors.
-result: [pending]
+result: pass
 
 ### 11. BizCode.kt Error Codes
 expected: `common/src/main/kotlin/com/nebula/common/BizCode.kt` exists with 30 error code constants across 7 categories (General 200/1000-1004, Auth 1100-1103, User 1200-1201, Friend 1300-1305, Conversation 1400-1405, Message 1500-1503, System 9000-9002). Includes `fromCode()` factory method.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 7
+passed: 8
 issues: 2
-pending: 3
+pending: 2
 skipped: 0
 
 ## Gaps
