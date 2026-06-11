@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 11
-name: BizCode.kt Error Codes
+number: 12
+name: Module Dependency Direction
 expected: |
-  `common/src/main/kotlin/com/nebula/common/BizCode.kt` exists with 30 error code constants across 7 categories (General 200/1000-1004, Auth 1100-1103, User 1200-1201, Friend 1300-1305, Conversation 1400-1405, Message 1500-1503, System 9000-9002). Includes `fromCode()` factory method.
+  Module dependencies follow enforced direction: proto (no deps) <- common <- repository <- service <- gateway <- server. Each module's build.gradle.kts only depends on the layer below or adjacent.
 awaiting: user response
 
 ## Tests
@@ -64,7 +64,7 @@ result: pass
 
 ### 11. BizCode.kt Error Codes
 expected: `common/src/main/kotlin/com/nebula/common/BizCode.kt` exists with 30 error code constants across 7 categories (General 200/1000-1004, Auth 1100-1103, User 1200-1201, Friend 1300-1305, Conversation 1400-1405, Message 1500-1503, System 9000-9002). Includes `fromCode()` factory method.
-result: [pending]
+result: pass
 
 ### 12. Module Dependency Direction
 expected: Module dependencies follow enforced direction: proto (no deps) <- common <- repository <- service <- gateway <- server. Each module's build.gradle.kts only depends on the layer below or adjacent.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 8
+passed: 9
 issues: 2
-pending: 2
+pending: 1
 skipped: 0
 
 ## Gaps
