@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package com.nebula.chat.common;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.common";
+
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  MOBILE = 1;
+  DESKTOP = 2;
+  WEB = 3;
+}
