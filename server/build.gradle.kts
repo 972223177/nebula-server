@@ -19,4 +19,14 @@ application {
 dependencies {
     implementation(project(":gateway"))
     implementation(project(":proto"))
+
+    // Phase 2 新增
+    implementation(project(":common"))
+    implementation(libs.grpc.netty.shaded)
+    implementation(libs.grpc.protobuf)
+    implementation(libs.grpc.stub)
+    implementation(libs.grpc.kotlin.stub)
+    implementation(libs.grpc.services)
+    implementation(libs.grpc.api)
+    implementation(libs.netty.tcnative)
 }

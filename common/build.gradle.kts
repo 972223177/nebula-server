@@ -16,4 +16,10 @@ dependencies {
     implementation(libs.kotlin.logging)
     implementation(libs.slf4j.api)
     implementation(libs.logback.classic)
+
+    // Phase 2 新增 — 基础设施依赖
+    implementation(libs.typesafe.config)
+    implementation(libs.hikaricp)
+    implementation(libs.mysql.connector)
+    implementation(libs.grpc.netty.shaded)
 }
