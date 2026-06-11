@@ -9,7 +9,7 @@
 
 | Phase | Name | Requirements | Success Criteria |
 |-------|------|--------------|------------------|
-| 1 | 4/5 | In Progress|  |
+| 1 | 5/5 | Complete   | 2026-06-11 |
 | 2 | Common Module & Infrastructure Base | INFRA-02~05 | Snowflake ID, HikariCP, SSL dual-mode, Netty bootstrap |
 | 3 | Database Schema & Repository Layer | DB-01~07 | 6 MySQL tables, 3 Redis structures, message persistence |
 | 4 | Handler Framework | HNDL-01~06 | Generic Handler, Dispatcher, Koin DI, Pipeline, Exceptions |
@@ -38,7 +38,7 @@
 5. Gradle protobuf plugin generates Kotlin code from .proto files
 6. Build order enforces proto <- common <- repository <- service <- gateway <- server
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -49,7 +49,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-04-PLAN.md — Proto build integration: protobuf plugin + git submodule
+- [x] 01-04-PLAN.md — Proto build integration: protobuf plugin + git submodule
 - [x] 01-05-PLAN.md — Common module: BizCode error codes + kotlin-logging
 
 ---
