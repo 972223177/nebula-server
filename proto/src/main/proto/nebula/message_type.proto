@@ -5,33 +5,27 @@ package com.nebula.chat;
 option java_multiple_files = true;
 option java_package = "com.nebula.chat";
 
-// 消息/事件类型枚举（按场景扩展）
-enum MessageType {
-  // ---- 聊天消息 ----
-  TEXT = 0;                         // 纯文本消息
-  TEXT_AND_IMAGE = 1;               // 图文混合消息（预留）
+// 聊天消息内容类型：描述 ChatMessage 正文的格式
+enum ChatContentType {
+  TEXT = 0;                             // 纯文本消息
+  TEXT_AND_IMAGE = 1;                   // 图文混合消息（预留）
+  // 后续可扩展：FILE = 2, LINK = 3 等
+}
 
-  // ---- 好友相关事件 ----
-  FRIEND_REQUEST = 3;               // 收到好友申请（payload 携带请求详情，如 from_uid, message）
-  FRIEND_ACCEPTED = 5;              // 好友申请被接受（payload 携带新会话信息，如 conversation_id）
-
-  // ---- 登出/踢出 ----
-  LOGOUT = 4;                       // 被强制登出（content 携带原因，如 "kicked_by_other_login", "token_expired"）
-
-  // ---- 群聊事件 ----
-  GROUP_CREATED = 6;                // 被拉入新群聊（payload 携带群基本信息，如 conversation_id, name）
-  GROUP_INVITED = 7;                // 被邀请加入群聊（payload 携带群信息及邀请人，如 conversation_id, inviter_uid）
-  GROUP_DISSOLVED = 8;              // 群聊已解散（payload 可携带群信息）
-  GROUP_UPDATED = 9;                // 群信息已更新（payload 携带新名称、头像等）
-
-  // ---- 成员变动 ----
-  MEMBER_JOINED = 10;               // 新成员加入群聊（payload 携带加入者信息）
-  MEMBER_LEFT = 11;                 // 成员退出群聊（payload 携带退出者信息）
-  MEMBER_KICKED = 12;               // 成员被踢出群聊（payload 携带被踢者信息和原因）
-
-  // ---- 已读同步 ----
-  READ_RECEIPT = 13;                // 已读回执同步（payload 携带 conversation_id, last_read_msg_id）
-
-  // ---- 送达确认 ----
-  DELIVERY_ACK = 14;                // 消息送达确认（服务端已投递到目标客户端，payload 携带 msg_id 列表）
+// 服务端推送事件类型：描述 envelope.Message 中 payload 的结构
+enum PushEventType {
+  PUSH_EVENT_UNSPECIFIED = 0;           // 未指定，不应使用
+  CHAT_MESSAGE = 1;                     // payload = ChatMessage
+  FRIEND_REQUEST = 2;                   // payload = FriendRequestPayload
+  FRIEND_ACCEPTED = 3;                  // payload = FriendAcceptedPayload
+  LOGOUT = 4;                           // payload 为空，content 携带原因
+  GROUP_CREATED = 5;                    // payload = GroupCreatedPayload
+  GROUP_INVITED = 6;                    // payload = GroupInvitedPayload
+  GROUP_DISSOLVED = 7;                  // payload = GroupDissolvedPayload
+  GROUP_UPDATED = 8;                    // payload = GroupUpdatedPayload
+  MEMBER_JOINED = 9;                    // payload = MemberJoinedPayload
+  MEMBER_LEFT = 10;                     // payload = MemberLeftPayload
+  MEMBER_KICKED = 11;                   // payload = MemberKickedPayload
+  READ_RECEIPT = 12;                    // payload = ReadReceiptPayload
+  DELIVERY_ACK = 13;                    // payload = DeliveryAckPayload
 }
