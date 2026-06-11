@@ -5,9 +5,10 @@ package com.nebula.chat.common;
 option java_multiple_files = true;
 option java_package = "com.nebula.chat.common";
 
+// 设备类型
 enum DeviceType {
-  DEVICE_TYPE_UNSPECIFIED = 0;
-  MOBILE = 1;
-  DESKTOP = 2;
-  WEB = 3;
+  DEVICE_TYPE_UNSPECIFIED = 0;  // 未知类型
+  MOBILE = 1;                   // 移动设备（手机/平板）
+  DESKTOP = 2;                  // 桌面设备（PC/Mac）
+  WEB = 3;                      // 浏览器 Web 端
 }

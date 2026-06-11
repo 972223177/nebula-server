@@ -7,8 +7,9 @@ option java_package = "com.nebula.chat.auth";
 
 import "nebula/common/common.proto";
 
+// 会话信息：服务端存储的客户端连接会话元数据
 message SessionInfo {
-  int64 uid = 1;
-  common.DeviceType device_type = 2;
-  int64 login_at = 3;
+  int64 uid = 1;                      // 用户 UID
+  common.DeviceType device_type = 2;  // 登录设备类型
+  int64 login_at = 3;                 // 登录时间（毫秒时间戳）
 }
