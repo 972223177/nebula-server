@@ -1,11 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Nebula Chat Server - 生产环境日志配置
-  per D-17: INFO 级别、JSON 格式输出
-  使用方式: java -Dlogback.configurationFile=logback-prod.xml -jar server.jar
--->
 <configuration>
-
     <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
     </appender>
@@ -13,5 +6,4 @@
     <root level="INFO">
         <appender-ref ref="JSON"/>
     </root>
-
 </configuration>
