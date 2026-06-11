@@ -8,10 +8,10 @@ updated: 2026-06-11T17:50:00+08:00
 
 ## Current Test
 
-number: 7
-name: Domain Proto Files Exist
+number: 8
+name: Domain Proto Methods Coverage
 expected: |
-  7 domain proto files exist under `proto/src/main/proto/nebula/`: `user/user.proto`, `auth/auth.proto`, `chat/chat.proto`, `message/message.proto`, `conversation/conversation.proto`, `group/group.proto`, `friend/friend.proto`. Package declarations match directory structure.
+  Domain proto files define 23 API methods across all domains. Each method has both Request and Response messages. Import paths use `nebula/` prefix.
 awaiting: user response
 
 ## Tests
@@ -48,7 +48,7 @@ result: pass
 
 ### 7. Domain Proto Files Exist
 expected: 7 domain proto files exist under `proto/src/main/proto/nebula/`: `user/user.proto`, `auth/auth.proto`, `chat/chat.proto`, `message/message.proto`, `conversation/conversation.proto`, `group/group.proto`, `friend/friend.proto`. Package declarations match directory structure.
-result: [pending]
+result: pass
 
 ### 8. Domain Proto Methods Coverage
 expected: Domain proto files define 23 API methods across all domains. Each method has both Request and Response messages. Import paths use `nebula/` prefix.
@@ -73,9 +73,9 @@ result: [pending]
 ## Summary
 
 total: 12
-passed: 4
+passed: 5
 issues: 2
-pending: 6
+pending: 5
 skipped: 0
 
 ## Gaps
