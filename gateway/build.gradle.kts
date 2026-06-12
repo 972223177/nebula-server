@@ -47,6 +47,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.protobuf.java)
     testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.lettuce.core)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
