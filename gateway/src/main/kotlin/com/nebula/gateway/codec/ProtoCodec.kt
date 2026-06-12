@@ -1,5 +1,7 @@
 package com.nebula.gateway.codec
 
+import com.nebula.gateway.dispatcher.HandlerEntry
+import com.google.protobuf.ByteString
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import kotlin.reflect.KClass
@@ -64,4 +66,30 @@ object ProtoCodec {
         val parseFrom: (ByteArray) -> Any,
         val toByteArray: (Any) -> ByteArray
     )
+
+    /**
+     * 从 HandlerEntry 中反序列化请求参数。
+     *
+     * 将 [ByteString] 转换为 [ByteArray] 后委托给 HandlerEntry.parseFrom。
+     *
+     * @param entry Handler 注册条目
+     * @param params Proto bytes 格式的请求参数
+     * @return 反序列化后的请求对象
+     */
+    fun deserialize(entry: HandlerEntry, params: ByteString): Any {
+        return entry.parseFrom(params.toByteArray())
+    }
+
+    /**
+     * 通过 HandlerEntry 序列化响应结果。
+     *
+     * 委托给 HandlerEntry.toByteArray。
+     *
+     * @param entry Handler 注册条目
+     * @param result 响应结果对象
+     * @return 序列化后的字节数组
+     */
+    fun serialize(entry: HandlerEntry, result: Any): ByteArray {
+        return entry.toByteArray(result)
+    }
 }

@@ -20,6 +20,8 @@ flyway = "10.22.0"
 kotlinx-coroutines = "1.9.0"
 koin = "4.1.0"
 mockk = "1.13.14"
+junit = "5.11.4"
+junit-platform = "1.11.4"
 
 [libraries]
 protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf" }
@@ -53,6 +55,9 @@ koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 koin-test-junit5 = { module = "io.insert-koin:koin-test-junit5", version.ref = "koin" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
