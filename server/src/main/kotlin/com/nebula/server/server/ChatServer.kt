@@ -40,9 +40,14 @@ class ChatServer(private val config: ApplicationConfig) {
 
         val builder = NettyServerBuilder.forPort(config.server.port)
             .maxInboundMessageSize(4 * 1024 * 1024) // 最大入站消息 4MB，超过则拒绝连接
-            .keepAliveTime(30, TimeUnit.SECONDS)     // 服务端每 30 秒发送 PING 帧检测客户端存活
-            .keepAliveTimeout(10, TimeUnit.SECONDS)  // 等待客户端 PING 应答超时 10 秒，超时则断开
-            .permitKeepAliveWithoutCalls(false)      // 禁止无活跃 RPC 时发送 keepalive（防资源滥用）
+            // 双重心跳策略 — 传输层 gRPC keepalive 快速检测 TCP 断开
+            // 参考业界标准（Go gRPC）精细化配置，详见 D-27
+            .keepAliveTime(60, TimeUnit.SECONDS)        // 每 60s 向客户端发送 PING 帧检测存活
+            .keepAliveTimeout(20, TimeUnit.SECONDS)     // 等待 PONG 超时 20s，超时则断开
+            .permitKeepAliveWithoutCalls(true)          // 允许无活跃 RPC 时发送 PING（D-27 双重心跳必须开启）
+            .maxConnectionIdle(300, TimeUnit.SECONDS)   // 空闲超过 5 分钟主动关闭连接释放资源
+            .maxConnectionAge(1800, TimeUnit.SECONDS)   // 30 分钟强制刷新连接，防老化、利负载均衡
+            .maxConnectionAgeGrace(10, TimeUnit.SECONDS)// 强制关闭前等待 10s，给进行中请求留缓冲
 
         // 若 SSL 开启，将生成的 SslContext 注入 Netty 管道
         sslContext?.let { builder.sslContext(it) }
