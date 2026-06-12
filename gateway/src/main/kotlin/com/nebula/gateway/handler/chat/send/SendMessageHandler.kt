@@ -13,7 +13,9 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -113,9 +115,10 @@ class SendMessageHandler(
     private suspend fun asyncUnreadAndPush(context: SendContext) {
         // D-06, D-16: 未读计数递增（REVIEW-MEDIUM-5 — 从 WriteStep 移出）
         try {
-            val members = conversationMemberRepository
-                .findByConversationId(context.conversationId)
-                .filter { it.userId != context.senderUid }
+            val members = withContext(Dispatchers.IO) {
+                conversationMemberRepository
+                    .findByConversationId(context.conversationId)
+            }.filter { it.userId != context.senderUid }
             for (member in members) {
                 try {
                     redis.incr("conversation:${context.conversationId}:unread:${member.userId}")

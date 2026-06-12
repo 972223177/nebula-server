@@ -15,6 +15,8 @@ import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -75,17 +77,22 @@ class ReadReportHandler(
         val session = coroutineContext.requireSession()
 
         // D-27: 获取会话并判断类型（私聊/群聊）
-        val conversation = conversationRepository.findById(req.conversationId).orElse(null)
-            ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
+        val conversation = withContext(Dispatchers.IO) {
+            conversationRepository.findById(req.conversationId).orElse(null)
+        } ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
         val isPrivate = conversation.type == PRIVATE_TYPE
 
         // REVIEW-MEDIUM-10: 成员身份检查 — 确保只有会话成员才能更新已读回执
-        val member = conversationMemberRepository.findByConversationIdAndUserId(
-            req.conversationId, session.userId
-        ) ?: throw ConversationException(BizCode.NOT_MEMBER, "不是会话成员")
+        val member = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationIdAndUserId(
+                req.conversationId, session.userId
+            )
+        } ?: throw ConversationException(BizCode.NOT_MEMBER, "不是会话成员")
 
         // D-24: 更新已读进度 — 设置 last_read_message_id 并清零 unread_count
-        conversationMemberRepository.updateReadReceipt(req.conversationId, session.userId, req.lastReadMsgId)
+        withContext(Dispatchers.IO) {
+            conversationMemberRepository.updateReadReceipt(req.conversationId, session.userId, req.lastReadMsgId)
+        }
 
         // D-28: 删除 Redis 未读计数键
         // 接受极低概率竞态：DEL 后新消息 INCR 覆盖，下次新消息自动修复
@@ -113,7 +120,9 @@ class ReadReportHandler(
      */
     private suspend fun pushReadReceiptToSender(req: ReadReportReq, readerUid: Long) {
         // 查询私聊的另一方成员
-        val members = conversationMemberRepository.findByConversationId(req.conversationId)
+        val members = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationId(req.conversationId)
+        }
         val senderMember = members.firstOrNull { it.userId != readerUid }
 
         if (senderMember != null) {
