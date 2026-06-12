@@ -203,7 +203,7 @@ Plans:
 - [x] 06-01-PLAN.md — Foundation: Proto regen, UserStreamRegistry, PushService, SendMessageException, unit tests
 
 **Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
-- [ ] 06-02-PLAN.md — Send Step Chain (Validate→Dedup→Write) + fire-and-forget async push + ChatService integration + unit tests
+- [x] 06-02-PLAN.md — Send Step Chain (Validate→Dedup→Write) + fire-and-forget async push + ChatService integration + unit tests
 - [ ] 06-03-PLAN.md — Message Pull & Read: PullMessagesHandler (security FIXME) + ReadReportHandler (membership check) + unit tests
 
 **Wave 3** *(depends on Wave 2)*
