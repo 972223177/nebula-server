@@ -25,6 +25,7 @@ dependencies {
     implementation(libs.kotlin.logging)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.protobuf.java)
+    implementation(libs.gson)
 
     // Test
     testImplementation(libs.koin.test)
