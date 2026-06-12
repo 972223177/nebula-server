@@ -8,17 +8,19 @@ option java_package = "com.nebula.chat";
 import "nebula/message_type.proto";
 
 // 通信方向枚举
-// 心跳采用双重心跳策略：
-// - 传输层：gRPC keepalive（HTTP/2 PING/PONG）快速检测 TCP 断开
-// - 业务层：应用层 PING/PONG（Direction 枚举值）检测 NAT/代理导致的半开连接
-//   应用层 PING 与业务消息在同一数据通道上，端到端真实状态检测
+// 双重心跳策略（D-27）：
+// - 传输层：gRPC keepalive（HTTP/2 PING/PONG）快速检测 TCP 断开 — 解决"连接是否存活"问题
+// - 业务层：应用层 PING/PONG（Direction 枚举值）检测 NAT/代理导致的半开连接 — 解决"服务是否健康"问题
+//   应用层 PING 与业务消息走在同一数据通道上，端到端真实状态检测
+// 两者分工：gRPC keepalive 只说明 HTTP/2 帧层面连接通，不代表服务端应用层能正常处理请求；
+// 应用层 PING 说明整个请求链路（Dispatcher + Handler）正常工作。
 enum Direction {
   DIRECTION_UNSPECIFIED = 0;  // 未知类型，不应使用
   REQUEST = 1;                // 客户端 → 服务端：发起业务请求
   RESPONSE = 2;               // 服务端 → 客户端：对请求的响应
   PUSH = 3;                   // 服务端 → 客户端：服务器主动推送事件（如新消息、踢出通知）
-  PING = 4;                   // 客户端 → 服务端：应用层心跳探测，检测半开连接
-  PONG = 5;                   // 服务端 → 客户端：应用层心跳应答
+  PING = 4;                   // 客户端 → 服务端：应用层心跳探测，检测半开连接（D-29: 客户端 30~60s 发送）
+  PONG = 5;                   // 服务端 → 客户端：应用层心跳应答（D-29: 服务端 90s 无 PING 断开）
 }
 
 // 消息信封：双向流中所有消息的外层包装，用于区分通信方向与负载类型
