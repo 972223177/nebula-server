@@ -65,7 +65,7 @@ class HikariDataSourceProvider(
         return "jdbc:mysql://${config.host}:${config.port}/${config.database}" +
                 "?sslMode=PREFERRED" +
                 "&useUnicode=true" +
-                "&characterEncoding=utf8mb4" +
+                "&characterEncoding=UTF-8" +
                 "&serverTimezone=UTC"
     }
 }

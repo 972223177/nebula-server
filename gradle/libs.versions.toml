@@ -12,6 +12,12 @@ mysql-connector = "9.2.0"
 grpc = "1.81.0"
 grpc-kotlin = "1.5.0"
 netty-tcnative = "2.0.78.Final"
+hibernate = "6.6.8.Final"
+spring-data-jpa = "3.4.5"
+spring-tx = "6.2.6"
+lettuce = "6.5.5.RELEASE"
+flyway = "10.22.0"
+kotlinx-coroutines = "1.9.0"
 
 [libraries]
 protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf" }
@@ -31,7 +37,18 @@ grpc-kotlin-stub = { module = "io.grpc:grpc-kotlin-stub", version.ref = "grpc-ko
 grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
 grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
 netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "netty-tcnative" }
+hibernate-core = { module = "org.hibernate.orm:hibernate-core", version.ref = "hibernate" }
+spring-data-jpa = { module = "org.springframework.data:spring-data-jpa", version.ref = "spring-data-jpa" }
+spring-tx = { module = "org.springframework:spring-tx", version.ref = "spring-tx" }
+lettuce-core = { module = "io.lettuce:lettuce-core", version.ref = "lettuce" }
+flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+flyway-mysql = { module = "org.flywaydb:flyway-mysql", version.ref = "flyway" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-reactive = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-reactive", version.ref = "kotlinx-coroutines" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-jpa = { id = "org.jetbrains.kotlin.plugin.jpa", version.ref = "kotlin" }
+kotlin-allopen = { id = "org.jetbrains.kotlin.plugin.allopen", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
