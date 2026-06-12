@@ -31,7 +31,7 @@ import java.util.UUID
  * @param userRepository 用户数据仓库
  * @param sessionRegistry Session 注册中心（用于 Token 验证）
  */
-class LoginHandler(
+open class LoginHandler(
     private val userRepository: UserRepository,
     private val sessionRegistry: SessionRegistry
 ) : Handler<LoginReq, LoginResp> {
