@@ -166,6 +166,19 @@ Plans:
 9. Batch query online status
 10. Set/get privacy settings
 
+**Plans:** 4 plans in 3 waves
+
+Plans:
+**Wave 1** *(autonomous, no dependencies)*
+- [ ] 05-01-PLAN.md — Proto 扩展 + SessionRegistry 设备类型 + Token 提取 + PrivacyRepository + bcrypt 依赖
+
+**Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
+- [ ] 05-02-PLAN.md — ChatService gRPC 双向流 + LoginHandler + RegisterHandler + SearchUserHandler
+- [ ] 05-03-PLAN.md — GetProfileHandler + BatchGetUserHandler + BatchGetStatusHandler + SetPrivacyHandler + GetPrivacyHandler
+
+**Wave 3** *(depends on Wave 2, 3)*
+- [ ] 05-04-PLAN.md — Koin DI 注册 + NebulaServer 启动更新 + 集成测试
+
 ---
 
 ## Phase 6: Chat & Message
