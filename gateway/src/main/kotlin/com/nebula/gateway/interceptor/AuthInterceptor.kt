@@ -55,16 +55,20 @@ open class AuthInterceptor(
     }
 
     /**
-     * 从请求中提取 Token。
+     * 从请求的 metadata map 中提取 Token（D-04 推荐方式）。
      *
-     * TODO: Phase 5 确定 Token 传递方式（如 Envelope metadata 或 params 中）后实现具体提取逻辑。
-     * 当前返回 null，确保未实现提取逻辑时安全地返回 UNAUTHORIZED。
+     * Token 通过 Request.metadata 传递，key 为 "authorization"。
+     * 客户端应在每个认证请求的 Request.metadata 中设置 "authorization" → token。
+     * login/register 请求走 skipMethods，不经过此方法。
      *
      * @param request 客户端请求
-     * @return Token 字符串，若无法提取则返回 null
+     * @return Token 字符串，若未携带则返回 null
      */
     open fun extractToken(request: Request): String? {
-        return null
+        val metadataMap = request.metadataMap
+        val token = metadataMap["authorization"]
+        if (token.isNullOrBlank()) return null
+        return token
     }
 
     companion object {
