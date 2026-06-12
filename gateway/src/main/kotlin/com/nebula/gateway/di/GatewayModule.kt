@@ -19,9 +19,25 @@ import com.nebula.gateway.interceptor.ExceptionInterceptor
 import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
+import com.nebula.gateway.handler.chat.send.DedupStep
+import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.chat.send.SendMessageStep
+import com.nebula.gateway.handler.chat.send.ValidateStep
+import com.nebula.gateway.handler.chat.send.WriteStep
+import com.nebula.gateway.handler.message.PullMessagesHandler
+import com.nebula.gateway.handler.message.ReadReportHandler
+import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.SessionRegistry
+import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.SessionRepository
+import io.lettuce.core.api.StatefulRedisConnection
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
+
+// Koin 4.x DSL: getAll() 用于解析所有 SendMessageStep 实现列表
 
 /**
  * 框架级 Koin 模块 — 注册所有基础设施组件（D-06）。
@@ -47,9 +63,10 @@ val frameworkModule = module {
 }
 
 /**
- * 业务 Handler Koin 模块 — 注册所有 Phase 5 Handler。
+ * 业务 Handler Koin 模块 — 注册所有 Handler 和业务组件。
  *
- * Phase 5: 包含 9 个 Handler（PingHandler + 8 个用户业务 Handler）。
+ * Phase 5: 包含 9 个 Handler（PingHandler + 8 个用户业务 Handler）
+ * Phase 6: 新增 UserStreamRegistry/PushService/3 个 Handler/3 个 SendMessageStep/SendMessageHandler scope
  * 新增 Handler 只需在此模块中添加 single { } 声明即可被 Koin 自动管理。
  */
 val handlerModule = module {
@@ -62,6 +79,23 @@ val handlerModule = module {
     single { BatchGetStatusHandler(get(), get()) } // OnlineStatusRepository + PrivacyRepository
     single { SetPrivacyHandler(get()) }          // PrivacyRepository
     single { GetPrivacyHandler(get()) }          // PrivacyRepository
+
+    // Phase 6: Chat & Message（D-13 Step 链 + PushService + 推送基础设施）
+    /** SendMessageHandler 使用 IO 调度器的后台协程执行 fire-and-forget 推送 */
+    single(named("sendHandlerScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
+    single { UserStreamRegistry() }                                                    // D-01
+    single { PushService(get(), get()) }                                                // PushService(UserStreamRegistry, ConversationMemberRepository)
+    // Step 链注册 — 显式构建列表传递给 SendMessageHandler（D-13）
+    single { 
+        listOf<SendMessageStep>(
+            ValidateStep(get()),                          // ValidateStep(ConversationMemberRepository)
+            DedupStep(get()),                             // DedupStep(RedisConnection)
+            WriteStep(get(), get(), get())                // WriteStep(SnowflakeIdGenerator, MessageQueueRepository, RedisConnection)
+        )
+    }
+    single { SendMessageHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) } // SendMessageHandler(steps, pushSvc, convMemberRepo, redisConn, scope)
+    single { PullMessagesHandler(get(), get()) }                                         // PullMessagesHandler(MessageRepository, ConversationRepository)
+    single { ReadReportHandler(get(), get(), get(), get()) }                             // ReadReportHandler(ConvRepo, ConvMemberRepo, PushSvc, RedisConn)
 }
 
 /**
@@ -113,6 +147,9 @@ private inline fun <reified ReqT : Any, reified RespT : Any> HandlerRegistry.reg
  * @param batchGetStatusHandler BatchGetStatusHandler 实例
  * @param setPrivacyHandler SetPrivacyHandler 实例
  * @param getPrivacyHandler GetPrivacyHandler 实例
+ * @param sendMessageHandler SendMessageHandler 实例
+ * @param pullMessagesHandler PullMessagesHandler 实例
+ * @param readReportHandler ReadReportHandler 实例
  */
 fun registerHandlers(
     registry: HandlerRegistry,
@@ -125,7 +162,10 @@ fun registerHandlers(
     batchGetUserHandler: BatchGetUserHandler,
     batchGetStatusHandler: BatchGetStatusHandler,
     setPrivacyHandler: SetPrivacyHandler,
-    getPrivacyHandler: GetPrivacyHandler
+    getPrivacyHandler: GetPrivacyHandler,
+    sendMessageHandler: SendMessageHandler,
+    pullMessagesHandler: PullMessagesHandler,
+    readReportHandler: ReadReportHandler
 ) {
     // 使用 inline 扩展函数逐个注册，消除重复的 HandlerEntry 构建代码（Review 修复）
     registry.register(pingHandler)               // system/ping: Request → Response
@@ -137,4 +177,7 @@ fun registerHandlers(
     registry.register(batchGetStatusHandler)     // user/batchGetStatus: BatchIdRequest → BatchGetStatusResp
     registry.register(setPrivacyHandler)         // user/setPrivacy: SetPrivacyReq → Response
     registry.register(getPrivacyHandler)         // user/getPrivacy: GetPrivacyReq → GetPrivacyResp
+    registry.register(sendMessageHandler)        // chat/send: SendMessageReq → SendMessageResp
+    registry.register(pullMessagesHandler)       // message/pull: PullMessagesReq → PullMessagesResp
+    registry.register(readReportHandler)         // message/read: ReadReportReq → Response
 }
