@@ -38,7 +38,7 @@ import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import jakarta.persistence.EntityTransaction
 import java.util.Optional
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
@@ -82,7 +82,7 @@ class PipelineIntegrationTest : KoinTest {
         override val method: String = "test/authenticated"
 
         override suspend fun handle(req: Request): Response {
-            val session = coroutineContext.requireSession()
+            val session = currentCoroutineContext().requireSession()
             return Response.newBuilder()
                 .setCode(200)
                 .setMsg("authenticated: ${session.userId}")

@@ -17,7 +17,7 @@ import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 已读报告 Handler — method = "message/read"（D-23, D-24, D-25, D-26, D-27, D-28）。
@@ -74,7 +74,7 @@ class ReadReportHandler(
      * @throws ConversationException(BizCode.NOT_MEMBER) 非会话成员
      */
     override suspend fun handle(req: ReadReportReq): Response {
-        val session = coroutineContext.requireSession()
+        val session = currentCoroutineContext().requireSession()
 
         // D-27: 获取会话并判断类型（私聊/群聊）
         val conversation = withContext(Dispatchers.IO) {

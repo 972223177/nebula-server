@@ -4,7 +4,7 @@ import com.nebula.chat.Request
 import com.nebula.chat.Response
 import com.nebula.gateway.handler.SessionKey
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -50,7 +50,7 @@ class RateLimitInterceptor(
         }
 
         // 获取限流 key：已认证请求使用 userId，未认证请求使用 IP
-        val session = coroutineContext[SessionKey]
+        val session = currentCoroutineContext()[SessionKey]
         val limitKey = session?.session?.userId?.toString() ?: extractClientIp(request)
 
         // 获取或创建该用户的信号量

@@ -5,7 +5,7 @@ import com.nebula.chat.user.GetPrivacyResp
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.repository.redis.PrivacyRepository
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 在线状态可见性读取 Handler — method = "user/getPrivacy"（BIZ-USER-06, D-11）。
@@ -35,7 +35,7 @@ class GetPrivacyHandler(
      * @return 当前用户的 hideOnlineStatus 设置
      */
     override suspend fun handle(req: GetPrivacyReq): GetPrivacyResp {
-        val session = coroutineContext.requireSession()
+        val session = currentCoroutineContext().requireSession()
         val hideOnlineStatus = privacyRepository.getHideOnlineStatus(session.userId)
         return GetPrivacyResp.newBuilder()
             .setHideOnlineStatus(hideOnlineStatus)
