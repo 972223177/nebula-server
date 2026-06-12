@@ -27,6 +27,7 @@ import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.UserRepository
 import io.lettuce.core.api.StatefulRedisConnection
+import jakarta.persistence.EntityManagerFactory
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,7 @@ class GatewayModuleTest {
     private val conversationRepo = mockk<ConversationRepository>()
     private val messageRepo = mockk<MessageRepository>()
     private val messageQueueRepo = mockk<MessageQueueRepository>()
+    private val emf = mockk<EntityManagerFactory>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
@@ -78,6 +80,7 @@ class GatewayModuleTest {
         single { idGenerator }
         single { redisConnection as StatefulRedisConnection<String, String> }
         single { messageQueueRepo }
+        single { emf as EntityManagerFactory }
         single { conversationMemberRepo }
         single { conversationRepo }
         single { messageRepo }
@@ -91,7 +94,7 @@ class GatewayModuleTest {
     private fun buildHandlerModule() = module {
         single { PingHandler() }
         single { LoginHandler(get(), get()) }
-        single { RegisterHandler(get(), get()) }
+        single { RegisterHandler(get(), get(), get()) }
         single { SearchUserHandler(get()) }
         single { GetProfileHandler(get()) }
         single { BatchGetUserHandler(get()) }

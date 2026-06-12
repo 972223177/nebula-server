@@ -31,6 +31,7 @@ import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.SessionRepository
 import io.lettuce.core.api.StatefulRedisConnection
+import jakarta.persistence.EntityManagerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,7 +73,7 @@ val frameworkModule = module {
 val handlerModule = module {
     single { PingHandler() }
     single { LoginHandler(get(), get()) }        // UserRepository + SessionRegistry
-    single { RegisterHandler(get(), get()) }     // UserRepository + SnowflakeIdGenerator
+    single { RegisterHandler(get(), get(), get()) } // UserRepository + SnowflakeIdGenerator + EntityManagerFactory
     single { SearchUserHandler(get()) }          // UserRepository
     single { GetProfileHandler(get()) }          // UserRepository
     single { BatchGetUserHandler(get()) }        // UserRepository

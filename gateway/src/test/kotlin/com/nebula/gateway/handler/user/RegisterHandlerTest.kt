@@ -9,6 +9,9 @@ import com.nebula.repository.repository.UserRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import jakarta.persistence.EntityManager
+import jakarta.persistence.EntityManagerFactory
+import jakarta.persistence.EntityTransaction
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -34,7 +37,19 @@ class RegisterHandlerTest {
     fun setUp() {
         userRepository = mockk<UserRepository>()
         idGenerator = mockk<SnowflakeIdGenerator>()
-        handler = RegisterHandler(userRepository, idGenerator)
+
+        // Mock JPA EntityManager chain for manual transaction management
+        val tx = mockk<EntityTransaction>(relaxed = true)
+        every { tx.begin() } returns Unit
+        every { tx.commit() } returns Unit
+
+        val em = mockk<EntityManager>(relaxed = true)
+        every { em.transaction } returns tx
+
+        val emf = mockk<EntityManagerFactory>()
+        every { emf.createEntityManager() } returns em
+
+        handler = RegisterHandler(userRepository, idGenerator, emf)
     }
 
     @Test

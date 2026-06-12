@@ -35,6 +35,9 @@ dependencies {
     // Phase 5: UserRepository 编译时依赖（repository 模块只以 implementation 导出 spring-data-jpa）
     implementation(libs.spring.data.jpa)
 
+    // Phase 6: JPA EntityManagerFactory — 手动事务管理（D-09）
+    implementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
+
     // Phase 5: ChatService gRPC 双向流服务
     implementation(libs.grpc.api)
     implementation(libs.grpc.protobuf)

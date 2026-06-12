@@ -34,6 +34,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import jakarta.persistence.EntityManager
+import jakarta.persistence.EntityManagerFactory
+import jakarta.persistence.EntityTransaction
 import java.util.Optional
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.test.runTest
@@ -309,7 +312,16 @@ class PipelineIntegrationTest : KoinTest {
         val userRepo = mockk<UserRepository>()
         val idGenerator = mockk<SnowflakeIdGenerator>()
 
-        val registerHandler = RegisterHandler(userRepo, idGenerator)
+        // Mock JPA EntityManager chain
+        val tx = mockk<EntityTransaction>(relaxed = true)
+        every { tx.begin() } returns Unit
+        every { tx.commit() } returns Unit
+        val em = mockk<EntityManager>(relaxed = true)
+        every { em.transaction } returns tx
+        val emf = mockk<EntityManagerFactory>()
+        every { emf.createEntityManager() } returns em
+
+        val registerHandler = RegisterHandler(userRepo, idGenerator, emf)
         val reqCodec = ProtoCodec.buildCodec(RegisterReq::class)
         val respCodec = ProtoCodec.buildCodec(RegisterResp::class)
         registry.register(
@@ -380,7 +392,7 @@ class PipelineIntegrationTest : KoinTest {
             nickname = "测试用户",
             avatar = "https://example.com/avatar.jpg"
         ).apply { id = 1001L }
-        every { userRepo.findByUsernameContaining("test", 0L, 21) } returns listOf(matchedUser)
+        every { userRepo.findByUsernameContaining("test", null, 21) } returns listOf(matchedUser)
 
         // Mock SessionRegistry — 提供认证 session
         val sessionRegistry = mockk<SessionRegistry>()
