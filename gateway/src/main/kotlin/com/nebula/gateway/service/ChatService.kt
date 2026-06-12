@@ -10,6 +10,7 @@ import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
+import com.nebula.gateway.session.UserStreamRegistry
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.BindableService
 import io.grpc.MethodDescriptor
@@ -33,19 +34,23 @@ import java.util.concurrent.ConcurrentHashMap
  * - 拦截 user/login 的 200 响应，从 LoginResp 中读取设备信息并注册 Session（D-05 绑定流程）
  * - 维护 tokenToObserver 映射，支持同类型设备互踢时的 LOGOUT 推送（D-05 eviction callback）
  * - 在 onCompleted()/onError() 中清理 tokenToObserver，防止内存泄漏（Review 反馈#6）
+ * - 集成 UserStreamRegistry，在登录成功时注册 StreamObserver，连接关闭时解除注册（D-01）
  *
  * 设计决策引用：
+ * - D-01: UserStreamRegistry 管理 userId→StreamObserver 映射，ChatService 在生命周期事件中注册/注销
  * - D-04: LoginResp 的 deviceType/deviceId 由 LoginHandler 从 LoginReq 复制，无需 ChatService 重新解析 params
  * - D-05: Session 绑定流程：handleRequest → registerWithDeviceType → eviction callback → LOGOUT 推送
  *
  * @param dispatcher 请求分发器
  * @param sessionRegistry Session 注册中心（含设备类型互踢逻辑）
  * @param registry Handler 注册中心
+ * @param userStreamRegistry 用户 StreamObserver 注册中心（D-01）
  */
 class ChatService(
     private val dispatcher: Dispatcher,
     private val sessionRegistry: SessionRegistry,
-    private val registry: HandlerRegistry
+    private val registry: HandlerRegistry,
+    private val userStreamRegistry: UserStreamRegistry
 ) : BindableService {
 
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
@@ -91,6 +96,9 @@ class ChatService(
         private val responseObserver: StreamObserver<Envelope>
     ) : StreamObserver<Envelope> {
 
+        /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。 */
+        var userId: Long? = null
+
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
                 Direction.REQUEST -> scope.launch {
@@ -113,12 +121,18 @@ class ChatService(
         }
 
         /**
-         * 清理此连接持有的所有 token→observer 映射（Review 修复：防止内存泄漏）。
+         * 清理此连接持有的所有资源（Review 修复：防止内存泄漏）。
          *
-         * 遍历 tokenToObserver，移除 value 等于当前 responseObserver 的条目。
+         * 清理操作：
+         * 1. 从 tokenToObserver 移除当前 responseObserver 的所有 token 映射
+         * 2. 从 UserStreamRegistry 移除当前设备的 StreamObserver（D-01）
          */
         private fun cleanupConnection() {
             tokenToObserver.entries.removeIf { it.value == responseObserver }
+            // D-01: 移除当前设备 StreamObserver（不调 removeUser 以免移除其他设备的流）
+            userId?.let { uid ->
+                userStreamRegistry.removeStream(uid, responseObserver)
+            }
         }
     }
 
@@ -158,6 +172,7 @@ class ChatService(
      *
      * 从 LoginResp 中直接读取 deviceType/deviceId（Review 修复：无需重新解析 Request.params）。
      * 调用 SessionRegistry.registerWithDeviceType() 注册 Session，旧连接收到 LOGOUT 推送。
+     * 同时将当前 StreamObserver 注册到 UserStreamRegistry（D-01）。
      *
      * @param response 登录成功响应（code=200）
      * @param responseObserver 当前连接的 StreamObserver
@@ -186,6 +201,13 @@ class ChatService(
             tokenToObserver.remove(evictedToken)
         }
         tokenToObserver[session.token] = responseObserver
+
+        // D-01: 注册 StreamObserver 到 UserStreamRegistry（REVIEW-MEDIUM-7: 使用 require 替代 as? 静默转换）
+        require(responseObserver is ChatStreamObserver) {
+            "responseObserver must be ChatStreamObserver"
+        }
+        responseObserver.userId = loginResp.userId
+        userStreamRegistry.register(loginResp.userId, responseObserver)
 
         // 发送 LoginResp Envelope 给客户端
         val loginRespEnvelope = Envelope.newBuilder()
