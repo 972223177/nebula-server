@@ -8,7 +8,7 @@ progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 26
   percent: 55
 ---
 
@@ -31,8 +31,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 2 — Common Module & Infrastructure Base | Complete | 2026-06-11 | 2026-06-11 |
 | 3 — Database Schema & Repository Layer | Complete | 2026-06-11 | 2026-06-11 |
 | 4 — Handler Framework | Complete | 2026-06-12 | 2026-06-12 |
-| 5 — User & Authentication | In Progress (gap closure) | 2026-06-12 | — |
-| 6 — Chat & Message | In Progress (gap closure) | 2026-06-12 | — |
+| 5 — User & Authentication | Complete | 2026-06-12 | 2026-06-12 |
+| 6 — Chat & Message | Complete | 2026-06-12 | 2026-06-12 |
 | 7 — Conversation | Pending | — | — |
 | 8 — Friend & Online Status | Pending | — | — |
 | 9 — Reconnection | Pending | — | — |

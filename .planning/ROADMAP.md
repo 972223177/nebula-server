@@ -180,7 +180,7 @@ Plans:
 - [x] 05-04-PLAN.md — Koin DI 注册 + registerHandlers() 简化 + NebulaServer 启动 + 集成测试（含登录路径 + Koin 清理修复）
 
 **Wave 4** *(gap closure — 修复 JPA 阻塞)*
-- [ ] 05-05-PLAN.md — 解决 JPA EntityManager 阻塞问题：所有 Handler 通过 withContext(Dispatchers.IO) 执行 JPA 操作
+- [x] 05-05-PLAN.md — 解决 JPA EntityManager 阻塞问题：所有 Handler 通过 withContext(Dispatchers.IO) 执行 JPA 操作
 
 ---
 
@@ -213,7 +213,7 @@ Plans:
 - [x] 06-04-PLAN.md — DI Wiring + NebulaServer ChatService constructor fix + Koin verification test
 
 **Wave 4** *(gap closure — 修复 JPA 阻塞)*
-- [ ] 06-05-PLAN.md — 解决 JPA EntityManager 阻塞问题：所有 Handler 通过 withContext(Dispatchers.IO) 执行 JPA 操作
+- [x] 06-05-PLAN.md — 解决 JPA EntityManager 阻塞问题：所有 Handler 通过 withContext(Dispatchers.IO) 执行 JPA 操作
 
 ---
 
