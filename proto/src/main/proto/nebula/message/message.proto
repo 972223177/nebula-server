@@ -23,12 +23,12 @@ message PullMessagesResp {
 }
 
 // 聊天消息结构
+// 客户端通过 sender_uid / receiver_id 配合 user/batchGet 展示用户信息（D-Phase6-02）。
 message ChatMessage {
   int64 msg_id = 1;                   // 消息 ID
   string conversation_id = 2;         // 所属会话ID
   int64 sender_uid = 3;               // 发送者 UID
-  string sender_username = 4;         // 发送者用户名
-  string sender_avatar = 5;           // 发送者头像 URL
+  int64 receiver_uid = 11;            // 私聊接收者 UID（群聊为 0）
   ChatContentType message_type = 6;       // 消息内容类型（ChatContentType），描述正文格式
   string content = 7;                 // 消息文本内容
   bytes payload = 8;                  // 消息附加数据
@@ -41,4 +41,12 @@ message ChatMessage {
 message ReadReportReq {
   string conversation_id = 1;         // 会话ID
   int64 last_read_msg_id = 2;         // 最后一条已读消息 ID
+}
+
+// 已读回执推送 payload（PUSH EventType=READ_RECEIPT）
+// 私聊场景下，接收方读了消息后推送给发送者。
+message ReadReceiptPayload {
+  string conversation_id = 1;         // 会话ID
+  int64 reader_uid = 2;              // 已读用户 UID
+  int64 msg_id = 3;                  // 最后已读消息 ID
 }
