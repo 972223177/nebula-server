@@ -1,0 +1,250 @@
+package com.nebula.gateway.handler.message
+
+import com.nebula.chat.Response
+import com.nebula.chat.message.ReadReceiptPayload
+import com.nebula.chat.message.ReadReportReq
+import com.nebula.common.BizCode
+import com.nebula.common.exception.ConversationException
+import com.nebula.gateway.handler.SessionKey
+import com.nebula.gateway.push.PushService
+import com.nebula.gateway.session.Session
+import com.nebula.repository.entity.ConversationEntity
+import com.nebula.repository.entity.ConversationMemberEntity
+import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.repository.repository.ConversationRepository
+import io.lettuce.core.ExperimentalLettuceCoroutinesApi
+import io.lettuce.core.api.StatefulRedisConnection
+import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.runs
+import io.mockk.verify
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import java.util.Optional
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+
+/**
+ * ReadReportHandler 已读报告 Handler 单元测试（D-23, D-24, D-27, D-28, REVIEW-MEDIUM-10）。
+ *
+ * 覆盖场景：
+ * - 会话不存在 → 抛出 ConversationException(BizCode.CONV_NOT_FOUND)（D-27）
+ * - 非会话成员 → 抛出 ConversationException(BizCode.NOT_MEMBER)（REVIEW-MEDIUM-10）
+ * - 私聊且读者是会话成员 → 更新已读进度 + DEL unread key + 推送 READ_RECEIPT（D-23, D-24, D-28）
+ * - 群聊 → 更新已读进度 + DEL unread key + 不推送（D-23）
+ * - 私聊另一方已离线/退出 → 不推送（不抛异常）
+ */
+@OptIn(ExperimentalLettuceCoroutinesApi::class)
+class ReadReportHandlerTest {
+
+    private lateinit var conversationRepository: ConversationRepository
+    private lateinit var conversationMemberRepository: ConversationMemberRepository
+    private lateinit var pushService: PushService
+    private lateinit var connection: StatefulRedisConnection<String, String>
+    private lateinit var redis: RedisCoroutinesCommands<String, String>
+    private lateinit var handler: ReadReportHandler
+
+    private val session = Session(2001L, "token-y", "MOBILE", "dev-2", "conn-2")
+
+    @BeforeEach
+    fun setUp() {
+        conversationRepository = mockk()
+        conversationMemberRepository = mockk()
+        pushService = mockk(relaxed = true)
+        connection = mockk(relaxed = true)
+        redis = mockk(relaxed = true)
+
+        handler = ReadReportHandler(
+            conversationRepository,
+            conversationMemberRepository,
+            pushService,
+            connection
+        )
+        // 通过反射注入 mock redis，避免使用 connection.reactive() 创建的实例
+        injectMockRedis()
+    }
+
+    /**
+     * 替换 ReadReportHandler 中的 redis 字段为 mock 实例。
+     */
+    private fun injectMockRedis() {
+        val field = ReadReportHandler::class.java.getDeclaredField("redis")
+        field.isAccessible = true
+        field.set(handler, redis)
+    }
+
+    @Test
+    fun `会话不存在时抛出ConversationException`() = runTest {
+        every { conversationRepository.findById("conv-not-exists") } returns Optional.empty()
+
+        val req = ReadReportReq.newBuilder()
+            .setConversationId("conv-not-exists")
+            .setLastReadMsgId(50001L)
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.CONV_NOT_FOUND, exception.bizCode)
+    }
+
+    @Test
+    fun `非会话成员时抛出ConversationException`() = runTest {
+        val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
+        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
+        } returns null
+
+        val req = ReadReportReq.newBuilder()
+            .setConversationId("conv-001")
+            .setLastReadMsgId(50001L)
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.NOT_MEMBER, exception.bizCode)
+    }
+
+    @Test
+    fun `私聊场景更新已读并推送READ_RECEIPT`() = runTest {
+        // 模拟私聊会话（type=0）
+        val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
+        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
+
+        // 当前用户是会话成员
+        val member = ConversationMemberEntity("conv-001", 2001L)
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
+        } returns member
+
+        // 更新已读
+        coEvery {
+            conversationMemberRepository.updateReadReceipt("conv-001", 2001L, 50001L)
+        } just runs
+
+        // 私聊另一方成员
+        val senderMember = ConversationMemberEntity("conv-001", 1001L)
+        every {
+            conversationMemberRepository.findByConversationId("conv-001")
+        } returns listOf(member, senderMember)
+
+        // 执行
+        val req = ReadReportReq.newBuilder()
+            .setConversationId("conv-001")
+            .setLastReadMsgId(50001L)
+            .build()
+        val resp = withContext(SessionKey(session)) { handler.handle(req) }
+
+        // 验证响应
+        assertNotNull(resp)
+        assertEquals(200, resp.code)
+        assertEquals("message/read", resp.method)
+
+        // 验证 updateReadReceipt 被调用
+        coVerify {
+            conversationMemberRepository.updateReadReceipt("conv-001", 2001L, 50001L)
+        }
+
+        // 验证 Redis DEL 被调用
+        coVerify {
+            redis.del("conversation:conv-001:unread:2001")
+        }
+
+        // 验证 pushReadReceipt 被调用（私聊场景）
+        verify {
+            pushService.pushReadReceipt(1001L, any<ReadReceiptPayload>())
+        }
+    }
+
+    @Test
+    fun `群聊场景更新已读但不推送READ_RECEIPT`() = runTest {
+        // 模拟群聊会话（type=1）
+        val convEntity = ConversationEntity(type = 1).apply { id = "conv-002" }
+        every { conversationRepository.findById("conv-002") } returns Optional.of(convEntity)
+
+        // 当前用户是会话成员
+        val member = ConversationMemberEntity("conv-002", 2001L)
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-002", 2001L)
+        } returns member
+
+        // 更新已读
+        coEvery {
+            conversationMemberRepository.updateReadReceipt("conv-002", 2001L, 60001L)
+        } just runs
+
+        // 执行
+        val req = ReadReportReq.newBuilder()
+            .setConversationId("conv-002")
+            .setLastReadMsgId(60001L)
+            .build()
+        val resp = withContext(SessionKey(session)) { handler.handle(req) }
+
+        // 验证响应
+        assertNotNull(resp)
+        assertEquals(200, resp.code)
+
+        // 验证 updateReadReceipt 被调用
+        coVerify {
+            conversationMemberRepository.updateReadReceipt("conv-002", 2001L, 60001L)
+        }
+
+        // 验证 Redis DEL 被调用
+        coVerify {
+            redis.del("conversation:conv-002:unread:2001")
+        }
+
+        // 验证 pushReadReceipt 不被调用（群聊不推送）
+        verify(exactly = 0) {
+            pushService.pushReadReceipt(any<Long>(), any<ReadReceiptPayload>())
+        }
+    }
+
+    @Test
+    fun `私聊另一方已退出时不推送不抛异常`() = runTest {
+        // 模拟私聊会话（type=0）
+        val convEntity = ConversationEntity(type = 0).apply { id = "conv-003" }
+        every { conversationRepository.findById("conv-003") } returns Optional.of(convEntity)
+
+        // 当前用户是会话成员
+        val member = ConversationMemberEntity("conv-003", 2001L)
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-003", 2001L)
+        } returns member
+
+        // 更新已读
+        coEvery {
+            conversationMemberRepository.updateReadReceipt("conv-003", 2001L, 70001L)
+        } just runs
+
+        // 私聊成员查询——只有读者自己，无发送者
+        every {
+            conversationMemberRepository.findByConversationId("conv-003")
+        } returns listOf(member)
+
+        // 执行
+        val req = ReadReportReq.newBuilder()
+            .setConversationId("conv-003")
+            .setLastReadMsgId(70001L)
+            .build()
+        val resp = withContext(SessionKey(session)) { handler.handle(req) }
+
+        // 验证响应正常返回（不抛异常）
+        assertNotNull(resp)
+        assertEquals(200, resp.code)
+
+        // 验证 pushReadReceipt 不被调用
+        verify(exactly = 0) {
+            pushService.pushReadReceipt(any<Long>(), any<ReadReceiptPayload>())
+        }
+    }
+}
