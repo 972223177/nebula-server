@@ -5,6 +5,8 @@ import com.nebula.chat.user.SearchUserResp
 import com.nebula.chat.user.UserBrief
 import com.nebula.gateway.handler.Handler
 import com.nebula.repository.repository.UserRepository
+import java.time.Instant
+import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 /**
@@ -46,10 +48,14 @@ class SearchUserHandler(
         val cursor = req.cursor
         val limit = if (req.limit in 1..maxLimit) req.limit else maxLimit
 
+        // 将毫秒时间戳游标转换为 LocalDateTime（null 表示首次查询）
+        val cursorDateTime = if (cursor == 0L) null
+            else LocalDateTime.ofInstant(Instant.ofEpochMilli(cursor), ZoneOffset.UTC)
+
         // 多取一条判断是否有更多数据（D-08 游标分页策略）
         val users = userRepository.findByUsernameContaining(
             keyword = keyword,
-            cursor = cursor,
+            cursor = cursorDateTime,
             limit = limit + 1
         )
         val hasMore = users.size > limit

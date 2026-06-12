@@ -41,6 +41,7 @@ import com.nebula.repository.repository.impl.MessageRepositoryImpl
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
 import io.lettuce.core.api.StatefulRedisConnection
+import jakarta.persistence.EntityManagerFactory
 import kotlinx.coroutines.runBlocking
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -118,12 +119,20 @@ fun main() {
     // Phase 5: 外部 Repository 模块（由 JpaConfig/RedisConfig 动态创建）
     // 将 main() 中创建的 Repository 实例注入 Koin 容器，供 Handler 通过 get() 获取
     val externalModule = module {
+        single { jpaConfig.entityManagerFactory as EntityManagerFactory }
         single { userRepo as UserRepository }
         single { sessionRepo as SessionRepository }
         single { onlineStatusRepo as OnlineStatusRepository }
         single { idGenerator as SnowflakeIdGenerator }
         single { PrivacyRepository(redisConfig.connection, userRepo as UserRepository) }
         single { redisConfig.connection as StatefulRedisConnection<String, String> }
+        single { conversationRepo as ConversationRepository }
+        single { conversationMemberRepo as ConversationMemberRepository }
+        single { messageRepo as MessageRepository }
+        single { messageWriteRepo as MessageRepositoryImpl }
+        single { messageQueueRepo as MessageQueueRepository }
+        single { friendshipRepo as FriendshipRepository }
+        single { friendRequestRepo as FriendRequestRepository }
     }
 
     startKoin {

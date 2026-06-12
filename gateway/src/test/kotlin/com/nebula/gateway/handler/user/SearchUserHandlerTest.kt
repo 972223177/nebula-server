@@ -54,7 +54,7 @@ class SearchUserHandlerTest {
             createUser(1002L, "testuser2", LocalDateTime.of(2026, 6, 1, 9, 0))
         )
         coEvery {
-            userRepository.findByUsernameContaining("test", 0L, 21)
+            userRepository.findByUsernameContaining("test", null, 21)
         } returns users
 
         val req = SearchUserReq.newBuilder()
@@ -73,7 +73,7 @@ class SearchUserHandlerTest {
     @Test
     fun `搜索无结果`() = runTest {
         coEvery {
-            userRepository.findByUsernameContaining("nonexistent", 0L, 21)
+            userRepository.findByUsernameContaining("nonexistent", null, 21)
         } returns emptyList()
 
         val req = SearchUserReq.newBuilder()
@@ -99,7 +99,7 @@ class SearchUserHandlerTest {
             )
         }
         coEvery {
-            userRepository.findByUsernameContaining("user", 0L, 21)
+            userRepository.findByUsernameContaining("user", null, 21)
         } returns users
 
         val req = SearchUserReq.newBuilder()
@@ -122,7 +122,7 @@ class SearchUserHandlerTest {
             createUser(1002L, "beta", baseTime.minusHours(3))
         )
         coEvery {
-            userRepository.findByUsernameContaining("user", 0L, 21)
+            userRepository.findByUsernameContaining("user", null, 21)
         } returns users
 
         val req = SearchUserReq.newBuilder()
