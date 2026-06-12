@@ -40,6 +40,10 @@ dependencies {
     implementation(libs.grpc.protobuf)
     implementation(libs.grpc.stub)
 
+    // Phase 6: Chat & Message — Redis 直接操作（DedupStep Redis SETNX、WriteStep 会话元更新）
+    implementation(libs.lettuce.core)
+    implementation(libs.kotlinx.coroutines.reactive)
+
     // Test
     testImplementation(libs.koin.test)
     testImplementation(libs.koin.test.junit5)
