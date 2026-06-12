@@ -32,6 +32,9 @@ class SessionRegistry(
     /** userId → token 集合索引，用于多设备管理（D-18） */
     private val userIdIndex = ConcurrentHashMap<Long, MutableSet<String>>()
 
+    /** 设备类型索引 — userId:deviceType → token，用于同类型设备互踢（D-05, AUTH-05） */
+    private val deviceTypeIndex = ConcurrentHashMap<String, String>()
+
     /** 缓存驱逐回调列表 — 当 Session 被驱逐时通知关闭 StreamObserver（D-20） */
     private val evictionCallbacks = CopyOnWriteArrayList<(String) -> Unit>()
 
@@ -82,6 +85,9 @@ class SessionRegistry(
                 tokens.remove(token)
                 if (tokens.isEmpty()) null else tokens
             }
+            // 同时清理设备类型索引（D-05）
+            val deviceKey = deviceTypeKey(session.userId, session.deviceType)
+            deviceTypeIndex.remove(deviceKey, token)
         }
         return session
     }
@@ -194,9 +200,118 @@ class SessionRegistry(
      * @param token 待注销的 Session Token
      */
     suspend fun unregister(token: String) {
-        removeFromLocalCache(token)
+        val session = removeFromLocalCache(token)
         removeFromRedis(token)
         evictionCallbacks.forEach { it(token) }
+        // 清理 Redis 设备类型映射（D-05）
+        if (session != null) {
+            deleteDeviceTypeMapping(session)
+        }
+    }
+
+    // ==================== 设备类型管理（D-05, AUTH-05） ====================
+
+    /**
+     * 按设备类型注册 Session — 同类型设备互踢（D-05, AUTH-05）。
+     *
+     * 流程：
+     * 1. 检查 deviceTypeIndex 是否存在同 userId+deviceType 的旧 token
+     * 2. 若存在，unregister 旧 token（触发驱逐回调 → LOGOUT 推送）
+     * 3. 注册新 Session（L1 + L2 token key）
+     * 4. 写入设备类型交叉引用到 Redis（key: "session:{userId}:{deviceType}" → token, TTL 7天）
+     * 5. 更新本地 deviceTypeIndex
+     *
+     * @param session 新 Session
+     * @return 被驱逐的旧 Session token，若无则 null
+     */
+    suspend fun registerWithDeviceType(session: Session): String? {
+        val key = deviceTypeKey(session.userId, session.deviceType)
+        val existingToken = deviceTypeIndex[key]
+
+        if (existingToken != null) {
+            // 同设备类型的旧连接存在，触发踢下线（LOGOUT 推送在 eviction callback 中完成）
+            unregister(existingToken)
+        }
+
+        // 注册新 Session（L1 + L2 token key）
+        register(session)
+
+        // 写入设备类型交叉引用到 Redis
+        saveDeviceTypeMapping(session)
+
+        // 更新本地索引
+        deviceTypeIndex[key] = session.token
+        return existingToken
+    }
+
+    /**
+     * 生成设备类型索引 key。
+     *
+     * @param userId 用户 ID
+     * @param deviceType 设备类型字符串
+     * @return key 格式: "$userId:$deviceType"
+     */
+    private fun deviceTypeKey(userId: Long, deviceType: String): String = "$userId:$deviceType"
+
+    /**
+     * 将设备类型映射持久化到 Redis（D-05）。
+     *
+     * 服务器重启后可以从 Redis 恢复设备类型映射，确保同类型互踢在重启后仍可工作。
+     * 使用 500ms 超时保护，超时仅日志记录不阻塞注册流程。
+     *
+     * @param session 当前注册的 Session
+     */
+    private suspend fun saveDeviceTypeMapping(session: Session) {
+        try {
+            withTimeout(redisTimeoutMs) {
+                sessionRepository.saveRaw(
+                    "session:${session.userId}:${session.deviceType}",
+                    session.token
+                )
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Device type mapping save timeout for userId=${session.userId}, degraded to local only" }
+        } catch (e: Exception) {
+            logger.error(e) { "Device type mapping save failed for userId=${session.userId}" }
+        }
+    }
+
+    /**
+     * 删除 Redis 中的设备类型映射。
+     *
+     * @param session 被移除的 Session
+     */
+    private suspend fun deleteDeviceTypeMapping(session: Session) {
+        try {
+            withTimeout(redisTimeoutMs) {
+                sessionRepository.deleteKey("session:${session.userId}:${session.deviceType}")
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Device type mapping delete timeout for userId=${session.userId}" }
+        } catch (e: Exception) {
+            logger.error(e) { "Device type mapping delete failed for userId=${session.userId}" }
+        }
+    }
+
+    /**
+     * 从 Redis 查找设备类型映射（重启后恢复用）。
+     *
+     * @param userId 用户 ID
+     * @param deviceType 设备类型字符串
+     * @return token 字符串，若不存在则返回 null
+     */
+    private suspend fun findDeviceTokenFromRedis(userId: Long, deviceType: String): String? {
+        return try {
+            withTimeout(redisTimeoutMs) {
+                sessionRepository.findRaw("session:$userId:$deviceType")
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Device type mapping query timeout for userId=$userId" }
+            null
+        } catch (e: Exception) {
+            logger.error(e) { "Device type mapping query failed for userId=$userId" }
+            null
+        }
     }
 
     companion object {
