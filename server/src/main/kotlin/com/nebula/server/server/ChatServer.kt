@@ -2,6 +2,7 @@ package com.nebula.server.server
 
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.config.buildSslContext
+import com.nebula.gateway.service.ChatService
 import io.grpc.Server
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import java.util.concurrent.TimeUnit
@@ -13,6 +14,7 @@ import java.util.concurrent.TimeUnit
  * - 使用 NettyServerBuilder 构建 gRPC Server
  * - 集成 SSL/TLS 双向证书认证（可选）
  * - 配置连接控制参数：消息大小限制、keepalive、流控
+ * - 注册 gRPC 服务端点（addService）
  * - 提供服务启动、优雅关闭和阻塞等待的声明式接口
  *
  * 设计决策引用：
@@ -25,17 +27,21 @@ class ChatServer(private val config: ApplicationConfig) {
     private var server: Server? = null
 
     /**
-     * 启动 gRPC 服务。
+     * 启动 gRPC 服务，注册 ChatService 服务端点。
      *
      * 构建流程：
      * 1. 生成 SSLContext（若 ssl.enabled=false 则返回 null，不加载证书）
-     * 2. 配置 NettyServerBuilder：端口、消息大小、keepalive 参数
+     * 2. 配置 NettyServerBuilder：端口、消息大小、keepalive 参数、addService 服务注册
      * 3. 有条件地配置 SSL（sslContext != null 时启用）
      * 4. 调用 builder.build().start() 启动服务
      *
+     * 修复 Phase 4 遗漏的 addService 注册（Review 反馈#高优先级）：
+     * ChatService 作为 gRPC BindableService，需通过 builder.addService() 注册到 gRPC Server。
+     *
+     * @param chatService ChatService 双向流服务实例
      * @throws IOException 如果端口被占用或 SSL 证书加载失败
      */
-    fun start() {
+    fun start(chatService: ChatService) {
         val sslContext = config.ssl.buildSslContext()
 
         val builder = NettyServerBuilder.forPort(config.server.port)
@@ -57,6 +63,9 @@ class ChatServer(private val config: ApplicationConfig) {
             // 安全边界 — 强制执行连接生命周期上限
             .maxConnectionAge(1800, TimeUnit.SECONDS)   // 30 分钟强制刷新连接，防老化、利负载均衡（安全边界，保持不变）
             .maxConnectionAgeGrace(10, TimeUnit.SECONDS)// 强制关闭前等待 10s，给进行中请求留缓冲
+
+            // Phase 5: 注册 ChatService 服务端点（Review 修复：Phase 4 遗漏的 addService）
+            .addService(chatService)
 
         // 若 SSL 开启，将生成的 SslContext 注入 Netty 管道
         sslContext?.let { builder.sslContext(it) }
