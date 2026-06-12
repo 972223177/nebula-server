@@ -43,4 +43,22 @@ class SessionRepository(
     suspend fun delete(token: String) {
         redis.del("$KEY_PREFIX$token")
     }
+
+    // ==================== 通用 Redis key/value 操作 ====================
+    // 以下方法不校验 key 前缀，由调用方负责 key 命名逻辑
+
+    /** 通用 Redis 字符串写入（用于设备类型映射等场景） */
+    suspend fun saveRaw(key: String, value: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
+        redis.setex(key, ttlSeconds, value)
+    }
+
+    /** 通用 Redis 字符串读取 */
+    suspend fun findRaw(key: String): String? {
+        return redis.get(key)
+    }
+
+    /** 删除 Redis key */
+    suspend fun deleteKey(key: String) {
+        redis.del(key)
+    }
 }
