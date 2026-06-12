@@ -44,4 +44,16 @@ dependencies {
 
     // Phase 4: Handler Framework — Koin 启动
     implementation(libs.koin.core)
+
+    // Phase 6: Koin 验证测试
+    testImplementation(libs.koin.test)
+    testImplementation(libs.koin.test.junit5)
+    testImplementation(libs.mockk)
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
