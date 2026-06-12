@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-last_updated: "2026-06-12T08:28:04.988Z"
+last_updated: "2026-06-12T17:05:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
-  completed_plans: 16
-  percent: 36
+  completed_plans: 20
+  percent: 45
 ---
 
 # State: Nebula Chat Server
@@ -19,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** Phase 5 — user & authentication
+**Current focus:** Phase 05 — user-authentication
 **Phase count:** 11
 **Requirements:** 70 v1 requirements mapped
 
@@ -30,8 +30,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 1 — Project Scaffolding & Proto Definitions | Complete | 2026-06-11 | 2026-06-11 |
 | 2 — Common Module & Infrastructure Base | Complete | 2026-06-11 | 2026-06-11 |
 | 3 — Database Schema & Repository Layer | Complete | 2026-06-11 | 2026-06-11 |
-| 4 — Handler Framework | Pending | — | — |
-| 5 — User & Authentication | Pending | — | — |
+| 4 — Handler Framework | Complete | 2026-06-12 | 2026-06-12 |
+| 5 — User & Authentication | Complete | 2026-06-12 | 2026-06-12 |
 | 6 — Chat & Message | Pending | — | — |
 | 7 — Conversation | Pending | — | — |
 | 8 — Friend & Online Status | Pending | — | — |
@@ -41,8 +41,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 ## Next Actions
 
-1. `/gsd-discuss-phase 4` — discuss Phase 4 (Handler Framework) context
-2. `/gsd-plan-phase 4` — plan Phase 4 execution
+1. `/gsd-discuss-phase 6` — discuss Phase 6 (Chat & Message) context
+2. `/gsd-plan-phase 6` — plan Phase 6 execution
 
 ## Quick Tasks Completed
 

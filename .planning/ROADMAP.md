@@ -166,18 +166,18 @@ Plans:
 9. Batch query online status
 10. Set/get privacy settings
 
-**Plans:** 4 plans in 3 waves
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1** *(autonomous, no dependencies)*
-- [ ] 05-01-PLAN.md — Proto 扩展（Request.metadata + RegisterReq + 游标分页 + LoginResp device 字段）+ SessionRegistry 设备类型 + Token 提取 + SessionRepository.saveRaw + PrivacyRepository（含 batch MGET）+ RegisterRateLimiter（内存泄漏修复）+ bcrypt 依赖
+- [x] 05-01-PLAN.md — Proto 扩展（Request.metadata + RegisterReq + 游标分页 + LoginResp device 字段）+ SessionRegistry 设备类型 + Token 提取 + SessionRepository.saveRaw + PrivacyRepository（含 batch MGET）+ RegisterRateLimiter（内存泄漏修复）+ bcrypt 依赖
 
 **Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
-- [ ] 05-02-PLAN.md — ChatService addService 修复 + tokenToObserver 生命周期管理 + LoginHandler（Token 复用修复 + 移除多余依赖）+ RegisterHandler + SearchUserHandler + 游标分页 + 单元测试
-- [ ] 05-03-PLAN.md — GetProfileHandler + BatchGetUserHandler（缺失 ID 文档化）+ BatchGetStatusHandler（MGET 批量隐私过滤 N+1 修复）+ SetPrivacyHandler（best-effort 文档化）+ GetPrivacyHandler + 单元测试
+- [x] 05-02-PLAN.md — ChatService addService 修复 + tokenToObserver 生命周期管理 + LoginHandler（Token 复用修复 + 移除多余依赖）+ RegisterHandler + SearchUserHandler + 游标分页 + 单元测试
+- [x] 05-03-PLAN.md — GetProfileHandler + BatchGetUserHandler（缺失 ID 文档化）+ BatchGetStatusHandler（MGET 批量隐私过滤 N+1 修复）+ SetPrivacyHandler（best-effort 文档化）+ GetPrivacyHandler + 单元测试
 
 **Wave 3** *(depends on Wave 2, 3)*
-- [ ] 05-04-PLAN.md — Koin DI 注册 + registerHandlers() 简化 + NebulaServer 启动 + 集成测试（含登录路径 + Koin 清理修复）
+- [x] 05-04-PLAN.md — Koin DI 注册 + registerHandlers() 简化 + NebulaServer 启动 + 集成测试（含登录路径 + Koin 清理修复）
 
 ---
 
@@ -319,18 +319,18 @@ Plans:
 | HNDL-04 | 4 | Pending |
 | HNDL-05 | 4 | Pending |
 | HNDL-06 | 4 | Pending |
-| AUTH-01 | 5 | Pending |
-| AUTH-02 | 5 | Pending |
-| AUTH-03 | 5 | Pending |
-| AUTH-04 | 5 | Pending |
-| AUTH-05 | 5 | Pending |
-| AUTH-06 | 5 | Pending |
-| BIZ-USER-01 | 5 | Pending |
-| BIZ-USER-02 | 5 | Pending |
-| BIZ-USER-03 | 5 | Pending |
-| BIZ-USER-04 | 5 | Pending |
-| BIZ-USER-05 | 5 | Pending |
-| BIZ-USER-06 | 5 | Pending |
+| AUTH-01 | 5 | Complete |
+| AUTH-02 | 5 | Complete |
+| AUTH-03 | 5 | Complete |
+| AUTH-04 | 5 | Complete |
+| AUTH-05 | 5 | Complete |
+| AUTH-06 | 5 | Complete |
+| BIZ-USER-01 | 5 | Complete |
+| BIZ-USER-02 | 5 | Complete |
+| BIZ-USER-03 | 5 | Complete |
+| BIZ-USER-04 | 5 | Complete |
+| BIZ-USER-05 | 5 | Complete |
+| BIZ-USER-06 | 5 | Complete |
 | BIZ-CHAT-01 | 6 | Pending |
 | BIZ-CHAT-02 | 6 | Pending |
 | BIZ-MSG-01 | 6 | Pending |
