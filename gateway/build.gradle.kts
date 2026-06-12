@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 java {
@@ -26,7 +27,7 @@ dependencies {
     implementation(libs.kotlin.logging)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.protobuf.java)
-    implementation(libs.gson)
+    implementation(libs.kotlinx.serialization.json)
 
     // Test
     testImplementation(libs.koin.test)
