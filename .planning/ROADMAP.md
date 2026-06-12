@@ -196,6 +196,19 @@ Plans:
 5. message/read updates last_read_message_id and unread count
 6. Fan-out latency within acceptable bounds
 
+**Plans:** 4 plans in 3 waves
+
+Plans:
+**Wave 1** *(autonomous, no dependencies)*
+- [ ] 06-01-PLAN.md — Foundation components: Proto regeneration, UserStreamRegistry, PushService, SendMessageException
+
+**Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
+- [ ] 06-02-PLAN.md — Send Message Step Chain: SendMessageStep, 4 Step implementations, SendMessageHandler, ChatService integration
+- [ ] 06-03-PLAN.md — Message Pull & Read: PullMessagesHandler, ReadReportHandler
+
+**Wave 3** *(depends on Wave 2)*
+- [ ] 06-04-PLAN.md — DI Wiring: GatewayModule handlerModule + registerHandlers updates
+
 ---
 
 ## Phase 7: Conversation
