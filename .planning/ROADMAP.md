@@ -130,6 +130,21 @@ Plans:
 6. ExceptionInterceptor catches BizException and maps to gRPC status
 7. Handler directory structure organized by domain
 
+**Plans:** 4 plans in 4 waves
+
+Plans:
+**Wave 1** *(no dependencies)*
+- [ ] 04-01-PLAN.md — Core Handler Framework: Handler, HandlerRegistry, ProtoCodec, Dispatcher
+
+**Wave 2** *(depends on Wave 1)*
+- [ ] 04-03-PLAN.md — Session & Heartbeat: Session, SessionRegistry, PingHandler, envelope Direction, ChatServer keepalive
+
+**Wave 3** *(depends on Wave 1, 2)*
+- [ ] 04-02-PLAN.md — Interceptor Pipeline: Interceptor/Chain, Auth, Log, RateLimit, Exception interceptors
+
+**Wave 4** *(depends on Wave 1, 2, 3)*
+- [ ] 04-04-PLAN.md — Koin DI & Gateway Integration: Koin module, build deps, NebulaServer init, integration tests
+
 ---
 
 ## Phase 5: User & Authentication
