@@ -21,6 +21,7 @@ import com.nebula.gateway.handler.user.SetPrivacyHandler
 import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
+import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.config.JpaConfig
 import com.nebula.repository.config.RedisConfig
 import com.nebula.repository.redis.MessageQueueRepository
@@ -150,8 +151,9 @@ fun main() {
     val interceptors: List<Interceptor> = GlobalContext.get().getAll()
     val dispatcher = Dispatcher(registry, interceptors, codec)
 
-    // ChatService: gRPC 双向流服务，绑定 Envelope 协议分发 + LoginResp 拦截
-    val chatService = ChatService(dispatcher, sessionRegistry, registry)
+    // ChatService: gRPC 双向流服务，绑定 Envelope 协议分发 + LoginResp 拦截 + UserStreamRegistry 集成
+    val userStreamRegistry = UserStreamRegistry()
+    val chatService = ChatService(dispatcher, sessionRegistry, registry, userStreamRegistry)
 
     // Step 5: 启动 gRPC 服务 — 包含 SSL/TLS、keepalive、流控配置
     val chatServer = ChatServer(config)
