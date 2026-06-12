@@ -3,6 +3,12 @@ package com.nebula.server
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.datasource.HikariDataSourceProvider
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.gateway.codec.ProtoCodec
+import com.nebula.gateway.di.frameworkModule
+import com.nebula.gateway.di.handlerModule
+import com.nebula.gateway.di.registerHandlers
+import com.nebula.gateway.dispatcher.HandlerRegistry
+import com.nebula.gateway.handler.PingHandler
 import com.nebula.repository.config.JpaConfig
 import com.nebula.repository.config.RedisConfig
 import com.nebula.repository.redis.MessageQueueRepository
@@ -18,6 +24,8 @@ import com.nebula.repository.repository.impl.MessageRepositoryImpl
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
 import kotlinx.coroutines.runBlocking
+import org.koin.core.context.GlobalContext
+import org.koin.core.context.startKoin
 
 /**
  * Nebula 服务端应用入口。
@@ -30,8 +38,10 @@ import kotlinx.coroutines.runBlocking
  * 2. 通过 ConfigLoader 加载 HOCON 配置
  * 3. 初始化 SnowflakeIdGenerator（Phase 5 消息 ID 生成正式使用）
  * 4. 初始化 HikariCP 数据库连接池（Phase 3 数据持久化正式使用）
- * 5. 启动 gRPC ChatServer
- * 6. 阻塞在 awaitTermination() 上，等待进程关闭信号
+ * 5. 初始化持久化层（JPA/Flyway/Redis）— Phase 3
+ * 5.75 初始化 Koin DI 容器 + 注册 Handler 到 Registry — Phase 4
+ * 6. 启动 gRPC ChatServer
+ * 7. 阻塞在 awaitTermination() 上，等待进程关闭信号
  */
 fun main() {
     val env = System.getenv("ENV") ?: "dev"
@@ -81,6 +91,20 @@ fun main() {
         emf = jpaConfig.entityManagerFactory
     )
     messageWriteRepo.startFlushTimer()
+
+    // Step 4.75: Phase 4 — 初始化 Koin DI 容器
+    // 在 gRPC Server 启动前注册所有基础设施组件（D-03, D-06）
+    // 注册顺序：框架组件（HandlerRegistry/Interceptor/SessionRegistry）→ 业务 Handler
+    startKoin {
+        modules(frameworkModule, handlerModule)
+    }
+
+    // 将 Koin 中注册的 Handler 实例注册到 HandlerRegistry（Review 反馈#1）
+    // 确保 method → HandlerEntry 映射在 gRPC 请求到达前就已建立
+    val registry = GlobalContext.get().get<HandlerRegistry>()
+    val codec = GlobalContext.get().get<ProtoCodec>()
+    val pingHandler = GlobalContext.get().get<PingHandler>()
+    registerHandlers(registry, codec, pingHandler)
 
     // Step 5: 启动 gRPC 服务 — 包含 SSL/TLS、keepalive、流控配置
     val chatServer = ChatServer(config)
