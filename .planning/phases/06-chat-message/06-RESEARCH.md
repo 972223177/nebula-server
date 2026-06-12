@@ -505,13 +505,13 @@ class UserStreamRegistry {
 
 **No user confirmation needed** — PushService placement in gateway is consistent with existing architecture (ChatService is also in gateway).
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **PushStep execution timing** — Does the PushStep run synchronously in the Step chain (before response), or asynchronously after the response? D-04 says "写入 Redis Stream 后立即返回" (ACK before push), but D-13 Step chain order lists PushStep as the last step. If PushStep blocks the response, the sender waits for all push operations to fail/succeed. Recommendation: Run Validate → Dedup → Write (return response), then PushStep executes after response. This can be achieved by having SendMessageHandler return the response immediately after WriteStep, and launching PushStep as a fire-and-forget coroutine.
+1. **PushStep execution timing** — Does the PushStep run synchronously in the Step chain (before response), or asynchronously after the response? D-04 says "写入 Redis Stream 后立即返回" (ACK before push), but D-13 Step chain order lists PushStep as the last step. If PushStep blocks the response, the sender waits for all push operations to fail/succeed. Recommendation: Run Validate → Dedup → Write (return response), then PushStep executes after response. This can be achieved by having SendMessageHandler return the response immediately after WriteStep, and launching PushStep as a fire-and-forget coroutine. (RESOLVED): Plan opts for synchronous PushStep in Step chain — ~5ms per device per D-12 is acceptable. Push exceptions caught via try-catch (D-05). Future optimization can move PushStep to fire-and-forget coroutine after response.
 
-2. **SessionRegistry.userIdIndex vs UserStreamRegistry** — SessionRegistry already has `userIdIndex` mapping userId→tokens. Should UserStreamRegistry reuse this or maintain its own mapping? Recommendation: Maintain separate mapping. UserStreamRegistry maps userId→StreamObserver<Envelope> (one per device session); SessionRegistry maps userId→tokens (cross-node). They serve different purposes.
+2. **SessionRegistry.userIdIndex vs UserStreamRegistry** — SessionRegistry already has `userIdIndex` mapping userId→tokens. Should UserStreamRegistry reuse this or maintain its own mapping? Recommendation: Maintain separate mapping. UserStreamRegistry maps userId→StreamObserver<Envelope> (one per device session); SessionRegistry maps userId→tokens (cross-node). They serve different purposes. (RESOLVED): Separate mappings confirmed. UserStreamRegistry manages gRPC StreamObserver references (gateway-local); SessionRegistry manages cross-node token→session mapping. No overlap.
 
-3. **DedupStep error handling** — What should DedupStep return when SETNX returns 0 (duplicate detected)? D-07 says "忽略" (ignore). Recommendation: Return a specific BizCode (e.g., `DUPLICATE_MESSAGE`) or simply return `false` to terminate the chain. Use a BizCode so the sender gets a meaningful response.
+3. **DedupStep error handling** — What should DedupStep return when SETNX returns 0 (duplicate detected)? D-07 says "忽略" (ignore). Recommendation: Return a specific BizCode (e.g., `DUPLICATE_MESSAGE`) or simply return `false` to terminate the chain. Use a BizCode so the sender gets a meaningful response. (RESOLVED): DedupStep throws SendMessageException(BizCode.SEND_FAILED) on duplicate (D-07). Exception terminates chain; SendMessageHandler translates to gRPC error response. No new BizCode needed.
 
 ## Validation Architecture
 
