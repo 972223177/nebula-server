@@ -8,8 +8,8 @@ progress:
   total_phases: 11
   completed_phases: 5
   total_plans: 24
-  completed_plans: 20
-  percent: 45
+  completed_plans: 21
+  percent: 47
 ---
 
 # State: Nebula Chat Server

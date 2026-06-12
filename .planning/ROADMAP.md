@@ -200,7 +200,7 @@ Plans:
 
 Plans:
 **Wave 1** *(autonomous, no dependencies)*
-- [ ] 06-01-PLAN.md — Foundation: Proto regen, UserStreamRegistry, PushService, SendMessageException, unit tests
+- [x] 06-01-PLAN.md — Foundation: Proto regen, UserStreamRegistry, PushService, SendMessageException, unit tests
 
 **Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
 - [ ] 06-02-PLAN.md — Send Step Chain (Validate→Dedup→Write) + fire-and-forget async push + ChatService integration + unit tests
