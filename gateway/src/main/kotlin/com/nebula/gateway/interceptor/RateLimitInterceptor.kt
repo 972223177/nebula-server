@@ -33,7 +33,22 @@ class RateLimitInterceptor(
     /** 每用户信号量映射 — userId/IP → Semaphore(permitsPerUser) */
     private val userSemaphores = ConcurrentHashMap<String, Semaphore>()
 
+    /** 注册 IP 限流器 — 每小时每 IP 最多 5 次注册（D-02） */
+    private val registerLimiter = RegisterRateLimiter()
+
     override suspend fun intercept(request: Request, chain: Interceptor.Chain): Response {
+        // 注册请求走独立 IP 限流（D-02）
+        if (request.method == "user/register") {
+            val ip = extractClientIp(request)
+            if (!registerLimiter.tryAcquire(ip)) {
+                log.warn { "Register rate limit exceeded for ip=$ip" }
+                return Response.newBuilder()
+                    .setCode(RATE_LIMITED_CODE)
+                    .setMsg("register rate limit exceeded")
+                    .build()
+            }
+        }
+
         // 获取限流 key：已认证请求使用 userId，未认证请求使用 IP
         val session = coroutineContext[SessionKey]
         val limitKey = session?.session?.userId?.toString() ?: extractClientIp(request)
@@ -59,14 +74,51 @@ class RateLimitInterceptor(
     }
 
     /**
-     * 从请求中提取客户端 IP。
+     * 从请求的 metadata map 中提取客户端 IP。
      *
-     * TODO: Phase 5 确定请求来源 IP 的传递方式后实现，当前骨架占位返回 "unknown"。
+     * IP 优先级：x-client-ip → x-forwarded-for → "unknown"
      *
      * @param request 客户端请求
      * @return 客户端 IP 字符串
      */
-    private fun extractClientIp(request: Request): String = "unknown"
+    private fun extractClientIp(request: Request): String {
+        return request.metadataMap["x-client-ip"]
+            ?: request.metadataMap["x-forwarded-for"]
+            ?: "unknown"
+    }
+
+    /**
+     * 注册 IP 限流器 — 每小时每 IP 最多 5 次注册（D-02）。
+     *
+     * 内存泄漏防护：tryAcquire() 每次调用后检查并移除空 IP 条目。
+     * 避免恶意 IP 变换导致 ipRequestTimes 无限膨胀。
+     */
+    class RegisterRateLimiter {
+        private val ipRequestTimes = ConcurrentHashMap<String, MutableList<Long>>()
+        private val maxRequests = 5
+        private val windowMs = 60 * 60 * 1000L  // 1 小时
+
+        /**
+         * 尝试获取注册许可。
+         *
+         * @param ip 客户端 IP
+         * @return true=允许注册，false=超出限流
+         */
+        fun tryAcquire(ip: String): Boolean {
+            val now = System.currentTimeMillis()
+            val times = ipRequestTimes.getOrPut(ip) { mutableListOf() }
+            synchronized(times) {
+                times.removeAll { now - it > windowMs }
+                if (times.size >= maxRequests) return false
+                times.add(now)
+            }
+            // 内存泄漏修复：清除已过期空的 IP 条目（Review 反馈#5）
+            if (times.isEmpty()) {
+                ipRequestTimes.remove(ip, times)
+            }
+            return true
+        }
+    }
 
     companion object {
         private val log = KotlinLogging.logger {}

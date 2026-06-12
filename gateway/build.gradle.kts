@@ -29,6 +29,9 @@ dependencies {
     implementation(libs.protobuf.java)
     implementation(libs.kotlinx.serialization.json)
 
+    // Phase 5: User Authentication — BCrypt 密码哈希（T-05-SC）
+    implementation(libs.spring.security.crypto)
+
     // Test
     testImplementation(libs.koin.test)
     testImplementation(libs.koin.test.junit5)
