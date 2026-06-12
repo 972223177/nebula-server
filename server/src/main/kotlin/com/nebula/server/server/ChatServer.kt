@@ -40,13 +40,22 @@ class ChatServer(private val config: ApplicationConfig) {
 
         val builder = NettyServerBuilder.forPort(config.server.port)
             .maxInboundMessageSize(4 * 1024 * 1024) // 最大入站消息 4MB，超过则拒绝连接
-            // 双重心跳策略 — 传输层 gRPC keepalive 快速检测 TCP 断开
-            // 参考业界标准（Go gRPC）精细化配置，详见 D-27
-            .keepAliveTime(60, TimeUnit.SECONDS)        // 每 60s 向客户端发送 PING 帧检测存活
-            .keepAliveTimeout(20, TimeUnit.SECONDS)     // 等待 PONG 超时 20s，超时则断开
-            .permitKeepAliveWithoutCalls(true)          // 允许无活跃 RPC 时发送 PING（D-27 双重心跳必须开启）
-            .maxConnectionIdle(300, TimeUnit.SECONDS)   // 空闲超过 5 分钟主动关闭连接释放资源
-            .maxConnectionAge(1800, TimeUnit.SECONDS)   // 30 分钟强制刷新连接，防老化、利负载均衡
+
+            // 双重心跳策略 — 传输层 + 应用层（D-27）
+            // 传输层 gRPC keepalive → 连接存活检测（TCP/HTTP2 帧层面）
+            // 应用层 system/ping → 服务健康检测（业务请求链路层面）
+            // 两者互补：gRPC keepalive 只说明帧层面连接通，应用层 PING 说明整个链路正常工作
+
+            // 服务端 EnforcementPolicy — 影响客户端 keepalive 行为
+            .keepAliveTime(30, TimeUnit.SECONDS)       // D-29 baseline，实际值会在创建时随机化 30~45s（D-32 Jitter 防惊群）
+            .keepAliveTimeout(10, TimeUnit.SECONDS)    // PING 超时 10s，超时即断开
+            .permitKeepAliveWithoutCalls(true)          // 无活动 RPC 也发 PING，双重心跳必须开启（D-27）
+
+            // 服务端 MaxConnectionIdle — 主动回收僵尸连接
+            .maxConnectionIdle(10, TimeUnit.MINUTES)  // D-29 baseline，实际值会在创建时随机化 10~30min（D-32 Jitter）
+
+            // 安全边界 — 强制执行连接生命周期上限
+            .maxConnectionAge(1800, TimeUnit.SECONDS)   // 30 分钟强制刷新连接，防老化、利负载均衡（安全边界，保持不变）
             .maxConnectionAgeGrace(10, TimeUnit.SECONDS)// 强制关闭前等待 10s，给进行中请求留缓冲
 
         // 若 SSL 开启，将生成的 SslContext 注入 Netty 管道
