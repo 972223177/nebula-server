@@ -8,18 +8,22 @@ option java_package = "com.nebula.chat";
 import "nebula/message_type.proto";
 
 // 通信方向枚举
-// 注意：心跳探测由 gRPC 内置 keepalive 机制在传输层处理，无需应用层 PING/PONG
+// 心跳采用双重心跳策略：
+// - 传输层：gRPC keepalive（HTTP/2 PING/PONG）快速检测 TCP 断开
+// - 业务层：应用层 PING/PONG（Direction 枚举值）检测 NAT/代理导致的半开连接
+//   应用层 PING 与业务消息在同一数据通道上，端到端真实状态检测
 enum Direction {
   DIRECTION_UNSPECIFIED = 0;  // 未知类型，不应使用
   REQUEST = 1;                // 客户端 → 服务端：发起业务请求
   RESPONSE = 2;               // 服务端 → 客户端：对请求的响应
   PUSH = 3;                   // 服务端 → 客户端：服务器主动推送事件（如新消息、踢出通知）
-  reserved 4, 5;              // 原 PING/PONG（v1.0 移除 — 改用 gRPC keepalive 处理心跳）
+  PING = 4;                   // 客户端 → 服务端：应用层心跳探测，检测半开连接
+  PONG = 5;                   // 服务端 → 客户端：应用层心跳应答
 }
 
 // 消息信封：双向流中所有消息的外层包装，用于区分通信方向与负载类型
 message Envelope {
-  Direction direction = 1;        // 通信方向，标识当前消息是请求、响应、推送还是心跳
+  Direction direction = 1;        // 通信方向，标识当前消息是请求、响应、推送还是应用层心跳
   string request_id = 2;          // 请求唯一ID，用于请求与响应的配对关联，推送和心跳时可为空
   int32 protocol_version = 3;     // 协议版本号，初始值 = 1，用于后续协议升级的兼容性判断
   oneof payload {

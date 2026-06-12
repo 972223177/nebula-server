@@ -51,16 +51,18 @@
   - `com.nebula.gateway.session` — Session, SessionRegistry
   - `com.nebula.gateway.handler.{domain}` — 按业务域分包
 
-### 心跳处理策略（2026-06-12 更新）
+### 心跳处理策略（2026-06-12 最终更新）
 - **D-22（已废弃）：** ~~心跳完全由 gRPC 内置 keepalive 机制处理，不实现应用层 PING/PONG。~~ → 废弃原因：移动端网络环境下 gRPC keepalive 无法可靠检测半开连接（NAT/代理透传 HTTP/2 PING 帧但不保证数据通道畅通）。
-- **D-27:** 采用纯应用层 PING/PONG 心跳，替代 gRPC keepalive 作为主要心跳检测机制。客户端定时发送 PING 请求，服务端返回 PONG 响应。gRPC keepalive 参数保持现有配置作为传输层兜底（`keepAliveTime=30s`, `keepAliveTimeout=10s`, `permitKeepAliveWithoutCalls=false`）。
+- **D-27:** 双重心跳策略，各司其职：
+  - **gRPC keepalive（传输层）：** 快速检测 TCP 断开/内核级 RST，参考业界标准精细化配置（见 ChatServer.kt）。开启 `permitKeepAliveWithoutCalls(true)` 确保无流时也能发 PING。
+  - **应用层 PING/PONG（业务层）：** 检测半开连接、NAT 静默清连接等 gRPC keepalive 无法覆盖的场景。PING 消息与业务消息走在同一数据通道上，端到端真实状态检测。
 - **D-28:** 应用层心跳通过普通 Handler `method = "system/ping"` 实现，走标准 Dispatcher + Pipeline 路由。PING 请求不携带业务 payload，服务端直接返回 PONG Response。
-- **D-29:** 心跳超时采用优雅降级策略：
-  - T1（60s 无 PING）：将连接标记为"可疑"状态，停止向该连接推送消息
-  - T2（150s 仍无 PING）：强制断开连接，清理 Session，触发客户端重连
+- **D-29:** 心跳超时采用优雅降级策略，应用层超时大幅拉远以避免与 gRPC keepalive 重叠：
+  - T1（450s 无 PING）：将连接标记为"可疑"状态，停止向该连接推送消息
+  - T2（900s 仍无 PING）：强制断开连接，清理 Session，触发客户端重连
   - 若客户端在 T1-T2 窗口内恢复 PING 发送，标记恢复正常，恢复推送
 - **D-30:** AuthInterceptor 和 LogInterceptor 跳过 `"system/ping"` 方法，心跳 Handler 直接返回 PONG 不经过认证/日志拦截。
-- **D-31:** Proto `envelope.proto` Direction 枚举还原 PING(4)/PONG(5) 为有效值（从 `reserved` 移除）。更新 proto 注释说明应用层 PING/PONG 用途。
+- **D-31:** Proto `envelope.proto` Direction 枚举还原 PING(4)/PONG(5) 为有效值（从 `reserved` 移除）。更新 proto 注释说明双重心跳策略。`ChatServer.kt` 同步更新为完备的 keepalive 配置参数。
 
 ### Handler 测试策略
 - **D-23:** 测试框架使用 JUnit5 + MockK，与项目现有配置一致。
@@ -70,7 +72,8 @@
 
 ### Claude's Discretion
 - 心跳 Handler 的 `system/ping` 方法名可协商，下游计划者可根据编码惯例调整
-- 优雅降级具体时间窗口 T1/T2 数值可在实现阶段根据实际测试调整（参考：T1=60s, T2=150s）
+- 应用层 PING 超时 T1/T2 数值可在实现阶段根据实际测试调整（参考：T1=450s, T2=900s）
+- gRPC keepalive 配置中的 Timeout 和 MaxConnectionIdle 等参数可在实现时根据运行环境微调
 - 心跳 Handler 是否需要独立单元测试由实现者决定（建议与 PingHandler Proto 定义一起测试）
 
 </decisions>
