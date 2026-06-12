@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.jpa)
     alias(libs.plugins.kotlin.allopen)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 java {
@@ -32,6 +33,9 @@ dependencies {
     implementation(libs.lettuce.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.reactive)
+
+    // kotlinx.serialization — PrivacyRepository 使用 JSON 序列化（D-09）
+    implementation(libs.kotlinx.serialization.json)
 
     // Flyway 数据库迁移 (D-02)
     implementation(libs.flyway.core)
