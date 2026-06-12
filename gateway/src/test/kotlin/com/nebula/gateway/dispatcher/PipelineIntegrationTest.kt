@@ -2,21 +2,39 @@ package com.nebula.gateway.dispatcher
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
+import com.nebula.chat.user.GetProfileReq
+import com.nebula.chat.user.GetProfileResp
+import com.nebula.chat.user.LoginReq
+import com.nebula.chat.user.LoginResp
+import com.nebula.chat.user.RegisterReq
+import com.nebula.chat.user.RegisterResp
+import com.nebula.chat.user.SearchUserReq
+import com.nebula.chat.user.SearchUserResp
+import com.nebula.chat.user.UserBrief
+import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.handler.requireSession
+import com.nebula.gateway.handler.user.GetProfileHandler
+import com.nebula.gateway.handler.user.LoginHandler
+import com.nebula.gateway.handler.user.RegisterHandler
+import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.interceptor.AuthInterceptor
 import com.nebula.gateway.interceptor.ExceptionInterceptor
 import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
+import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.SessionRepository
+import com.nebula.repository.repository.UserRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import java.util.Optional
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -25,12 +43,17 @@ import org.koin.dsl.module
 import org.koin.test.KoinTest
 import org.koin.test.junit5.KoinTestExtension
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * 全链路集成测试 — Dispatcher → Interceptor Pipeline → Handler 完整路径（D-24, D-26）。
  *
- * 验证无认证（ping）和需认证（authenticated）两条路径的完整执行。
- * Koin 加载 frameworkModule + handlerModule 模拟真实 DI 装配。
+ * 覆盖场景：
+ * - Phase 4: system/ping（无认证）+ test/authenticated（需认证注入 Session）
+ * - Phase 5（Review 修复）：user/login 分发测试 + user/register/user/search/user/getProfile 分发
+ *
+ * Koin 加载 frameworkModule + handlerModule 模拟真实 DI 装配，用于 SessionRepository mock。
  */
 class PipelineIntegrationTest : KoinTest {
 
@@ -163,5 +186,373 @@ class PipelineIntegrationTest : KoinTest {
 
         // 验证 SessionRegistry.validate() 被调用（AuthInterceptor 实际执行了认证）
         coVerify(exactly = 1) { sessionRegistry.validate("test-token") }
+    }
+
+    // ========== Phase 5 用户 Handler 集成测试 ==========
+
+    @Test
+    fun `login dispatch test - correct password returns token`() = runTest {
+        // 准备 HandlerRegistry
+        val registry = HandlerRegistry()
+        val userRepo = mockk<UserRepository>()
+        val sessionRegistry = mockk<SessionRegistry>()
+
+        // 创建 LoginHandler，覆写 verifyPassword 绕过 BCrypt
+        val loginHandler = object : LoginHandler(userRepo, sessionRegistry) {
+            override fun verifyPassword(rawPassword: String, storedHash: String): Boolean = true
+        }
+        val reqCodec = ProtoCodec.buildCodec(LoginReq::class)
+        val respCodec = ProtoCodec.buildCodec(LoginResp::class)
+        registry.register(
+            HandlerEntry(
+                handler = loginHandler,
+                reqClass = LoginReq::class,
+                respClass = LoginResp::class,
+                parseFrom = reqCodec.parseFrom,
+                toByteArray = respCodec.toByteArray
+            )
+        )
+
+        // Mock UserRepository — 返回存在的用户
+        val existingUser = UserEntity(
+            username = "testuser",
+            passwordHash = "hashed",
+            nickname = "测试用户",
+            avatar = ""
+        ).apply { id = 1001L }
+        coEvery { userRepo.findByUsername("testuser") } returns existingUser
+
+        // 构建 Interceptor Pipeline — user/login 在 skipMethods 中
+        val interceptors = listOf(
+            AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping", "user/login", "user/register")),
+            LogInterceptor(),
+            RateLimitInterceptor(),
+            ExceptionInterceptor()
+        )
+        val dispatcher = Dispatcher(registry, interceptors)
+
+        // 构建登录请求
+        val loginReq = LoginReq.newBuilder()
+            .setUsername("testuser")
+            .setPassword("correct-password")
+            .build()
+        val envelopeRequest = Request.newBuilder()
+            .setMethod("user/login")
+            .setParams(loginReq.toByteString())
+            .build()
+        val response = dispatcher.dispatch(envelopeRequest)
+
+        // 验证：外层 Response code=200
+        assertEquals(200, response.code, "login response code should be 200")
+
+        // 反序列化 LoginResp
+        val loginResp = LoginResp.parseFrom(response.result.toByteArray())
+        assertTrue(loginResp.token.isNotBlank(), "login response should contain token")
+        assertEquals(1001L, loginResp.uid, "login response uid should match")
+    }
+
+    @Test
+    fun `login dispatch test - wrong password returns non 200`() = runTest {
+        // 准备 HandlerRegistry
+        val registry = HandlerRegistry()
+        val userRepo = mockk<UserRepository>()
+        val sessionRegistry = mockk<SessionRegistry>()
+
+        val loginHandler = object : LoginHandler(userRepo, sessionRegistry) {
+            override fun verifyPassword(rawPassword: String, storedHash: String): Boolean = false
+        }
+        val reqCodec = ProtoCodec.buildCodec(LoginReq::class)
+        val respCodec = ProtoCodec.buildCodec(LoginResp::class)
+        registry.register(
+            HandlerEntry(
+                handler = loginHandler,
+                reqClass = LoginReq::class,
+                respClass = LoginResp::class,
+                parseFrom = reqCodec.parseFrom,
+                toByteArray = respCodec.toByteArray
+            )
+        )
+
+        val existingUser = UserEntity(
+            username = "testuser",
+            passwordHash = "hashed",
+            nickname = "用户",
+            avatar = ""
+        ).apply { id = 1001L }
+        coEvery { userRepo.findByUsername("testuser") } returns existingUser
+
+        val interceptors = listOf(
+            AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping", "user/login", "user/register")),
+            LogInterceptor(),
+            RateLimitInterceptor(),
+            ExceptionInterceptor()
+        )
+        val dispatcher = Dispatcher(registry, interceptors)
+
+        val loginReq = LoginReq.newBuilder()
+            .setUsername("testuser")
+            .setPassword("wrong-password")
+            .build()
+        val envelopeRequest = Request.newBuilder()
+            .setMethod("user/login")
+            .setParams(loginReq.toByteString())
+            .build()
+        val response = dispatcher.dispatch(envelopeRequest)
+
+        // 密码错误应通过 ExceptionInterceptor 返回业务错误码
+        assertEquals(true, response.code != 200, "wrong password should return non-200 code")
+    }
+
+    @Test
+    fun `register dispatch test - success returns uid`() = runTest {
+        val registry = HandlerRegistry()
+        val userRepo = mockk<UserRepository>()
+        val idGenerator = mockk<SnowflakeIdGenerator>()
+
+        val registerHandler = RegisterHandler(userRepo, idGenerator)
+        val reqCodec = ProtoCodec.buildCodec(RegisterReq::class)
+        val respCodec = ProtoCodec.buildCodec(RegisterResp::class)
+        registry.register(
+            HandlerEntry(
+                handler = registerHandler,
+                reqClass = RegisterReq::class,
+                respClass = RegisterResp::class,
+                parseFrom = reqCodec.parseFrom,
+                toByteArray = respCodec.toByteArray
+            )
+        )
+
+        // Mock：用户不存在，ID 生成器返回固定值
+        coEvery { userRepo.findByUsername("newuser") } returns null
+        every { idGenerator.nextId() } returns 2001L
+        coEvery { userRepo.save(any()) } answers {
+            val entity = firstArg<UserEntity>()
+            entity.apply { id = 2001L }
+        }
+
+        val interceptors = listOf(
+            AuthInterceptor(mockk(), skipMethods = setOf("system/ping", "user/login", "user/register")),
+            LogInterceptor(),
+            RateLimitInterceptor(),
+            ExceptionInterceptor()
+        )
+        val dispatcher = Dispatcher(registry, interceptors)
+
+        val registerReq = RegisterReq.newBuilder()
+            .setUsername("newuser")
+            .setPassword("password123")
+            .setNickname("新用户")
+            .build()
+        val envelopeRequest = Request.newBuilder()
+            .setMethod("user/register")
+            .setParams(registerReq.toByteString())
+            .build()
+        val response = dispatcher.dispatch(envelopeRequest)
+
+        assertEquals(200, response.code, "register response code should be 200")
+
+        val registerResp = RegisterResp.parseFrom(response.result.toByteArray())
+        assertEquals(2001L, registerResp.uid, "register response uid should match generated id")
+    }
+
+    @Test
+    fun `search dispatch test - keyword returns user list`() = runTest {
+        val registry = HandlerRegistry()
+        val userRepo = mockk<UserRepository>()
+
+        val searchHandler = SearchUserHandler(userRepo)
+        val reqCodec = ProtoCodec.buildCodec(SearchUserReq::class)
+        val respCodec = ProtoCodec.buildCodec(SearchUserResp::class)
+        registry.register(
+            HandlerEntry(
+                handler = searchHandler,
+                reqClass = SearchUserReq::class,
+                respClass = SearchUserResp::class,
+                parseFrom = reqCodec.parseFrom,
+                toByteArray = respCodec.toByteArray
+            )
+        )
+
+        // Mock 搜索结果
+        val matchedUser = UserEntity(
+            username = "testuser",
+            passwordHash = "",
+            nickname = "测试用户",
+            avatar = "https://example.com/avatar.jpg"
+        ).apply { id = 1001L }
+        every { userRepo.findByUsernameContaining("test", 0L, 21) } returns listOf(matchedUser)
+
+        // Mock SessionRegistry — 提供认证 session
+        val sessionRegistry = mockk<SessionRegistry>()
+        val testSession = Session(
+            userId = 1001L,
+            token = "test-token",
+            deviceType = "test",
+            deviceId = "dev1",
+            connectionId = "conn1"
+        )
+        coEvery { sessionRegistry.validate("test-token") } returns testSession
+
+        // 自定义 AuthInterceptor 提取固定 token
+        val customAuthInterceptor = object : AuthInterceptor(
+            sessionRegistry,
+            skipMethods = setOf("system/ping", "user/login", "user/register")
+        ) {
+            override fun extractToken(request: Request): String? = "test-token"
+        }
+
+        val interceptors = listOf(
+            customAuthInterceptor,
+            LogInterceptor(),
+            RateLimitInterceptor(),
+            ExceptionInterceptor()
+        )
+        val dispatcher = Dispatcher(registry, interceptors)
+
+        val searchReq = SearchUserReq.newBuilder()
+            .setKeyword("test")
+            .setCursor(0)
+            .setLimit(20)
+            .build()
+        val envelopeRequest = Request.newBuilder()
+            .setMethod("user/search")
+            .setParams(searchReq.toByteString())
+            .build()
+        val response = dispatcher.dispatch(envelopeRequest)
+
+        assertEquals(200, response.code, "search response code should be 200")
+
+        val searchResp = SearchUserResp.parseFrom(response.result.toByteArray())
+        assertEquals(1, searchResp.usersCount, "should return 1 user")
+        val userBrief = searchResp.usersList[0]
+        assertEquals("testuser", userBrief.username)
+        assertEquals("测试用户", userBrief.displayName)
+    }
+
+    @Test
+    fun `getProfile dispatch test - existing user returns profile`() = runTest {
+        val registry = HandlerRegistry()
+        val userRepo = mockk<UserRepository>()
+
+        val profileHandler = GetProfileHandler(userRepo)
+        val reqCodec = ProtoCodec.buildCodec(GetProfileReq::class)
+        val respCodec = ProtoCodec.buildCodec(GetProfileResp::class)
+        registry.register(
+            HandlerEntry(
+                handler = profileHandler,
+                reqClass = GetProfileReq::class,
+                respClass = GetProfileResp::class,
+                parseFrom = reqCodec.parseFrom,
+                toByteArray = respCodec.toByteArray
+            )
+        )
+
+        // Mock 用户资料
+        val user = UserEntity(
+            username = "testuser",
+            passwordHash = "",
+            nickname = "测试用户",
+            avatar = "https://example.com/avatar.jpg"
+        ).apply { id = 1001L }
+        every { userRepo.findById(1001L) } returns Optional.of(user)
+
+        // Mock SessionRegistry — 提供认证 session
+        val sessionRegistry = mockk<SessionRegistry>()
+        val testSession = Session(
+            userId = 1001L,
+            token = "test-token",
+            deviceType = "test",
+            deviceId = "dev1",
+            connectionId = "conn1"
+        )
+        coEvery { sessionRegistry.validate("test-token") } returns testSession
+
+        val customAuthInterceptor = object : AuthInterceptor(
+            sessionRegistry,
+            skipMethods = setOf("system/ping", "user/login", "user/register")
+        ) {
+            override fun extractToken(request: Request): String? = "test-token"
+        }
+
+        val interceptors = listOf(
+            customAuthInterceptor,
+            LogInterceptor(),
+            RateLimitInterceptor(),
+            ExceptionInterceptor()
+        )
+        val dispatcher = Dispatcher(registry, interceptors)
+
+        val profileReq = GetProfileReq.newBuilder()
+            .setUid(1001L)
+            .build()
+        val envelopeRequest = Request.newBuilder()
+            .setMethod("user/getProfile")
+            .setParams(profileReq.toByteString())
+            .build()
+        val response = dispatcher.dispatch(envelopeRequest)
+
+        assertEquals(200, response.code, "getProfile response code should be 200")
+
+        val profileResp = GetProfileResp.parseFrom(response.result.toByteArray())
+        assertEquals("testuser", profileResp.username)
+        assertEquals("测试用户", profileResp.displayName)
+        assertEquals("https://example.com/avatar.jpg", profileResp.avatarUrl)
+    }
+
+    @Test
+    fun `getProfile dispatch test - non existent user returns error`() = runTest {
+        val registry = HandlerRegistry()
+        val userRepo = mockk<UserRepository>()
+
+        val profileHandler = GetProfileHandler(userRepo)
+        val reqCodec = ProtoCodec.buildCodec(GetProfileReq::class)
+        val respCodec = ProtoCodec.buildCodec(GetProfileResp::class)
+        registry.register(
+            HandlerEntry(
+                handler = profileHandler,
+                reqClass = GetProfileReq::class,
+                respClass = GetProfileResp::class,
+                parseFrom = reqCodec.parseFrom,
+                toByteArray = respCodec.toByteArray
+            )
+        )
+
+        every { userRepo.findById(9999L) } returns Optional.empty()
+
+        // Mock SessionRegistry — 提供认证 session
+        val sessionRegistry = mockk<SessionRegistry>()
+        val testSession = Session(
+            userId = 1001L,
+            token = "test-token",
+            deviceType = "test",
+            deviceId = "dev1",
+            connectionId = "conn1"
+        )
+        coEvery { sessionRegistry.validate("test-token") } returns testSession
+
+        val customAuthInterceptor = object : AuthInterceptor(
+            sessionRegistry,
+            skipMethods = setOf("system/ping", "user/login", "user/register")
+        ) {
+            override fun extractToken(request: Request): String? = "test-token"
+        }
+
+        val interceptors = listOf(
+            customAuthInterceptor,
+            LogInterceptor(),
+            RateLimitInterceptor(),
+            ExceptionInterceptor()
+        )
+        val dispatcher = Dispatcher(registry, interceptors)
+
+        val profileReq = GetProfileReq.newBuilder().setUid(9999L).build()
+        val envelopeRequest = Request.newBuilder()
+            .setMethod("user/getProfile")
+            .setParams(profileReq.toByteString())
+            .build()
+        val response = dispatcher.dispatch(envelopeRequest)
+
+        // 用户不存在应返回非 200 错误码
+        assertTrue(response.code != 200, "non-existent user profile should return non-200 code")
     }
 }
