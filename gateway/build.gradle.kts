@@ -32,6 +32,14 @@ dependencies {
     // Phase 5: User Authentication — BCrypt 密码哈希（T-05-SC）
     implementation(libs.spring.security.crypto)
 
+    // Phase 5: UserRepository 编译时依赖（repository 模块只以 implementation 导出 spring-data-jpa）
+    implementation(libs.spring.data.jpa)
+
+    // Phase 5: ChatService gRPC 双向流服务
+    implementation(libs.grpc.api)
+    implementation(libs.grpc.protobuf)
+    implementation(libs.grpc.stub)
+
     // Test
     testImplementation(libs.koin.test)
     testImplementation(libs.koin.test.junit5)
