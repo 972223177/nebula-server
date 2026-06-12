@@ -3,6 +3,8 @@ package com.nebula.gateway.handler.chat.send
 import com.nebula.common.BizCode
 import com.nebula.repository.repository.ConversationMemberRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 验证 Step — 校验消息参数和发送者成员身份（D-08, D-13, D-14）。
@@ -41,9 +43,11 @@ class ValidateStep(
         }
 
         // D-08: 发送者成员身份验证
-        val member = conversationMemberRepository.findByConversationIdAndUserId(
-            req.conversationId, context.senderUid
-        )
+        val member = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationIdAndUserId(
+                req.conversationId, context.senderUid
+            )
+        }
         if (member == null) {
             throw SendMessageException(BizCode.NOT_MEMBER, "发送者不是会话成员")
         }
