@@ -79,8 +79,8 @@
 
 ### Message Business Logic
 
-- [ ] **BIZ-MSG-01**: message/pull pulls messages by conversation with cursor-based pagination
-- [ ] **BIZ-MSG-02**: message/read reports read status, updates unread count and last_read_message_id
+- [x] **BIZ-MSG-01**: message/pull pulls messages by conversation with cursor-based pagination
+- [x] **BIZ-MSG-02**: message/read reports read status, updates unread count and last_read_message_id
 
 ### Friend Business Logic
 
@@ -186,8 +186,8 @@
 | BIZ-USER-06 | Phase 5 | Pending |
 | BIZ-CHAT-01 | Phase 6 | Pending |
 | BIZ-CHAT-02 | Phase 6 | Pending |
-| BIZ-MSG-01 | Phase 6 | Pending |
-| BIZ-MSG-02 | Phase 6 | Pending |
+| BIZ-MSG-01 | Phase 6 | Complete |
+| BIZ-MSG-02 | Phase 6 | Complete |
 | BIZ-CONV-01 | Phase 7 | Pending |
 | BIZ-CONV-02 | Phase 7 | Pending |
 | BIZ-CONV-03 | Phase 7 | Pending |
