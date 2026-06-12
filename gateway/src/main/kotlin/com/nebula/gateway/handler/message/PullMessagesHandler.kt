@@ -18,6 +18,8 @@ import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.MessageRepository
 import com.google.protobuf.ByteString
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import org.springframework.data.domain.Pageable
 
@@ -64,7 +66,7 @@ class PullMessagesHandler(
         val session = coroutineContext.requireSession()
 
         // REVIEW-MEDIUM-9: 会话存在性检查 — 区分"会话不存在"和"会话无消息"
-        val exists = conversationRepository.existsById(req.conversationId)
+        val exists = withContext(Dispatchers.IO) { conversationRepository.existsById(req.conversationId) }
         if (!exists) {
             throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
         }
@@ -77,9 +79,11 @@ class PullMessagesHandler(
         // Snowflake ID 始终 < Long.MAX_VALUE，所以 MAX_VALUE 等效于"无上界"
         val effectiveCursor = if (cursor == 0L) Long.MAX_VALUE else cursor
 
-        val messages = messageRepository.findMessagesBackward(
-            req.conversationId, effectiveCursor, Pageable.ofSize(limit)
-        )
+        val messages = withContext(Dispatchers.IO) {
+            messageRepository.findMessagesBackward(
+                req.conversationId, effectiveCursor, Pageable.ofSize(limit)
+            )
+        }
 
         // hasMore: 返回数量等于或超过 limit 时，表示还有更多数据
         val hasMore = messages.size >= limit
