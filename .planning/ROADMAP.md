@@ -200,14 +200,14 @@ Plans:
 
 Plans:
 **Wave 1** *(autonomous, no dependencies)*
-- [ ] 06-01-PLAN.md — Foundation components: Proto regeneration, UserStreamRegistry, PushService, SendMessageException
+- [ ] 06-01-PLAN.md — Foundation: Proto regen, UserStreamRegistry, PushService, SendMessageException, unit tests
 
 **Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
-- [ ] 06-02-PLAN.md — Send Message Step Chain: SendMessageStep, 4 Step implementations, SendMessageHandler, ChatService integration
-- [ ] 06-03-PLAN.md — Message Pull & Read: PullMessagesHandler, ReadReportHandler
+- [ ] 06-02-PLAN.md — Send Step Chain (Validate→Dedup→Write) + fire-and-forget async push + ChatService integration + unit tests
+- [ ] 06-03-PLAN.md — Message Pull & Read: PullMessagesHandler (security FIXME) + ReadReportHandler (membership check) + unit tests
 
 **Wave 3** *(depends on Wave 2)*
-- [ ] 06-04-PLAN.md — DI Wiring: GatewayModule handlerModule + registerHandlers updates
+- [ ] 06-04-PLAN.md — DI Wiring + NebulaServer ChatService constructor fix + Koin verification test
 
 ---
 

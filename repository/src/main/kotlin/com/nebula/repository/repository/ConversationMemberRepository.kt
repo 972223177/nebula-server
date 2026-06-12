@@ -10,6 +10,8 @@ import org.springframework.data.repository.query.Param
  * 会话成员数据仓库。
  */
 interface ConversationMemberRepository : JpaRepository<ConversationMemberEntity, Long> {
+    /** 按会话查找所有成员 */
+    fun findByConversationId(conversationId: String): List<ConversationMemberEntity>
     /** 按会话和用户查找成员记录 */
     fun findByConversationIdAndUserId(conversationId: String, userId: Long): ConversationMemberEntity?
     /** 查询用户参与的所有会话 */
