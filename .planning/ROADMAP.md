@@ -170,14 +170,14 @@ Plans:
 
 Plans:
 **Wave 1** *(autonomous, no dependencies)*
-- [ ] 05-01-PLAN.md — Proto 扩展 + SessionRegistry 设备类型 + Token 提取 + PrivacyRepository + bcrypt 依赖
+- [ ] 05-01-PLAN.md — Proto 扩展（Request.metadata + RegisterReq + 游标分页 + LoginResp device 字段）+ SessionRegistry 设备类型 + Token 提取 + SessionRepository.saveRaw + PrivacyRepository（含 batch MGET）+ RegisterRateLimiter（内存泄漏修复）+ bcrypt 依赖
 
 **Wave 2** *(depends on Wave 1; parallel plans, no file overlap)*
-- [ ] 05-02-PLAN.md — ChatService gRPC 双向流 + LoginHandler + RegisterHandler + SearchUserHandler
-- [ ] 05-03-PLAN.md — GetProfileHandler + BatchGetUserHandler + BatchGetStatusHandler + SetPrivacyHandler + GetPrivacyHandler
+- [ ] 05-02-PLAN.md — ChatService addService 修复 + tokenToObserver 生命周期管理 + LoginHandler（Token 复用修复 + 移除多余依赖）+ RegisterHandler + SearchUserHandler + 游标分页 + 单元测试
+- [ ] 05-03-PLAN.md — GetProfileHandler + BatchGetUserHandler（缺失 ID 文档化）+ BatchGetStatusHandler（MGET 批量隐私过滤 N+1 修复）+ SetPrivacyHandler（best-effort 文档化）+ GetPrivacyHandler + 单元测试
 
 **Wave 3** *(depends on Wave 2, 3)*
-- [ ] 05-04-PLAN.md — Koin DI 注册 + NebulaServer 启动更新 + 集成测试
+- [ ] 05-04-PLAN.md — Koin DI 注册 + registerHandlers() 简化 + NebulaServer 启动 + 集成测试（含登录路径 + Koin 清理修复）
 
 ---
 
