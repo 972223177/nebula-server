@@ -8,7 +8,10 @@ import io.lettuce.core.api.StatefulRedisConnection
 /**
  * Lettuce Redis 客户端配置（D-03）。
  *
- * 使用单一 [StatefulRedisConnection] 供所有 Redis Repository 共享（D-05）。
+ * 维护两条独立的 [StatefulRedisConnection]：
+ * - [connection]：供 SessionRepository / OnlineStatusRepository / PrivacyRepository 等延时敏感操作使用
+ * - [messageQueueConnection]：专供 [MessageQueueRepository] 的消息队列批量操作使用
+ *
  * 连接使用 [by lazy] 延迟初始化。
  *
  * @param host Redis 服务器地址，默认 127.0.0.1
@@ -23,8 +26,19 @@ class RedisConfig(
         RedisClient.create(RedisURI.builder().withHost(host).withPort(port).build())
     }
 
-    /** 共享 Redis 连接实例，供所有 Repository 通过构造参数注入（防连接泄漏） */
+    /** 共享 Redis 连接实例，供延时敏感的 Repository 使用（Session / OnlineStatus / Privacy） */
     val connection: StatefulRedisConnection<String, String> by lazy {
+        client.connect()
+    }
+
+    /**
+     * 消息队列专用 Redis 连接实例（D-29）。
+     *
+     * 与 [connection] 使用同一 [RedisClient] 但开辟独立连接通道，
+     * 避免 [MessageQueueRepository] 的 XREADGROUP/XADD/XACK 批量操作
+     * 阻塞 SessionRegistry 等延时敏感操作的 Redis 调用。
+     */
+    val messageQueueConnection: StatefulRedisConnection<String, String> by lazy {
         client.connect()
     }
 
@@ -39,6 +53,7 @@ class RedisConfig(
 
     /** 清理资源 */
     fun shutdown() {
+        messageQueueConnection.close()
         connection.close()
         client.shutdown()
     }
