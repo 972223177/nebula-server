@@ -100,7 +100,7 @@ fun main() {
     val friendRequestRepo = jpaConfig.getRepository(FriendRequestRepository::class.java)
     // Redis Repository 初始化
     val sessionRepo = SessionRepository(redisConfig.connection)
-    val messageQueueRepo = MessageQueueRepository(redisConfig.connection)
+    val messageQueueRepo = MessageQueueRepository(redisConfig.messageQueueConnection)  // D-29: 使用独立连接避免与 Session 操作争用
     val onlineStatusRepo = OnlineStatusRepository(redisConfig.connection)
     // 确保 Redis Stream 消费者组就绪（runBlocking 用于 main 线程非阻塞上下文的桥接）
     runBlocking { redisConfig.initializeRedisInfra(messageQueueRepo) }
