@@ -7,7 +7,7 @@ last_updated: "2026-06-12T12:11:06.359Z"
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 24
+  total_plans: 26
   completed_plans: 24
   percent: 55
 ---
@@ -31,8 +31,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 2 — Common Module & Infrastructure Base | Complete | 2026-06-11 | 2026-06-11 |
 | 3 — Database Schema & Repository Layer | Complete | 2026-06-11 | 2026-06-11 |
 | 4 — Handler Framework | Complete | 2026-06-12 | 2026-06-12 |
-| 5 — User & Authentication | Complete | 2026-06-12 | 2026-06-12 |
-| 6 — Chat & Message | Complete | 2026-06-12 | 2026-06-12 |
+| 5 — User & Authentication | In Progress (gap closure) | 2026-06-12 | — |
+| 6 — Chat & Message | In Progress (gap closure) | 2026-06-12 | — |
 | 7 — Conversation | Pending | — | — |
 | 8 — Friend & Online Status | Pending | — | — |
 | 9 — Reconnection | Pending | — | — |
@@ -41,8 +41,9 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 ## Next Actions
 
-1. `/gsd-discuss-phase 7` — discuss Phase 7 (Conversation) context
-2. `/gsd-execute-phase 7` — execute Phase 7 (Conversation) plans
+1. 执行 Phase 5 gap closure — `./gradlew :gateway:compileKotlin` 验证 JPA 阻塞修复
+2. 执行 Phase 6 gap closure — `./gradlew :gateway:compileKotlin` 验证 JPA 阻塞修复
+3. 全量测试验证
 
 ## Quick Tasks Completed
 
@@ -66,4 +67,4 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 6 | ⏳ 待追溯 | ⏳ 待追溯 | ⏳ 待追溯 |
 
 ---
-*Last updated: 2026-06-12 after Phase 6 Plan 4 execution (DI Wiring + Koin verification test)*
+*Last updated: 2026-06-12 after creating Phase 5/6 JPA blocking fix plans*

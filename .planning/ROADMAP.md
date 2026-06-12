@@ -166,7 +166,7 @@ Plans:
 9. Batch query online status
 10. Set/get privacy settings
 
-**Plans:** 4/4 plans complete
+**Plans:** 5 plans in 4 waves
 
 Plans:
 **Wave 1** *(autonomous, no dependencies)*
@@ -176,8 +176,11 @@ Plans:
 - [x] 05-02-PLAN.md — ChatService addService 修复 + tokenToObserver 生命周期管理 + LoginHandler（Token 复用修复 + 移除多余依赖）+ RegisterHandler + SearchUserHandler + 游标分页 + 单元测试
 - [x] 05-03-PLAN.md — GetProfileHandler + BatchGetUserHandler（缺失 ID 文档化）+ BatchGetStatusHandler（MGET 批量隐私过滤 N+1 修复）+ SetPrivacyHandler（best-effort 文档化）+ GetPrivacyHandler + 单元测试
 
-**Wave 3** *(depends on Wave 2, 3)*
+**Wave 3** *(depends on Wave 2)*
 - [x] 05-04-PLAN.md — Koin DI 注册 + registerHandlers() 简化 + NebulaServer 启动 + 集成测试（含登录路径 + Koin 清理修复）
+
+**Wave 4** *(gap closure — 修复 JPA 阻塞)*
+- [ ] 05-05-PLAN.md — 解决 JPA EntityManager 阻塞问题：所有 Handler 通过 withContext(Dispatchers.IO) 执行 JPA 操作
 
 ---
 
@@ -196,7 +199,7 @@ Plans:
 5. message/read updates last_read_message_id and unread count
 6. Fan-out latency within acceptable bounds
 
-**Plans:** 4 plans in 3 waves
+**Plans:** 5 plans in 4 waves
 
 Plans:
 **Wave 1** *(autonomous, no dependencies)*
@@ -207,7 +210,10 @@ Plans:
 - [x] 06-03-PLAN.md — Message Pull & Read: PullMessagesHandler (security FIXME) + ReadReportHandler (membership check) + unit tests
 
 **Wave 3** *(depends on Wave 2)*
-- [ ] 06-04-PLAN.md — DI Wiring + NebulaServer ChatService constructor fix + Koin verification test
+- [x] 06-04-PLAN.md — DI Wiring + NebulaServer ChatService constructor fix + Koin verification test
+
+**Wave 4** *(gap closure — 修复 JPA 阻塞)*
+- [ ] 06-05-PLAN.md — 解决 JPA EntityManager 阻塞问题：所有 Handler 通过 withContext(Dispatchers.IO) 执行 JPA 操作
 
 ---
 
