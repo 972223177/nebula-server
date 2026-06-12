@@ -24,6 +24,7 @@ junit = "5.11.4"
 junit-platform = "1.11.4"
 kotlinx-serialization-json = "1.8.1"
 spring-security-crypto = "6.4.5"
+jakarta-persistence-api = "3.1.0"
 
 [libraries]
 protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobuf" }
@@ -62,6 +63,7 @@ junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", vers
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
 spring-security-crypto = { module = "org.springframework.security:spring-security-crypto", version.ref = "spring-security-crypto" }
+jakarta-persistence-api = { module = "jakarta.persistence:jakarta.persistence-api", version.ref = "jakarta-persistence-api" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

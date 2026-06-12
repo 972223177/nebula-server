@@ -36,7 +36,7 @@ dependencies {
     implementation(libs.spring.data.jpa)
 
     // Phase 6: JPA EntityManagerFactory — 手动事务管理（D-09）
-    implementation("jakarta.persistence:jakarta.persistence-api:3.1.0")
+    implementation(libs.jakarta.persistence.api)
 
     // Phase 5: ChatService gRPC 双向流服务
     implementation(libs.grpc.api)
