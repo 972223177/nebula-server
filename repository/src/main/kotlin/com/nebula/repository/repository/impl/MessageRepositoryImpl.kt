@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
  *
  * 架构：Redis Stream（即时 ACK）→ 定时批量刷入 MySQL
  * - 消息先通过 [MessageQueueRepository.enqueue] 写入 Redis Stream，客户端即刻收到 ACK
- * - 后台协程每 500ms 检查积压消息，>= 30 条时触发批量 INSERT
+ * - 后台协程每 500ms 检查积压消息，有消息即触发批量 INSERT
  * - 刷写失败的消息保留在 Redis Stream 中，下次定时任务重试
  *
  * @param messageQueue Redis Stream 消息队列操作封装
@@ -54,7 +54,6 @@ class MessageRepositoryImpl(
 
         // 解析 StreamMessage 为 MessageEntity
         val messages = entries.mapNotNull { entry -> parseToEntity(entry) }
-        if (messages.size < 30) return 0  // 不到阈值，暂不刷盘
 
         val em = emf.createEntityManager()
         try {
@@ -87,10 +86,9 @@ class MessageRepositoryImpl(
     }
 
     /**
-     * 启动定时刷写任务（D-11: 500ms 间隔，30 条阈值）。
+     * 启动定时刷写任务（D-11: 500ms 间隔）。
      *
-     * 在后台协程中每 500ms 检查 Redis Stream 中的积压消息，
-     * 达到 30 条阈值时触发批量刷入 MySQL。
+     * 在后台协程中每 500ms 消费 Redis Stream 中的积压消息，触发批量刷入 MySQL。
      */
     fun startFlushTimer() {
         CoroutineScope(Dispatchers.IO).launch {

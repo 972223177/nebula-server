@@ -66,5 +66,11 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 5 | ✅ (15 threats, 0 open) | ✅ (100% coverage) | ✅ (22/22 tests pass) |
 | 6 | ⏳ 待追溯 | ⏳ 待追溯 | ⏳ 待追溯 |
 
+## Quick Tasks Completed
+
+| Date | Task | Summary |
+|------|------|---------|
+| 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
+
 ---
 *Last updated: 2026-06-12 after creating Phase 5/6 JPA blocking fix plans*

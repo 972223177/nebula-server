@@ -44,7 +44,7 @@ class MessageQueueRepository(
                 XGroupCreateArgs.Builder.mkstream(true)
             )
         } catch (e: RedisCommandExecutionException) {
-            if (!e.message?.contains("BUSYGROUP")!!) throw e
+            if (!(e.message?.contains("BUSYGROUP") ?: false)) throw e
             // 消费者组已存在，忽略
         }
     }
