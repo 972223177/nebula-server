@@ -10,6 +10,14 @@ import com.nebula.gateway.di.registerHandlers
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.handler.user.BatchGetStatusHandler
+import com.nebula.gateway.handler.user.BatchGetUserHandler
+import com.nebula.gateway.handler.user.GetPrivacyHandler
+import com.nebula.gateway.handler.user.GetProfileHandler
+import com.nebula.gateway.handler.user.LoginHandler
+import com.nebula.gateway.handler.user.RegisterHandler
+import com.nebula.gateway.handler.user.SearchUserHandler
+import com.nebula.gateway.handler.user.SetPrivacyHandler
 import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
@@ -17,6 +25,7 @@ import com.nebula.repository.config.JpaConfig
 import com.nebula.repository.config.RedisConfig
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
+import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
@@ -30,6 +39,7 @@ import com.nebula.server.server.ChatServer
 import kotlinx.coroutines.runBlocking
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
+import org.koin.dsl.module
 
 /**
  * Nebula 服务端应用入口。
@@ -98,17 +108,41 @@ fun main() {
 
     // Step 4.75: Phase 4 — 初始化 Koin DI 容器
     // 在 gRPC Server 启动前注册所有基础设施组件（D-03, D-06）
-    // 注册顺序：框架组件（HandlerRegistry/Interceptor/SessionRegistry）→ 业务 Handler
-    startKoin {
-        modules(frameworkModule, handlerModule)
+    // 注册顺序：框架组件（HandlerRegistry/Interceptor/SessionRegistry）→ 业务 Handler → 外部 Repository
+
+    // Phase 5: 外部 Repository 模块（由 JpaConfig/RedisConfig 动态创建）
+    // 将 main() 中创建的 Repository 实例注入 Koin 容器，供 Handler 通过 get() 获取
+    val externalModule = module {
+        single { userRepo as UserRepository }
+        single { sessionRepo as SessionRepository }
+        single { onlineStatusRepo as OnlineStatusRepository }
+        single { idGenerator as SnowflakeIdGenerator }
+        single { PrivacyRepository(redisConfig.connection, userRepo as UserRepository) }
     }
 
-    // 将 Koin 中注册的 Handler 实例注册到 HandlerRegistry（Review 反馈#1）
-    // 确保 method → HandlerEntry 映射在 gRPC 请求到达前就已建立
+    startKoin {
+        modules(frameworkModule, handlerModule, externalModule)
+    }
+
+    // Phase 5: 从 Koin 获取所有 Handler 并注册到 HandlerRegistry
+    // Review 修复：注册方式通过 handlerModule + externalModule 由 Koin 管理依赖
     val registry = GlobalContext.get().get<HandlerRegistry>()
     val codec = GlobalContext.get().get<ProtoCodec>()
     val pingHandler = GlobalContext.get().get<PingHandler>()
-    registerHandlers(registry, codec, pingHandler)
+    val loginHandler = GlobalContext.get().get<LoginHandler>()
+    val registerHandler = GlobalContext.get().get<RegisterHandler>()
+    val searchUserHandler = GlobalContext.get().get<SearchUserHandler>()
+    val getProfileHandler = GlobalContext.get().get<GetProfileHandler>()
+    val batchGetUserHandler = GlobalContext.get().get<BatchGetUserHandler>()
+    val batchGetStatusHandler = GlobalContext.get().get<BatchGetStatusHandler>()
+    val setPrivacyHandler = GlobalContext.get().get<SetPrivacyHandler>()
+    val getPrivacyHandler = GlobalContext.get().get<GetPrivacyHandler>()
+    registerHandlers(
+        registry, codec,
+        pingHandler, loginHandler, registerHandler, searchUserHandler,
+        getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
+        setPrivacyHandler, getPrivacyHandler
+    )
 
     // Step 4.8: Phase 5 — 构造 ChatService 依赖
     // Dispatcher: 注入 HandlerRegistry + 拦截器链 + ProtoCodec
