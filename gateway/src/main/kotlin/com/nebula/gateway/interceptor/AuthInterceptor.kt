@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
  * @param sessionRegistry Session 注册中心，用于验证 Token 的有效性
  * @param skipMethods 跳过认证的方法白名单，默认包含 "system/ping"
  */
-class AuthInterceptor(
+open class AuthInterceptor(
     private val sessionRegistry: SessionRegistry,
     private val skipMethods: Set<String> = setOf("system/ping")
 ) : Interceptor {
@@ -63,7 +63,7 @@ class AuthInterceptor(
      * @param request 客户端请求
      * @return Token 字符串，若无法提取则返回 null
      */
-    private fun extractToken(request: Request): String? {
+    open fun extractToken(request: Request): String? {
         return null
     }
 
