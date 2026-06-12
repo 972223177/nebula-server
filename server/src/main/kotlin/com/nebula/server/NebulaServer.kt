@@ -7,8 +7,12 @@ import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.di.frameworkModule
 import com.nebula.gateway.di.handlerModule
 import com.nebula.gateway.di.registerHandlers
+import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.interceptor.Interceptor
+import com.nebula.gateway.service.ChatService
+import com.nebula.gateway.session.SessionRegistry
 import com.nebula.repository.config.JpaConfig
 import com.nebula.repository.config.RedisConfig
 import com.nebula.repository.redis.MessageQueueRepository
@@ -106,9 +110,18 @@ fun main() {
     val pingHandler = GlobalContext.get().get<PingHandler>()
     registerHandlers(registry, codec, pingHandler)
 
+    // Step 4.8: Phase 5 — 构造 ChatService 依赖
+    // Dispatcher: 注入 HandlerRegistry + 拦截器链 + ProtoCodec
+    val sessionRegistry = GlobalContext.get().get<SessionRegistry>()
+    val interceptors: List<Interceptor> = GlobalContext.get().getAll()
+    val dispatcher = Dispatcher(registry, interceptors, codec)
+
+    // ChatService: gRPC 双向流服务，绑定 Envelope 协议分发 + LoginResp 拦截
+    val chatService = ChatService(dispatcher, sessionRegistry, registry)
+
     // Step 5: 启动 gRPC 服务 — 包含 SSL/TLS、keepalive、流控配置
     val chatServer = ChatServer(config)
-    chatServer.start()
+    chatServer.start(chatService)
 
     // Step 6: 阻塞等待关闭 — JVM 进程在此等待，直到收到 SIGTERM/Shutdown 信号
     chatServer.blockUntilShutdown()
