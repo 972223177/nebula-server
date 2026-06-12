@@ -12,7 +12,7 @@
 | 1 | 5/5 | Complete   | 2026-06-11 |
 | 2 | Common Module & Infrastructure Base | INFRA-02~05 | Snowflake ID, HikariCP, SSL dual-mode, Netty bootstrap |
 | 3 | Database Schema & Repository Layer | DB-01~07 | 6 MySQL tables, 3 Redis structures, message persistence |
-| 4 | Handler Framework | HNDL-01~06 | Generic Handler, Dispatcher, Koin DI, Pipeline, Exceptions |
+| 4 | 4/4 | Complete   | 2026-06-12 |
 | 5 | User & Authentication | AUTH-01~06, BIZ-USER-01~06 | Login, session, multi-device, user CRUD APIs |
 | 6 | Chat & Message | BIZ-CHAT-01~02, BIZ-MSG-01~02 | Send message, fan-out, pull, read receipt |
 | 7 | Conversation | BIZ-CONV-01~08 | List, create group, invite, leave, kick, edit |
@@ -130,20 +130,20 @@ Plans:
 6. ExceptionInterceptor catches BizException and maps to gRPC status
 7. Handler directory structure organized by domain
 
-**Plans:** 4 plans in 4 waves
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1** *(no dependencies)*
-- [ ] 04-01-PLAN.md — Core Handler Framework: Handler, HandlerRegistry, ProtoCodec, Dispatcher
+- [x] 04-01-PLAN.md — Core Handler Framework: Handler, HandlerRegistry, ProtoCodec, Dispatcher
 
 **Wave 2** *(depends on Wave 1)*
-- [ ] 04-03-PLAN.md — Session & Heartbeat: Session, SessionRegistry, PingHandler, envelope Direction, ChatServer keepalive
+- [x] 04-03-PLAN.md — Session & Heartbeat: Session, SessionRegistry, PingHandler, envelope Direction, ChatServer keepalive
 
 **Wave 3** *(depends on Wave 1, 2)*
-- [ ] 04-02-PLAN.md — Interceptor Pipeline: Interceptor/Chain, Auth, Log, RateLimit, Exception interceptors
+- [x] 04-02-PLAN.md — Interceptor Pipeline: Interceptor/Chain, Auth, Log, RateLimit, Exception interceptors
 
 **Wave 4** *(depends on Wave 1, 2, 3)*
-- [ ] 04-04-PLAN.md — Koin DI & Gateway Integration: Koin module, build deps, NebulaServer init, integration tests
+- [x] 04-04-PLAN.md — Koin DI & Gateway Integration: Koin module, build deps, NebulaServer init, integration tests
 
 ---
 
