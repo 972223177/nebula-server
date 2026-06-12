@@ -18,6 +18,7 @@ tasks.test {
 dependencies {
     implementation(project(":service"))
     implementation(project(":proto"))
+    implementation(project(":common"))
 
     // Phase 4: Handler Framework
     implementation(libs.koin.core)
