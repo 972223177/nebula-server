@@ -16,7 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * chat/send Handler — Step 链编排器（D-04, D-05, D-06, D-09, D-11, D-13）。
@@ -68,7 +68,7 @@ class SendMessageHandler(
      * @throws SendMessageException 验证/去重失败或非预期异常时
      */
     override suspend fun handle(req: SendMessageReq): SendMessageResp {
-        val session = coroutineContext.requireSession()
+        val session = currentCoroutineContext().requireSession()
         val context = SendContext(req = req, senderUid = session.userId)
 
         // REVIEW-HIGH-2: Step 链包裹 try-catch，非预期异常转化为 SendMessageException

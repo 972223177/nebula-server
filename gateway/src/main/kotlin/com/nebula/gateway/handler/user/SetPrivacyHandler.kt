@@ -6,7 +6,7 @@ import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.repository.redis.PrivacyRepository
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 在线状态可见性设置 Handler — method = "user/setPrivacy"（BIZ-USER-05, D-09, D-11）。
@@ -42,7 +42,7 @@ class SetPrivacyHandler(
      * @return 通用响应，仅包含状态码
      */
     override suspend fun handle(req: SetPrivacyReq): Response {
-        val session = coroutineContext.requireSession()
+        val session = currentCoroutineContext().requireSession()
         privacyRepository.setHideOnlineStatus(session.userId, req.hideOnlineStatus)
         return Response.newBuilder()
             .setCode(BizCode.OK.code)

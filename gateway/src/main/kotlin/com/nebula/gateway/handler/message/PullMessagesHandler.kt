@@ -20,7 +20,7 @@ import com.google.protobuf.ByteString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 import org.springframework.data.domain.Pageable
 
 /**
@@ -63,7 +63,7 @@ class PullMessagesHandler(
      * @throws ConversationException(BizCode.CONV_NOT_FOUND) 会话不存在
      */
     override suspend fun handle(req: PullMessagesReq): PullMessagesResp {
-        val session = coroutineContext.requireSession()
+        val session = currentCoroutineContext().requireSession()
 
         // REVIEW-MEDIUM-9: 会话存在性检查 — 区分"会话不存在"和"会话无消息"
         val exists = withContext(Dispatchers.IO) { conversationRepository.existsById(req.conversationId) }
