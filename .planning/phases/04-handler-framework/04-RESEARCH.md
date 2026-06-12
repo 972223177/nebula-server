@@ -924,21 +924,24 @@ class AuthInterceptorTest {
 | A4 | gRPC keepalive 的精细化参数（maxConnectionAge=1800s 等）在 ChatServer.kt 中与当前 gRPC 版本兼容 | ChatServer.kt 修改 | gRPC 1.81.0 支持这些参数，但具体版本需确认 NettyServerBuilder API 兼容性 |
 | A5 | kotlinx-coroutines-test 1.9.0 与 kotlinx-coroutines-core 1.9.0 完全兼容 | 测试框架 | 同版本号的协程测试库理论上兼容 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **ProtoCodec 对 Unit/empty Handler 的处理**
+1. **ProtoCodec 对 Unit/empty Handler 的处理** [RESOLVED → Plan 01 Task 2]
    - What we know: 设计文档 8.2 中某些 Handler 的 Resp 类型为 `Unit::class`（如 `friend/delete`），D-13 要求 HandlerEntry 包含 Resp KClass
    - What's unclear: Protobuf `parseFrom(byte[])` 对空载荷的兼容性，以及 Unit 类型如何映射到 Proto 消息
+   - Resolution: Plan 01 Task 2 为 ProtoCodec 增加 empty bytes guard clause，对无参 Handler 返回空消息/空字节
    - Recommendation: 为无参 Handler 定义一个 `EmptyRequest` / `EmptyResponse` Proto 消息，或在 ProtoCodec 中增加 guard：if (protoClass == Unit::class) 直接返回空消息/空字节
 
-2. **AuthInterceptor 从 Request 提取 token 的方式**
+2. **AuthInterceptor 从 Request 提取 token 的方式** [RESOLVED → Plan 02 Task 2]
    - What we know: Request.proto 定义 `method` 和 `bytes params` 两个字段，没有显式的 token 字段
    - What's unclear: token 是放在 `params` 中随第一个请求发送，还是需要通过 Envelope metadata 传递
+   - Resolution: Plan 02 Task 2 中 AuthInterceptor 先实现 token 提取的扩展点（extractToken() 方法返回 TODO），Phase 5 填入具体实现
    - Recommendation: 等待 Phase 5 确定 token 传递方式。Phase 4 的 AuthInterceptor 先实现 token 提取的扩展点（接口或抽象方法），Phase 5 填入具体实现
 
-3. **RateLimitInterceptor 的限流策略参数**
+3. **RateLimitInterceptor 的限流策略参数** [RESOLVED → Plan 02 Task 2]
    - What we know: D-08 要求实现 RateLimitInterceptor，基于 userId (已认证) 或 IP (未认证) 限流
    - What's unclear: 限流阈值（每分钟 N 次）是硬编码还是配置化，以及是否需要滑动窗口或令牌桶
+   - Resolution: Plan 02 Task 2 将 RateLimitInterceptor 实现为骨架（stub/skeleton），使用默认限流阈值，Phase 11 精细化调优
    - Recommendation: 使用令牌桶算法（`java.util.concurrent.Semaphore` 或 `Bucket4j`），限流阈值通过配置加载。Phase 4 先实现骨架和默认值，Phase 11 精细化调优
 
 ## Environment Availability
