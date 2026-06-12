@@ -1,5 +1,7 @@
 package com.nebula.gateway.session
 
+import kotlinx.serialization.Serializable
+
 /**
  * Session 会话数据模型。
  *
@@ -12,6 +14,7 @@ package com.nebula.gateway.session
  * @param deviceId 客户端设备唯一标识，用于同端多设备互踢（AUTH-03）
  * @param connectionId gRPC 连接唯一标识，对应 StreamObserver 关联
  */
+@Serializable
 data class Session(
     val userId: Long,
     val token: String,

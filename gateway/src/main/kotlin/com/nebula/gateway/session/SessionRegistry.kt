@@ -1,6 +1,6 @@
 package com.nebula.gateway.session
 
-import com.google.gson.Gson
+import kotlinx.serialization.json.Json
 import com.nebula.repository.redis.SessionRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.TimeoutCancellationException
@@ -35,8 +35,8 @@ class SessionRegistry(
     /** 缓存驱逐回调列表 — 当 Session 被驱逐时通知关闭 StreamObserver（D-20） */
     private val evictionCallbacks = CopyOnWriteArrayList<(String) -> Unit>()
 
-    /** Gson 实例用于 Session 与 JSON 互转，存储到 Redis */
-    private val gson = Gson()
+    /** Json 实例用于 Session 与 JSON 互转，存储到 Redis */
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
     /** L2 Redis 调用超时时间（毫秒）*/
     private val redisTimeoutMs = 500L
@@ -107,8 +107,8 @@ class SessionRegistry(
     suspend fun saveToRedis(session: Session) {
         try {
             withTimeout(redisTimeoutMs) {
-                val json = gson.toJson(session)
-                sessionRepository.save(session.token, json)
+                val sessionJson = json.encodeToString(session)
+                sessionRepository.save(session.token, sessionJson)
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Redis save timeout for token=${session.token}, degraded to L1 only" }
@@ -146,9 +146,9 @@ class SessionRegistry(
     suspend fun queryFromRedis(token: String): Session? {
         return try {
             withTimeout(redisTimeoutMs) {
-                val json = sessionRepository.findByToken(token)
-                if (json != null) {
-                    gson.fromJson(json, Session::class.java)
+                val sessionJson = sessionRepository.findByToken(token)
+                if (sessionJson != null) {
+                    json.decodeFromString<Session>(sessionJson)
                 } else null
             }
         } catch (e: TimeoutCancellationException) {
