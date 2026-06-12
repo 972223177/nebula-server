@@ -917,7 +917,7 @@ class RedisConfig(
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **How to wire dependencies without Koin?**
    - What we know: Phase 4 introduces Koin DI. Phase 3 currently has no DI framework.

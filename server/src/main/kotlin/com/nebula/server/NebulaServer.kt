@@ -3,8 +3,21 @@ package com.nebula.server
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.datasource.HikariDataSourceProvider
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.repository.config.JpaConfig
+import com.nebula.repository.config.RedisConfig
+import com.nebula.repository.redis.MessageQueueRepository
+import com.nebula.repository.redis.OnlineStatusRepository
+import com.nebula.repository.redis.SessionRepository
+import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.repository.repository.ConversationRepository
+import com.nebula.repository.repository.FriendRequestRepository
+import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.repository.repository.MessageRepository
+import com.nebula.repository.repository.UserRepository
+import com.nebula.repository.repository.impl.MessageRepositoryImpl
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
+import kotlinx.coroutines.runBlocking
 
 /**
  * Nebula 服务端应用入口。
@@ -39,6 +52,35 @@ fun main() {
     // Step 4: 初始化数据库连接池 — Phase 3 正式使用
     // HikariCP 连接池通过 HikariDataSourceProvider 封装，屏蔽直接依赖
     val dataSourceProvider = HikariDataSourceProvider(config.database)
+
+    // Step 4.5: Phase 3 — 初始化持久化层
+    // JPA + Flyway：先执行迁移再创建 EntityManagerFactory
+    val jpaConfig = JpaConfig(dataSourceProvider)
+    // Redis 客户端：Lettuce 共享连接
+    val redisConfig = RedisConfig(
+        host = config.redis.host,
+        port = config.redis.port
+    )
+    // 获取各 JPA Repository 代理
+    val userRepo = jpaConfig.getRepository(UserRepository::class.java)
+    val conversationRepo = jpaConfig.getRepository(ConversationRepository::class.java)
+    val conversationMemberRepo = jpaConfig.getRepository(ConversationMemberRepository::class.java)
+    val messageRepo = jpaConfig.getRepository(MessageRepository::class.java)
+    val friendshipRepo = jpaConfig.getRepository(FriendshipRepository::class.java)
+    val friendRequestRepo = jpaConfig.getRepository(FriendRequestRepository::class.java)
+    // Redis Repository 初始化
+    val sessionRepo = SessionRepository(redisConfig.connection)
+    val messageQueueRepo = MessageQueueRepository(redisConfig.connection)
+    val onlineStatusRepo = OnlineStatusRepository(redisConfig.connection)
+    // 确保 Redis Stream 消费者组就绪（runBlocking 用于 main 线程非阻塞上下文的桥接）
+    runBlocking { redisConfig.initializeRedisInfra(messageQueueRepo) }
+    // 消息写入路径：Redis Stream → 异步批量刷入 MySQL
+    val messageWriteRepo = MessageRepositoryImpl(
+        messageQueue = messageQueueRepo,
+        jpaMessageRepo = messageRepo,
+        emf = jpaConfig.entityManagerFactory
+    )
+    messageWriteRepo.startFlushTimer()
 
     // Step 5: 启动 gRPC 服务 — 包含 SSL/TLS、keepalive、流控配置
     val chatServer = ChatServer(config)

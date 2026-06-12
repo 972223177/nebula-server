@@ -14,6 +14,8 @@ data class ApplicationConfig(
     val snowflake: SnowflakeConfig,
     /** 关系型数据库（HikariCP）连接池配置 */
     val database: DatabaseConfig,
+    /** Redis 缓存服务器配置 — Phase 3 引入 */
+    val redis: RedisConfig,
     /** gRPC TLS/SSL 传输层安全配置 */
     val ssl: SslConfig
 )

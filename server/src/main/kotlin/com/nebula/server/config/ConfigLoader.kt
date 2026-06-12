@@ -2,6 +2,7 @@ package com.nebula.server.config
 
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.config.DatabaseConfig
+import com.nebula.common.config.RedisConfig
 import com.nebula.common.config.ServerConfig
 import com.nebula.common.config.SnowflakeConfig
 import com.nebula.common.config.SslConfig
@@ -85,6 +86,10 @@ object ConfigLoader {
                 idleTimeout = config.getLong("database.idle-timeout"),
                 maxLifetime = config.getLong("database.max-lifetime"),
                 leakDetectionThreshold = config.getLong("database.leak-detection-threshold")
+            ),
+            redis = RedisConfig(
+                host = config.getString("redis.host"),
+                port = config.getInt("redis.port")
             ),
             ssl = SslConfig(
                 enabled = config.getBoolean("ssl.enabled"),
