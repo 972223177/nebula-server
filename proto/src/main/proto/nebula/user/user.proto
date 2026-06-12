@@ -15,6 +15,7 @@ message LoginReq {
   optional string token = 3;          // Token，token 登录时必填
   common.DeviceType device_type = 4;  // 登录设备类型
   int64 last_received_global_id = 5;  // 客户端最后收到的全局消息ID，用于服务端同步增量数据
+  string device_id = 6;               // 客户端设备唯一标识（由客户端生成），用于同设备类型互踢
 }
 
 // 登录响应
@@ -25,17 +26,39 @@ message LoginResp {
   int64 server_now = 4;               // 服务端当前时间戳（毫秒），用于客户端时间校准
   map<string, int64> last_read_info = 5;  // 各会话的最新已读消息ID，{conversation_id: last_read_msg_id}
   int64 server_last_msg_id = 6;       // 服务端最新消息全局ID，用于客户端判断是否有增量消息
+  common.DeviceType device_type = 7;  // 本次登录的设备类型，由 LoginHandler 从 LoginReq 复制（D-04/D-05）
+  string device_id = 8;               // 本次登录的设备 ID，由 LoginHandler 从 LoginReq 复制，避免 ChatService 重复解析
+}
+
+// ---- user/register ----
+// 注册请求：创建新用户账户（D-01）
+// 注意：不包含 device_type 字段 — 注册不创建 Session，设备类型在后续登录时提供
+message RegisterReq {
+  string username = 1;                // 用户名，登录唯一凭证
+  string password = 2;                // 密码，BCrypt 哈希后存储
+  string nickname = 3;                // 显示昵称
+  optional string avatar = 4;         // 头像 URL，可选
+}
+
+// 注册响应
+message RegisterResp {
+  int64 uid = 1;                      // 新用户的 UID
+  string token = 2;                   // 登录凭证 token，注册成功后直接完成登录状态
 }
 
 // ---- user/search ----
-// 搜索用户请求，根据关键词查找用户
+// 搜索用户请求，根据关键词查找用户（游标分页）
 message SearchUserReq {
   string keyword = 1;                 // 搜索关键词（用户名/昵称）
+  int64 cursor = 2;                   // 游标：上一页最后一条的 created_at 毫秒时间戳，首次查询传 0（D-08）
+  int32 limit = 3;                    // 每页数量，默认 20，最大 20
 }
 
 // 搜索用户响应
 message SearchUserResp {
   repeated UserBrief users = 1;       // 匹配的用户简要列表
+  int64 next_cursor = 2;              // 下一页游标（最后一条的 created_at 毫秒时间戳），无更多数据时为 0
+  bool has_more = 3;                  // 是否有更多数据
 }
 
 // ---- user/getProfile ----
@@ -79,7 +102,10 @@ message SetPrivacyReq {
 }
 
 // ---- user/getPrivacy ----
-// 获取隐私选项（无需 Request 入参，userId 由服务端从 Session 中获取）
+// 获取隐私选项请求（空消息，userId 由服务端从 Session 中获取）
+message GetPrivacyReq {}
+
+// 获取隐私选项响应
 message GetPrivacyResp {
   bool hide_online_status = 1;        // 是否隐藏在线状态
 }
@@ -90,6 +116,7 @@ message UserBrief {
   string username = 2;                // 用户名
   string display_name = 3;            // 显示昵称
   string avatar_url = 4;              // 头像 URL
+  int64 created_at = 5;               // 注册时间（毫秒时间戳），用于搜索分页排序参考
 }
 
 // 在线状态

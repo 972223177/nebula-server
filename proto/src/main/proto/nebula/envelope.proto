@@ -36,9 +36,11 @@ message Envelope {
 }
 
 // 请求消息：客户端发起的业务调用
+// metadata 用于传递认证 Token（key="authorization"）、客户端 IP（key="x-client-ip"）、客户端版本等元数据（D-04）
 message Request {
   string method = 1;              // 接口路由标识，格式为 "业务模块/接口名称"，如 "user/login"、"chat/send"
   bytes params = 2;               // 请求参数，通过 method 找到对应的 protobuf 消息类型进行序列化/反序列化
+  map<string, string> metadata = 3;  // 请求元数据，用于传递 Token、客户端 IP 等（D-04 推荐方式）
 }
 
 // 响应消息：服务端对请求的应答
