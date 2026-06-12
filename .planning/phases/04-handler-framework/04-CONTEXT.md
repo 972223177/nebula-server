@@ -1,6 +1,6 @@
 # Phase 4: Handler Framework - Context
 
-**Gathered:** 2026-06-12
+**Gathered:** 2026-06-12 (updated)
 **Status:** Ready for planning
 
 <domain>
@@ -26,7 +26,7 @@
 - **D-06:** 采用设计文档 8.3 的 Interceptor/Chain 接口模式（GoF Chain of Responsibility），适配为 suspend 版本。拦截器通过 Koin `List<Interceptor>` 注入。
 - **D-07:** 拦截器执行顺序：AuthInterceptor → LogInterceptor → RateLimitInterceptor → ExceptionInterceptor（ExceptionInterceptor 作为链尾包裹 Handler）。
 - **D-08:** 实现 4 个拦截器：AuthInterceptor、LogInterceptor、RateLimitInterceptor、ExceptionInterceptor。
-- **D-09:** AuthInterceptor 内部维护 `skipMethods: Set<String>` 白名单控制跳过认证的方法（如 "user/login"）。
+- **D-09:** AuthInterceptor 内部维护 `skipMethods: Set<String>` 白名单控制跳过认证的方法（如 "system/ping"）。
 - **D-10:** ExceptionInterceptor 三态异常处理：BizException→业务状态码、IllegalArgumentException→BAD_REQUEST、未预期异常→INTERNAL_ERROR(9000) 不暴露堆栈细节。
 
 ### Dispatcher 路由与序列化
@@ -51,8 +51,16 @@
   - `com.nebula.gateway.session` — Session, SessionRegistry
   - `com.nebula.gateway.handler.{domain}` — 按业务域分包
 
-### 心跳处理策略
-- **D-22:** 心跳完全由 gRPC 内置 keepalive 机制处理，不实现应用层 PING/PONG Handler。`envelope.proto` 中 Direction 枚举的 PING(4)/PONG(5) 已标记为 `reserved` 移除。
+### 心跳处理策略（2026-06-12 更新）
+- **D-22（已废弃）：** ~~心跳完全由 gRPC 内置 keepalive 机制处理，不实现应用层 PING/PONG。~~ → 废弃原因：移动端网络环境下 gRPC keepalive 无法可靠检测半开连接（NAT/代理透传 HTTP/2 PING 帧但不保证数据通道畅通）。
+- **D-27:** 采用纯应用层 PING/PONG 心跳，替代 gRPC keepalive 作为主要心跳检测机制。客户端定时发送 PING 请求，服务端返回 PONG 响应。gRPC keepalive 参数保持现有配置作为传输层兜底（`keepAliveTime=30s`, `keepAliveTimeout=10s`, `permitKeepAliveWithoutCalls=false`）。
+- **D-28:** 应用层心跳通过普通 Handler `method = "system/ping"` 实现，走标准 Dispatcher + Pipeline 路由。PING 请求不携带业务 payload，服务端直接返回 PONG Response。
+- **D-29:** 心跳超时采用优雅降级策略：
+  - T1（60s 无 PING）：将连接标记为"可疑"状态，停止向该连接推送消息
+  - T2（150s 仍无 PING）：强制断开连接，清理 Session，触发客户端重连
+  - 若客户端在 T1-T2 窗口内恢复 PING 发送，标记恢复正常，恢复推送
+- **D-30:** AuthInterceptor 和 LogInterceptor 跳过 `"system/ping"` 方法，心跳 Handler 直接返回 PONG 不经过认证/日志拦截。
+- **D-31:** Proto `envelope.proto` Direction 枚举还原 PING(4)/PONG(5) 为有效值（从 `reserved` 移除）。更新 proto 注释说明应用层 PING/PONG 用途。
 
 ### Handler 测试策略
 - **D-23:** 测试框架使用 JUnit5 + MockK，与项目现有配置一致。
@@ -61,7 +69,9 @@
 - **D-26:** Dispatcher + Pipeline 采取 Mock 全链路测试 — MockHandlerRegistry + MockInterceptorChain 验证编排顺序。
 
 ### Claude's Discretion
-- 暂无 — 所有灰色区域均已做出明确决策。
+- 心跳 Handler 的 `system/ping` 方法名可协商，下游计划者可根据编码惯例调整
+- 优雅降级具体时间窗口 T1/T2 数值可在实现阶段根据实际测试调整（参考：T1=60s, T2=150s）
+- 心跳 Handler 是否需要独立单元测试由实现者决定（建议与 PingHandler Proto 定义一起测试）
 
 </decisions>
 
@@ -71,7 +81,7 @@
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Proto 定义
-- `proto/src/main/proto/nebula/envelope.proto` — Envelope、Direction、Request/Response 消息定义
+- `proto/src/main/proto/nebula/envelope.proto` — Envelope、Direction（含 PING/PONG）、Request/Response 消息定义
 - `proto/src/main/proto/nebula/message_type.proto` — MessageType 枚举（23 个方法）
 - `proto/src/main/proto/nebula/common.proto` — 公共消息类型定义
 
@@ -102,11 +112,13 @@
 ### Established Patterns
 - 协程已由 Phase 2 `CoroutineScope(Dispatchers.IO)` 模式确立为全局基础设施
 - Koin 注入模式在各模块中统一（`nebulaModule` + `loadKoinModules`）
+- gRPC keepalive 配置已在 ChatServer.kt 确立（Phase 2），心跳策略变更后需调整
 
 ### Integration Points
 - ChatGatewayImpl（:gateway 模块） — gRPC 双向流 service 实现入口，调用 Dispatcher.dispatch()
 - SessionRegistry 需要依赖 `:repository` 模块的 SessionRepository（Redis 操作）
 - Handler 注册点在 Koin 模块中统一管理，Phase 5+ 的 Handler 通过 Koin 注入
+- 心跳 Handler `system/ping` 需要注册到 Koin，添加到 AuthInterceptor.skipMethods
 
 </code_context>
 
@@ -127,4 +139,4 @@ None — discussion stayed within phase scope.
 ---
 
 *Phase: 4-Handler Framework*
-*Context gathered: 2026-06-12*
+*Context gathered: 2026-06-12 (updated)*
