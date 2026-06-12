@@ -15,7 +15,6 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 
 /**
  * GetProfileHandler 用户详细资料查询 Handler 单元测试。
@@ -48,7 +47,7 @@ class GetProfileHandlerTest {
             createdAt = now
         }
 
-        coEvery { userRepository.findById(1001L) } returns entity
+        coEvery { userRepository.findById(1001L) } returns java.util.Optional.of(entity)
 
         val req = GetProfileReq.newBuilder().setUid(1001L).build()
         val resp = handler.handle(req)
@@ -62,7 +61,7 @@ class GetProfileHandlerTest {
 
     @Test
     fun `用户不存在`() = runTest {
-        coEvery { userRepository.findById(9999L) } returns null
+        coEvery { userRepository.findById(9999L) } returns java.util.Optional.empty()
 
         val req = GetProfileReq.newBuilder().setUid(9999L).build()
         val exception = assertFailsWith<UserException> {
