@@ -4,6 +4,10 @@ import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.chat.send.SendMessageStep
+import com.nebula.gateway.handler.message.PullMessagesHandler
+import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -12,11 +16,21 @@ import com.nebula.gateway.handler.user.LoginHandler
 import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
+import com.nebula.gateway.push.PushService
+import com.nebula.gateway.session.UserStreamRegistry
+import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
+import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.repository.repository.ConversationRepository
+import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.UserRepository
+import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
@@ -45,6 +59,12 @@ class GatewayModuleTest {
     private val onlineStatusRepo = mockk<OnlineStatusRepository>()
     private val idGenerator = mockk<SnowflakeIdGenerator>()
     private val privacyRepo = mockk<PrivacyRepository>()
+    private val redisConnection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
+    private val conversationMemberRepo = mockk<ConversationMemberRepository>()
+    private val conversationRepo = mockk<ConversationRepository>()
+    private val messageRepo = mockk<MessageRepository>()
+    private val messageQueueRepo = mockk<MessageQueueRepository>()
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
      * 构建供测试使用的外部 Repository Koin 模块。
@@ -56,11 +76,17 @@ class GatewayModuleTest {
         single { userRepo }
         single { onlineStatusRepo }
         single { idGenerator }
+        single { redisConnection as StatefulRedisConnection<String, String> }
+        single { messageQueueRepo }
+        single { conversationMemberRepo }
+        single { conversationRepo }
+        single { messageRepo }
     }
 
     /**
      * 构建测试专用的 handlerModule，代替生产 handlerModule。
      * PrivacyRepository 直接使用 mock 实例，避免 Koin 解析 StatefulRedisConnection 泛型参数。
+     * Phase 6 组件使用 mock 外部依赖，避免真实 Redis/Lettuce 连接。
      */
     private fun buildHandlerModule() = module {
         single { PingHandler() }
@@ -73,6 +99,15 @@ class GatewayModuleTest {
         single { BatchGetStatusHandler(get(), get()) }
         single { SetPrivacyHandler(get()) }
         single { GetPrivacyHandler(get()) }
+
+        // Phase 6: Chat & Message — 使用 mock 外部依赖
+        single { scope }
+        single { UserStreamRegistry() }
+        single { PushService(get(), get()) }
+        single { listOf<SendMessageStep>(mockk(), mockk(), mockk()) }
+        single { SendMessageHandler(get(), get(), get(), get(), get()) }
+        single { PullMessagesHandler(get(), get()) }
+        single { ReadReportHandler(get(), get(), get(), get()) }
     }
 
     @AfterEach
@@ -198,15 +233,19 @@ class GatewayModuleTest {
         val batchGetStatusHandler = GlobalContext.get().get<BatchGetStatusHandler>()
         val setPrivacyHandler = GlobalContext.get().get<SetPrivacyHandler>()
         val getPrivacyHandler = GlobalContext.get().get<GetPrivacyHandler>()
+        val sendMessageHandler = GlobalContext.get().get<SendMessageHandler>()
+        val pullMessagesHandler = GlobalContext.get().get<PullMessagesHandler>()
+        val readReportHandler = GlobalContext.get().get<ReadReportHandler>()
 
         registerHandlers(
             registry, codec,
             pingHandler, loginHandler, registerHandler, searchUserHandler,
             getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
-            setPrivacyHandler, getPrivacyHandler
+            setPrivacyHandler, getPrivacyHandler,
+            sendMessageHandler, pullMessagesHandler, readReportHandler
         )
 
-        // 验证所有 Phase 5 方法已注册
+        // 验证所有 Phase 5~6 方法已注册
         assertNotNull(registry.get("system/ping"))
         assertSame(pingHandler, registry.get("system/ping")?.handler)
 
@@ -220,5 +259,13 @@ class GatewayModuleTest {
         assertNotNull(registry.get("user/batchGetStatus"))
         assertNotNull(registry.get("user/setPrivacy"))
         assertNotNull(registry.get("user/getPrivacy"))
+
+        // Phase 6: Chat & Message Handler 注册验证
+        assertNotNull(registry.get("chat/send"))
+        assertSame(sendMessageHandler, registry.get("chat/send")?.handler)
+        assertNotNull(registry.get("message/pull"))
+        assertSame(pullMessagesHandler, registry.get("message/pull")?.handler)
+        assertNotNull(registry.get("message/read"))
+        assertSame(readReportHandler, registry.get("message/read")?.handler)
     }
 }

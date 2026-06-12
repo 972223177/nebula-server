@@ -10,6 +10,9 @@ import com.nebula.gateway.di.registerHandlers
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.message.PullMessagesHandler
+import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -37,6 +40,7 @@ import com.nebula.repository.repository.UserRepository
 import com.nebula.repository.repository.impl.MessageRepositoryImpl
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
+import io.lettuce.core.api.StatefulRedisConnection
 import kotlinx.coroutines.runBlocking
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -119,6 +123,7 @@ fun main() {
         single { onlineStatusRepo as OnlineStatusRepository }
         single { idGenerator as SnowflakeIdGenerator }
         single { PrivacyRepository(redisConfig.connection, userRepo as UserRepository) }
+        single { redisConfig.connection as StatefulRedisConnection<String, String> }
     }
 
     startKoin {
@@ -138,11 +143,15 @@ fun main() {
     val batchGetStatusHandler = GlobalContext.get().get<BatchGetStatusHandler>()
     val setPrivacyHandler = GlobalContext.get().get<SetPrivacyHandler>()
     val getPrivacyHandler = GlobalContext.get().get<GetPrivacyHandler>()
+    val sendMessageHandler = GlobalContext.get().get<SendMessageHandler>()
+    val pullMessagesHandler = GlobalContext.get().get<PullMessagesHandler>()
+    val readReportHandler = GlobalContext.get().get<ReadReportHandler>()
     registerHandlers(
         registry, codec,
         pingHandler, loginHandler, registerHandler, searchUserHandler,
         getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
-        setPrivacyHandler, getPrivacyHandler
+        setPrivacyHandler, getPrivacyHandler,
+        sendMessageHandler, pullMessagesHandler, readReportHandler
     )
 
     // Step 4.8: Phase 5 — 构造 ChatService 依赖
