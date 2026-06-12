@@ -80,7 +80,7 @@ class PrivacyRepository(
                 }
             }
             // Redis 未命中，从 MySQL 回退读取
-            val entity = userRepository.findById(userId)
+            val entity = withContext(Dispatchers.IO) { userRepository.findById(userId) }
             if (entity.isPresent) {
                 val hide = entity.get().privacyStatus == PRIVACY_HIDDEN
                 // 写回 Redis
@@ -93,7 +93,7 @@ class PrivacyRepository(
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Redis getHideOnlineStatus timeout for userId=$userId, falling back to MySQL" }
             // 超时后从 MySQL 回退
-            val entity = userRepository.findById(userId)
+            val entity = withContext(Dispatchers.IO) { userRepository.findById(userId) }
             return if (entity.isPresent) entity.get().privacyStatus == PRIVACY_HIDDEN else false
         } catch (e: Exception) {
             logger.error(e) { "Redis getHideOnlineStatus failed for userId=$userId" }

@@ -5,6 +5,8 @@ import com.nebula.chat.user.BatchIdRequest
 import com.nebula.chat.user.UserBrief
 import com.nebula.gateway.handler.Handler
 import com.nebula.repository.repository.UserRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 批量用户摘要查询 Handler — method = "user/batchGet"（BIZ-USER-03）。
@@ -32,7 +34,7 @@ class BatchGetUserHandler(
      * @return 用户简要信息列表，缺失 ID 对应的用户不会出现在返回结果中
      */
     override suspend fun handle(req: BatchIdRequest): BatchGetUserResp {
-        val users = userRepository.findAllById(req.uidsList)
+        val users = withContext(Dispatchers.IO) { userRepository.findAllById(req.uidsList) }
         val builder = BatchGetUserResp.newBuilder()
 
         users.forEach { entity ->

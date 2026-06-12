@@ -7,6 +7,8 @@ import com.nebula.common.exception.UserException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.repository.repository.UserRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import java.util.UUID
 
@@ -57,7 +59,7 @@ open class LoginHandler(
             if (existingSession != null) {
                 // Review 修复#2：复用现有 Token，不生成新 Token
                 // 避免 Session 孤儿化——旧 Session 在 Redis 中存活，新 Token 被生成，旧 Token 泄露
-                val user = userRepository.findById(existingSession.userId)
+                val user = withContext(Dispatchers.IO) { userRepository.findById(existingSession.userId) }
                     ?: throw UserException(BizCode.USER_NOT_FOUND)
                 // Token 有效，复用现有 Token
                 return buildLoginResp(existingSession.userId, existingSession.token, req)
@@ -67,7 +69,7 @@ open class LoginHandler(
         // 场景 2: 用户名+密码登录
         val username = req.username ?: throw UserException(BizCode.INVALID_PARAM, "用户名不能为空")
         val password = req.password ?: throw UserException(BizCode.INVALID_PARAM, "密码不能为空")
-        val user = userRepository.findByUsername(username)
+        val user = withContext(Dispatchers.IO) { userRepository.findByUsername(username) }
             ?: throw UserException(BizCode.USER_NOT_FOUND)
 
         // BCrypt 密码验证（D-03, cost 12）
