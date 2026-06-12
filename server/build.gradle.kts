@@ -16,6 +16,10 @@ application {
     mainClass = "com.nebula.server.NebulaServerKt"
 }
 
+tasks.named<JavaExec>("run") {
+    workingDir = rootProject.projectDir
+}
+
 dependencies {
     implementation(project(":gateway"))
     implementation(project(":proto"))
@@ -31,4 +35,10 @@ dependencies {
     implementation(libs.grpc.services)
     implementation(libs.grpc.api)
     implementation(libs.netty.tcnative)
+
+    // Phase 3 新增 — 持久化层
+    implementation(project(":repository"))
+    implementation(libs.lettuce.core)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.hibernate.core)
 }
