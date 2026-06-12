@@ -9,6 +9,8 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.UserRepository
 import jakarta.persistence.EntityManagerFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import java.time.LocalDateTime
 
@@ -55,7 +57,7 @@ class RegisterHandler(
         }
 
         // 校验用户名唯一性（T-05-05）
-        if (userRepository.findByUsername(username) != null) {
+        if (withContext(Dispatchers.IO) { userRepository.findByUsername(username) } != null) {
             throw UserException(BizCode.USERNAME_EXISTS)
         }
 
@@ -64,36 +66,38 @@ class RegisterHandler(
         val passwordHash = encoder.encode(password)
 
         // 使用独立 EntityManager + 显式事务确保写入成功（D-09）
-        val em = emf.createEntityManager()
-        try {
-            em.transaction.begin()
+        return withContext(Dispatchers.IO) {
+            val em = emf.createEntityManager()
+            try {
+                em.transaction.begin()
 
-            val user = UserEntity(
-                username = username,
-                passwordHash = passwordHash,
-                nickname = req.nickname.ifBlank { username },
-                avatar = req.avatar ?: ""
-            )
-            user.id = idGenerator.nextId()
-            val now = LocalDateTime.now()
-            user.createdAt = now
-            user.updatedAt = now
+                val user = UserEntity(
+                    username = username,
+                    passwordHash = passwordHash,
+                    nickname = req.nickname.ifBlank { username },
+                    avatar = req.avatar ?: ""
+                )
+                user.id = idGenerator.nextId()
+                val now = LocalDateTime.now()
+                user.createdAt = now
+                user.updatedAt = now
 
-            em.persist(user)
-            em.flush()
+                em.persist(user)
+                em.flush()
 
-            em.transaction.commit()
+                em.transaction.commit()
 
-            return RegisterResp.newBuilder()
-                .setUid(user.id!!)
-                .build()
-        } catch (e: Exception) {
-            if (em.transaction.isActive) {
-                em.transaction.rollback()
+                RegisterResp.newBuilder()
+                    .setUid(user.id!!)
+                    .build()
+            } catch (e: Exception) {
+                if (em.transaction.isActive) {
+                    em.transaction.rollback()
+                }
+                throw e
+            } finally {
+                em.close()
             }
-            throw e
-        } finally {
-            em.close()
         }
     }
 }

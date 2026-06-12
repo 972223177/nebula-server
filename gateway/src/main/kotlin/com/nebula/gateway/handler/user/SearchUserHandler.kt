@@ -5,6 +5,8 @@ import com.nebula.chat.user.SearchUserResp
 import com.nebula.chat.user.UserBrief
 import com.nebula.gateway.handler.Handler
 import com.nebula.repository.repository.UserRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -53,11 +55,13 @@ class SearchUserHandler(
             else LocalDateTime.ofInstant(Instant.ofEpochMilli(cursor), ZoneOffset.UTC)
 
         // 多取一条判断是否有更多数据（D-08 游标分页策略）
-        val users = userRepository.findByUsernameContaining(
-            keyword = keyword,
-            cursor = cursorDateTime,
-            limit = limit + 1
-        )
+        val users = withContext(Dispatchers.IO) {
+            userRepository.findByUsernameContaining(
+                keyword = keyword,
+                cursor = cursorDateTime,
+                limit = limit + 1
+            )
+        }
         val hasMore = users.size > limit
         val result = if (hasMore) users.dropLast(1) else users
 

@@ -6,6 +6,8 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
 import com.nebula.gateway.handler.Handler
 import com.nebula.repository.repository.UserRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.ZoneOffset
 
 /**
@@ -35,7 +37,7 @@ class GetProfileHandler(
      * @throws UserException(BizCode.USER_NOT_FOUND) 目标用户不存在
      */
     override suspend fun handle(req: GetProfileReq): GetProfileResp {
-        val user = userRepository.findById(req.uid).orElse(null)
+        val user = withContext(Dispatchers.IO) { userRepository.findById(req.uid).orElse(null) }
             ?: throw UserException(BizCode.USER_NOT_FOUND)
 
         return GetProfileResp.newBuilder()
