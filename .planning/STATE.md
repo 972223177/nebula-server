@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Phase 09 complete
-last_updated: "2026-06-13T10:06:00.000Z"
+last_updated: "2026-06-13T16:30:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 9
@@ -50,6 +50,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 |------|------|--------|
 | 2026-06-13 | Phase 8 安全审计 | 完成 08-SECURITY.md：识别 25 个威胁（STRIDE 六类全覆盖），mitigate 12 个，accept 9 个，threats_open=0 |
 | 2026-06-13 | Phase 9 Reconnection 执行 | 4 Plan 全部完成：Proto DISCONNECT=15、SessionRepository batchDelete pipeline、DISCONNECT 推送 eviction callback、缓存再投递缓冲区（pendingBuffer+deliver+activateDelivery）、防御性 cleanupConnection、3 个测试文件（ReconnectCleanupTest/DisconnectPushTest/ChatServiceReconnectTest 共 7 场景） |
+| 2026-06-13 | Phase 9 安全审计 | 完成 09-SECURITY.md：识别 14 个威胁（STRIDE 六类全覆盖），mitigate 11 个（含 R-09-02 追补修复），accept 1 个，threats_open=0 |
+| 2026-06-13 | Phase 9 R-09-02 追补修复 | `cleanupConnection()` 启动新延迟离线任务前取消旧 Job（ChatService.kt:247）|
 
 | Date | Task | Impact |
 |------|------|--------|
@@ -75,6 +77,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 6 | ✅ (18 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 42/42 tests) |
 | 7 | ✅ (19 threats, 0 open) | ✅ (100% coverage, 17 new tests) | ✅ (77 tests pass) |
 | 8 | ✅ (25 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 22/25 L1) |
+| 9 | ✅ (14 threats, 0 open, R-09-02 fixed) | ✅ (88% coverage, partial) | ✅ (L1-L4 passed, 257/257 tests) |
 
 ## Quick Tasks Completed
 
@@ -83,4 +86,4 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-13 after Phase 7 security audit (nx-secure)*
+*Last updated: 2026-06-13 after Phase 9 security audit (nx-secure)*

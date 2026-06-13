@@ -242,6 +242,8 @@ class ChatService(
 
             // D-57: 60s 延迟离线任务（伪在线）
             userId?.let { uid ->
+                // 取消旧的延迟任务防止泄漏（R-09-02）
+                delayedOfflineJob?.cancel()
                 delayedOfflineJob = scope.launch {
                     delay(60_000)  // 60s 伪在线窗口
                     // 再次检查是否还有其他设备在线
