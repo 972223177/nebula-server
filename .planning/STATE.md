@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 09 complete
-last_updated: "2026-06-13T16:30:00.000Z"
+status: Phase 10 complete
+last_updated: "2026-06-14T00:00:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 9
-  total_plans: 41
-  completed_plans: 41
-  percent: 82
+  completed_phases: 10
+  total_plans: 45
+  completed_plans: 45
+  percent: 91
 ---
 
 # State: Nebula Chat Server
@@ -36,20 +36,20 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 7 — Conversation | Complete | 2026-06-13 | 2026-06-13 |
 | 8 — Friend & Online Status | Complete | 2026-06-13 | 2026-06-13 |
 | 9 — Reconnection | Complete | 2026-06-13 | 2026-06-13 |
-| 10 — Message Reliability | Pending | — | — |
+| 10 — Message Reliability | Complete | 2026-06-13 | 2026-06-14 |
 | 11 — Performance & Monitoring | Pending | — | — |
 
 ## Next Actions
 
-1. `/nx-discuss 10` — 开始阶段 10（Message Reliability）讨论
-2. `/nx-verify 9` — 执行阶段 9 的验证追补
+1. `/nx-discuss 11` — 开始阶段 11（Performance & Monitoring）讨论
+2. `/nx-verify 10` — 执行阶段 10 的验证追补
 
 ## Quick Tasks Completed
 
 | Date | Task | Impact |
 |------|------|--------|
 | 2026-06-13 | Phase 8 安全审计 | 完成 08-SECURITY.md：识别 25 个威胁（STRIDE 六类全覆盖），mitigate 12 个，accept 9 个，threats_open=0 |
-| 2026-06-13 | Phase 9 Reconnection 执行 | 4 Plan 全部完成：Proto DISCONNECT=15、SessionRepository batchDelete pipeline、DISCONNECT 推送 eviction callback、缓存再投递缓冲区（pendingBuffer+deliver+activateDelivery）、防御性 cleanupConnection、3 个测试文件（ReconnectCleanupTest/DisconnectPushTest/ChatServiceReconnectTest 共 7 场景） |
+| 2026-06-14 | Phase 10 Message Reliability 执行 | 4 Plan 全部完成：10-01 Proto扩展（SendMessageResp.seq、DeliveryAckPayload、MessageSeqReq/Resp、admin.proto）+ V4死信表DDL；10-02 Redis三态跟踪（sent/delivered/read）+ DeliveryAck推送 + SETNX去重下沉 + flushBatch异常处理；10-03 SeqService + MessageSeqHandler间隙检测；10-04 DeadLetterEntity/Repository/Service/Compensator + Admin API（查询/重试）+ D-75 pendingBuffer 10次失败→死信 + W2 seq统一到SeqService + W1 DI迁移 + AuthInterceptor admin/放行 |
 | 2026-06-13 | Phase 9 安全审计 | 完成 09-SECURITY.md：识别 14 个威胁（STRIDE 六类全覆盖），mitigate 11 个（含 R-09-02 追补修复），accept 1 个，threats_open=0 |
 | 2026-06-13 | Phase 9 R-09-02 追补修复 | `cleanupConnection()` 启动新延迟离线任务前取消旧 Job（ChatService.kt:247）|
 
