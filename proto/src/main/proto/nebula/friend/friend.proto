@@ -36,8 +36,11 @@ message FriendDeleteReq {
 }
 
 // ---- friend/list ----
-// 获取好友列表
-message FriendListReq {}
+// 获取好友列表，支持游标分页（D-46）
+message FriendListReq {
+  int64 cursor = 1;                    // 游标，首次请求传 0
+  int32 limit = 2;                    // 每页数量
+}
 
 // 好友列表响应
 message FriendListResp {
@@ -72,4 +75,29 @@ message FriendRequestItem {
   string message = 5;                 // 申请附言
   string status = 6;                  // 申请状态：pending / accepted / rejected
   int64 created_at = 7;               // 申请时间（毫秒时间戳）
+}
+
+// ========================================
+// 推送 Payload 消息（D-49, D-50）
+// ========================================
+
+// 好友申请推送载荷（pushEventType = FRIEND_REQUEST）
+message FriendRequestPayload {
+  int64 request_id = 1;               // 好友申请 ID
+  int64 from_uid = 2;                 // 申请人 UID
+  string from_username = 3;           // 申请人用户名
+  string from_avatar = 4;             // 申请人头像 URL
+  string message = 5;                 // 申请附言
+}
+
+// 好友接受推送载荷（pushEventType = FRIEND_ACCEPTED）
+message FriendAcceptedPayload {
+  int64 uid = 1;                      // 接受方 UID
+  string conversation_id = 2;         // 新建/恢复的私聊会话 ID（D-43）
+}
+
+// 在线状态变更推送载荷（pushEventType = STATUS_CHANGED）
+message StatusChangedPayload {
+  int64 uid = 1;                      // 状态变更用户 UID
+  int32 status = 2;                   // 在线状态：0=离线 1=在线 2=隐藏（D-57）
 }

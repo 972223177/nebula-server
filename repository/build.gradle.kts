@@ -14,6 +14,10 @@ kotlin {
     jvmToolchain(21)
 }
 
+tasks.test {
+    useJUnitPlatform()
+}
+
 dependencies {
     api(project(":common"))
     implementation(project(":proto"))
@@ -41,6 +45,13 @@ dependencies {
     implementation(libs.flyway.core)
     implementation(libs.flyway.mysql)
     implementation(kotlin("stdlib"))
+
+    // Test
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 repositories {
     mavenCentral()
