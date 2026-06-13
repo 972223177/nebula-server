@@ -6,7 +6,7 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.MessageException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
-import com.nebula.gateway.sequence.SeqService
+import com.nebula.service.sequence.SeqService
 import kotlinx.coroutines.currentCoroutineContext
 
 /**

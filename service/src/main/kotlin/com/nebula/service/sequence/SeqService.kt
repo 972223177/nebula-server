@@ -1,11 +1,10 @@
-package com.nebula.gateway.sequence
+package com.nebula.service.sequence
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
-import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 会话消息序列号服务 — 基于 Redis INCR 的序列号生成（Phase 10）。

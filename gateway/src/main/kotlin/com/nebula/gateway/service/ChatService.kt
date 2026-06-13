@@ -6,10 +6,12 @@ import com.nebula.chat.Message
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
 import com.nebula.chat.friend.StatusChangedPayload
+import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.user.LoginResp
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
+import com.nebula.service.admin.DeadLetterService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
@@ -65,6 +67,7 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
  * @param friendshipRepository 好友关系仓库（查询好友列表用于推送）
  * @param pushService 推送服务
  * @param privacyRepository 隐私设置仓库（过滤隐藏用户）
+ * @param deadLetterService 死信服务（D-75：缓存投递失败 10 次后写入死信表）
  */
 class ChatService(
     private val dispatcher: Dispatcher,
@@ -74,7 +77,8 @@ class ChatService(
     private val onlineStatusRepository: OnlineStatusRepository,
     private val friendshipRepository: FriendshipRepository,
     private val pushService: PushService,
-    private val privacyRepository: PrivacyRepository
+    private val privacyRepository: PrivacyRepository,
+    private val deadLetterService: DeadLetterService
 ) : BindableService {
 
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
@@ -147,6 +151,62 @@ class ChatService(
         @Volatile
         var deliveryActive = false
 
+        /** 每消息投递重试计数器（D-75），key 为 envelope 内容哈希，value 为重试次数 */
+        private val retryCountMap = ConcurrentHashMap<String, Int>()
+
+        /**
+         * 根据 envelope 内容生成唯一标识键，用于重试计数跟踪（D-75）。
+         *
+         * 使用 message 的事件类型和 payload 哈希组合，确保同一消息内容在不同 Envelope 实例间可追踪。
+         */
+        private fun envelopeKey(envelope: Envelope): String {
+            val msg = envelope.message
+            val payloadHash = if (!msg.payload.isEmpty) msg.payload.hashCode() else 0
+            return "${msg.eventType.name}_$payloadHash"
+        }
+
+        /**
+         * 从 envelope 中提取数据创建死信记录（D-75）。
+         *
+         * 当消息投递失败达到 MAX_PENDING_RETRIES 次时调用。
+         * 优先尝试解析 ChatMessage 类型的数据，非 ChatMessage 类型使用 envelope 原始信息。
+         *
+         * @param envelope 投递失败的 Envelope
+         * @param failReason 失败原因
+         */
+        private suspend fun createDeadLetter(envelope: Envelope, failReason: String) {
+            try {
+                val msg = envelope.message
+                if (msg.eventType == PushEventType.CHAT_MESSAGE) {
+                    val chatMsg = ChatMessage.parseFrom(msg.payload)
+                    deadLetterService.create(
+                        conversationId = chatMsg.conversationId,
+                        senderUid = chatMsg.senderUid,
+                        messageType = chatMsg.messageTypeValue,
+                        content = chatMsg.content,
+                        payload = chatMsg.payload.toByteArray(),
+                        clientMsgId = null,
+                        clientTs = chatMsg.clientTs,
+                        failReason = failReason
+                    )
+                } else {
+                    // 非 ChatMessage 类型的死信，使用 envelope 可用数据
+                    deadLetterService.create(
+                        conversationId = "",
+                        senderUid = 0L,
+                        messageType = msg.eventTypeValue,
+                        content = msg.content,
+                        payload = msg.payload.toByteArray(),
+                        clientMsgId = null,
+                        clientTs = System.currentTimeMillis(),
+                        failReason = failReason
+                    )
+                }
+            } catch (e: Exception) {
+                logger.error(e) { "创建死信记录失败" }
+            }
+        }
+
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
                 Direction.REQUEST -> scope.launch {
@@ -171,10 +231,11 @@ class ChatService(
         }
 
         /**
-         * 缓存再投递入口（D-67）。
+         * 缓存再投递入口（D-67, D-75）。
          *
          * 在重连期间（deliveryActive = false），将消息缓存到 pendingBuffer；
          * 在正常投递模式（deliveryActive = true），直接通过 responseObserver 投递。
+         * 投递失败时跟踪重试次数，超过 MAX_PENDING_RETRIES 次后调用 [createDeadLetter] 写入死信表（D-75）。
          *
          * 所有通过 UserStreamRegistry.getStreams() 获取 StreamObserver 后调用 onNext()
          * 的代码路径（PushService.pushEventToUser 等），应切换为此方法。
@@ -184,7 +245,27 @@ class ChatService(
          */
         fun deliver(envelope: Envelope) {
             if (deliveryActive) {
-                responseObserver.onNext(envelope)
+                try {
+                    responseObserver.onNext(envelope)
+                } catch (e: Exception) {
+                    // D-75: 投递失败，跟踪重试次数
+                    val key = envelopeKey(envelope)
+                    val retryCount = retryCountMap.merge(key, 1) { old, _ -> old + 1 }!!
+                    logger.warn(e) { "投递失败（第 $retryCount 次），envelopeKey=$key" }
+                    if (retryCount >= MAX_PENDING_RETRIES) {
+                        retryCountMap.remove(key)
+                        // 异步创建死信，不阻塞当前线程
+                        scope.launch { createDeadLetter(envelope, "投递失败已达${MAX_PENDING_RETRIES}次") }
+                    } else {
+                        // 重新入队等待下次重试
+                        if (pendingBuffer.size >= MAX_PENDING) {
+                            pendingBuffer.poll()
+                        }
+                        pendingBuffer.add(envelope)
+                        // 触发延迟投递防饿死（D-67）
+                        scheduleDelayedRetry()
+                    }
+                }
             } else {
                 // 超限保护：丢弃最旧消息
                 if (pendingBuffer.size >= MAX_PENDING) {
@@ -194,27 +275,84 @@ class ChatService(
             }
         }
 
+        /** 延迟触发缓存投递的协程 Job */
+        private var delayedRetryJob: Job? = null
+
         /**
-         * 激活投递模式，投递所有缓存消息（D-67）。
+         * 安排延迟投递任务（D-67 防饿死）。
+         *
+         * 当 deliveryActive 但投递失败重新入队后，安排 10s 后重新尝试投递缓存。
+         */
+        private fun scheduleDelayedRetry() {
+            delayedRetryJob?.cancel()
+            delayedRetryJob = scope.launch {
+                delay(DELIVERY_TIMEOUT_MS)
+                if (deliveryActive) {
+                    activateDeliveryInternal()
+                }
+            }
+        }
+
+        /**
+         * 投递单条缓存消息（D-75）。
+         *
+         * 投递成功返回 true；
+         * 投递失败时跟踪重试次数，超过 MAX_PENDING_RETRIES 次后创建死信并返回 true（已处理），
+         * 否则重新入队并返回 false。
+         *
+         * @param envelope 待投递的 Envelope
+         * @return true 消息已处理（成功投递或写入死信），false 需重新入队
+         */
+        private suspend fun deliverCached(envelope: Envelope): Boolean {
+            return try {
+                responseObserver.onNext(envelope)
+                true
+            } catch (e: Exception) {
+                val key = envelopeKey(envelope)
+                val retryCount = retryCountMap.merge(key, 1) { old, _ -> old + 1 }!!
+                logger.warn(e) { "缓存消息投递失败（第 $retryCount 次），envelopeKey=$key" }
+                if (retryCount >= MAX_PENDING_RETRIES) {
+                    retryCountMap.remove(key)
+                    createDeadLetter(envelope, "缓存投递失败已达${MAX_PENDING_RETRIES}次")
+                    true // 死信已处理，标记为完成
+                } else {
+                    false // 需重新入队
+                }
+            }
+        }
+
+        /**
+         * 激活投递模式，投递所有缓存消息（D-67, D-75）。
          *
          * 由 handleLoginSuccess 在旧连接清理完成后调用。
          * 使用 withContext(Dispatchers.Default) 避免阻塞 gRPC 事件循环线程。
          * 使用 Default 而非 IO，因为 onNext() 是非阻塞的 gRPC 调用。
+         * 投递失败的消息根据重试计数决定重新入队或写入死信（D-75）。
          */
         suspend fun activateDelivery() {
-            // 投递所有缓存消息
             withContext(Dispatchers.Default) {
-                while (true) {
-                    val envelope = pendingBuffer.poll() ?: break
-                    try {
-                        responseObserver.onNext(envelope)
-                    } catch (e: Exception) {
-                        // 与 PushService 容错模式一致（D-05）：单个消息异常不影响剩余缓存投递
-                        logger.error(e) { "Failed to deliver cached envelope after reconnect" }
-                    }
-                }
+                activateDeliveryInternal()
             }
             deliveryActive = true
+        }
+
+        /**
+         * 投递所有缓存消息的内部实现（D-75）。
+         *
+         * 轮询 pendingBuffer，逐条投递。投递失败的消息重新入队等待下次重试。
+         * 与 [deliver] 方法失败时的重新入队逻辑保持一致。
+         */
+        private suspend fun activateDeliveryInternal() {
+            val reQueue = mutableListOf<Envelope>()
+            while (true) {
+                val envelope = pendingBuffer.poll() ?: break
+                val handled = deliverCached(envelope)
+                if (!handled) {
+                    reQueue.add(envelope)
+                }
+            }
+            // 将投递失败需重试的消息重新入队
+            reQueue.forEach { pendingBuffer.add(it) }
         }
 
         /** 连接清理时清理缓冲区，防止内存泄漏（D-67） */
@@ -444,6 +582,9 @@ class ChatService(
 
     companion object {
         private val logger = KotlinLogging.logger {}
+
+        /** pendingBuffer 中单条消息的最大投递重试次数，超过后写入死信表（D-75） */
+        const val MAX_PENDING_RETRIES = 10
     }
 
     /**

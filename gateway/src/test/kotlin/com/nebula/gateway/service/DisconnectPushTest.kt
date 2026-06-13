@@ -15,6 +15,7 @@ import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.admin.DeadLetterService
 import io.grpc.stub.StreamObserver
 import io.mockk.every
 import io.mockk.mockk
@@ -55,6 +56,7 @@ class DisconnectPushTest {
         val friendshipRepository = mockk<FriendshipRepository>(relaxed = true)
         val pushService = mockk<PushService>(relaxed = true)
         val privacyRepository = mockk<PrivacyRepository>(relaxed = true)
+        val deadLetterService = mockk<DeadLetterService>(relaxed = true)
         mockObserver = mockk(relaxed = true)
 
         // 捕获 eviction callback，模拟 ChatService 首次请求时的注册行为
@@ -71,7 +73,8 @@ class DisconnectPushTest {
             onlineStatusRepository = onlineStatusRepository,
             friendshipRepository = friendshipRepository,
             pushService = pushService,
-            privacyRepository = privacyRepository
+            privacyRepository = privacyRepository,
+            deadLetterService = deadLetterService
         )
 
         evictionCallback = { token -> capturedCallback?.invoke(token) }
