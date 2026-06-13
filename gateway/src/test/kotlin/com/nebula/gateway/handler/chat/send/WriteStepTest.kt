@@ -60,7 +60,7 @@ class WriteStepTest {
     }
 
     @Test
-    fun `生成 msg_id 并设置到 context`() = runTest {
+    fun generateMsgIdShouldSetToContext() = runTest {
         injectMockRedis()
         every { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
@@ -79,7 +79,7 @@ class WriteStepTest {
     }
 
     @Test
-    fun `构建 ChatMessage 并设置到 context`() = runTest {
+    fun buildChatMessageShouldSetToContext() = runTest {
         injectMockRedis()
         every { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
@@ -102,7 +102,7 @@ class WriteStepTest {
     }
 
     @Test
-    fun `调用 MessageQueueRepository enqueue`() = runTest {
+    fun shouldCallMessageQueueRepositoryEnqueue() = runTest {
         injectMockRedis()
         every { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
@@ -120,7 +120,7 @@ class WriteStepTest {
     }
 
     @Test
-    fun `更新会话元 Redis key`() = runTest {
+    fun shouldUpdateConversationMetaRedisKeys() = runTest {
         injectMockRedis()
         every { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
@@ -141,7 +141,7 @@ class WriteStepTest {
     }
 
     @Test
-    fun `更新去重键值为实际 msg_id`() = runTest {
+    fun shouldUpdateDedupKeyWithActualMsgId() = runTest {
         injectMockRedis()
         every { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"

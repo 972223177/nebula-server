@@ -48,7 +48,7 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `setOnline 写入 JSON 后 getStatus 返回 status=1`() = runTest {
+    fun setOnlineShouldWriteJsonAndGetStatusReturns1() = runTest {
         // 模拟 setOnline 写入 JSON，getStatus 返回相同内容
         coEvery { redis.get("online:user:1") } returns """{"status":1,"lastActiveAt":1700000000000}"""
 
@@ -60,7 +60,7 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `setHidden 写入 JSON 后 getStatus 返回 status=2`() = runTest {
+    fun setHiddenShouldWriteJsonAndGetStatusReturns2() = runTest {
         coEvery { redis.get("online:user:2") } returns """{"status":2,"lastActiveAt":1700000000000}"""
 
         repository.setHidden(2L)
@@ -71,13 +71,13 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `refreshTtl 调用 EXPIRE`() = runTest {
+    fun refreshTtlShouldCallExpire() = runTest {
         repository.refreshTtl(3L)
         // relaxed mock 不抛异常即验证成功
     }
 
     @Test
-    fun `batchGetStatus 批量查询返回所有状态`() = runTest {
+    fun batchGetStatusShouldReturnAllStatuses() = runTest {
         coEvery { redis.mget("online:user:1", "online:user:2", "online:user:3") } returns flowOf<KeyValue<String, String>>(
             KeyValue.just("online:user:1", """{"status":1,"lastActiveAt":1700000000000}"""),  // 在线
             KeyValue.just("online:user:2", """{"status":2,"lastActiveAt":1700000000000}"""),  // 隐藏
@@ -93,7 +93,7 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `isOnline 对在线用户返回 true`() = runTest {
+    fun isOnlineShouldReturnTrueForOnlineUser() = runTest {
         coEvery { redis.get("online:user:4") } returns """{"status":1,"lastActiveAt":1700000000000}"""
 
         val result = repository.isOnline(4L)
@@ -102,7 +102,7 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `isOnline 对离线用户返回 false`() = runTest {
+    fun isOnlineShouldReturnFalseForOfflineUser() = runTest {
         coEvery { redis.get("online:user:5") } returns null
 
         val result = repository.isOnline(5L)
@@ -115,7 +115,7 @@ class OnlineStatusRepositoryTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `setOffline 调用 del 删除 key`() = runTest {
+    fun setOfflineShouldCallDelToDeleteKey() = runTest {
         // Given: 用户在线状态的 key 存在
         // When: 标记用户离线
         repository.setOffline(6L)
@@ -125,7 +125,7 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `getStatus key 不存在返回 null`() = runTest {
+    fun getStatusShouldReturnNullWhenKeyNotExists() = runTest {
         // Given: Redis 中不存在该 key
         coEvery { redis.get("online:user:999") } returns null
 
@@ -137,7 +137,7 @@ class OnlineStatusRepositoryTest {
     }
 
     @Test
-    fun `batchGetStatus 空列表返回 emptyMap`() = runTest {
+    fun batchGetStatusShouldReturnEmptyMapForEmptyList() = runTest {
         // Given: 传入空的 userIds 列表
         // When: 批量查询
         val result = repository.batchGetStatus(emptyList())

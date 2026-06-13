@@ -170,7 +170,7 @@ class GatewayModuleTest {
     }
 
     @Test
-    fun `frameworkModule resolves HandlerRegistry`() {
+    fun frameworkModuleResolvesHandlerRegistry() {
         startKoin {
             modules(frameworkModule, buildExternalModule())
         }
@@ -179,7 +179,7 @@ class GatewayModuleTest {
     }
 
     @Test
-    fun `frameworkModule resolves ProtoCodec and dependencies`() {
+    fun frameworkModuleResolvesProtoCodecAndDependencies() {
         startKoin {
             modules(frameworkModule, buildExternalModule())
         }
@@ -190,7 +190,7 @@ class GatewayModuleTest {
     }
 
     @Test
-    fun `all HandlerCollectors register all methods via getAll`() = runTest {
+    fun allHandlerCollectorsRegisterAllMethodsViaGetAll() = runTest {
         startKoin {
             modules(frameworkModule, buildHandlerModule(), buildExternalModule())
         }

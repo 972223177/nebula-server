@@ -27,7 +27,7 @@ class ReconnectCleanupTest {
     }
 
     @Test
-    fun `batchDelete should delete multiple keys via pipeline`() = runTest {
+    fun batchDeleteShouldDeleteMultipleKeysViaPipeline() = runTest {
         val connection = createMockConnection()
         val repo = SessionRepository(connection)
         val keys = listOf("session:token:abc", "session:token:def", "session:token:ghi")
@@ -44,7 +44,7 @@ class ReconnectCleanupTest {
     }
 
     @Test
-    fun `batchDelete with empty list should do nothing`() = runTest {
+    fun batchDeleteWithEmptyListShouldDoNothing() = runTest {
         val connection = createMockConnection()
         val repo = SessionRepository(connection)
 
@@ -56,7 +56,7 @@ class ReconnectCleanupTest {
     }
 
     @Test
-    fun `batchDelete should restore autoFlush on exception`() = runTest {
+    fun batchDeleteShouldRestoreAutoFlushOnException() = runTest {
         val connection = createMockConnection()
         val async = mockk<RedisAsyncCommands<String, String>>(relaxed = true)
         every { connection.async() } returns async

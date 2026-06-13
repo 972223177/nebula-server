@@ -6,17 +6,13 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
-import com.nebula.repository.entity.FriendRequestEntity
-import com.nebula.repository.repository.FriendRequestRepository
 import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -25,7 +21,7 @@ import kotlin.test.assertNotNull
  * FriendRejectHandler 拒绝好友申请 Handler 单元测试。
  *
  * 覆盖场景：
- * - 正常拒绝 → request.status 被更新为 2，返回 Response(OK)
+ * - 正常拒绝 → 委托 FriendService 拒绝，返回 Response(OK)
  * - 请求不存在 → 抛出 FriendException(REQUEST_NOT_FOUND)
  * - 请求已处理（status != 0）→ 抛出 FriendException(REQUEST_HANDLED)
  * - 非本人申请（toUid != session.userId）→ 抛出 FriendException(FORBIDDEN)
@@ -35,7 +31,6 @@ import kotlin.test.assertNotNull
 class FriendRejectHandlerTest {
 
     private lateinit var friendService: FriendService
-    private lateinit var friendRequestRepository: FriendRequestRepository
     private lateinit var handler: FriendRejectHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -43,7 +38,6 @@ class FriendRejectHandlerTest {
     @BeforeEach
     fun setUp() {
         friendService = mockk()
-        friendRequestRepository = mockk(relaxed = true)
         handler = FriendRejectHandler(friendService)
     }
 
@@ -52,16 +46,13 @@ class FriendRejectHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `正常拒绝 — status 更新为 2 返回 Response OK`() = runTest {
+    fun rejectShouldDelegateServiceAndReturnOk() = runTest {
         // Given: 存在一条 pending 的好友申请，接收方是当前用户
         val req = FriendRejectReq.newBuilder()
             .setRequestId(42L)
             .build()
 
-        val entity = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0, message = "加个好友")
-        entity.id = 42L
-        coEvery { friendRequestRepository.findById(42L) } returns Optional.of(entity)
-        coEvery { friendRequestRepository.save(entity) } returns entity
+        coEvery { friendService.rejectFriendRequest(any<FriendRejectReq>(), any()) } returns Unit
 
         // When: 执行拒绝
         val result = withContext(SessionKey(session)) {
@@ -72,12 +63,6 @@ class FriendRejectHandlerTest {
         assertNotNull(result)
         assertEquals(BizCode.OK.code, result.code)
         assertEquals(BizCode.OK.msg, result.msg)
-
-        // 验证 status 被更新为 2（rejected）
-        assertEquals(2, entity.status)
-
-        // 验证 save 被调用
-        coVerify(exactly = 1) { friendRequestRepository.save(entity) }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -85,13 +70,13 @@ class FriendRejectHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `请求不存在 — 抛出 REQUEST_NOT_FOUND 异常`() = runTest {
+    fun rejectRequestNotFoundShouldThrowRequestNotFound() = runTest {
         // Given: requestId 对应的申请记录不存在
         val req = FriendRejectReq.newBuilder()
             .setRequestId(999L)
             .build()
 
-        coEvery { friendRequestRepository.findById(999L) } returns Optional.empty()
+        coEvery { friendService.rejectFriendRequest(any<FriendRejectReq>(), any()) } throws FriendException(BizCode.REQUEST_NOT_FOUND)
 
         // When & Then: 应抛出 FriendException(REQUEST_NOT_FOUND)
         val ex = assertFailsWith<FriendException> {
@@ -107,15 +92,13 @@ class FriendRejectHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `请求已处理 — status 不为 0 时抛出 REQUEST_HANDLED 异常`() = runTest {
+    fun rejectRequestHandledShouldThrowRequestHandled() = runTest {
         // Given: 申请记录存在但 status=1（已接受），不再是 pending 状态
         val req = FriendRejectReq.newBuilder()
             .setRequestId(42L)
             .build()
 
-        val entity = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 1, message = "加个好友")
-        entity.id = 42L
-        coEvery { friendRequestRepository.findById(42L) } returns Optional.of(entity)
+        coEvery { friendService.rejectFriendRequest(any<FriendRejectReq>(), any()) } throws FriendException(BizCode.REQUEST_HANDLED)
 
         // When & Then: 应抛出 FriendException(REQUEST_HANDLED)
         val ex = assertFailsWith<FriendException> {
@@ -131,16 +114,13 @@ class FriendRejectHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `非本人申请 — toUid 不等于 sessionUserId 时抛出 FORBIDDEN`() = runTest {
-        // Given: 申请记录存在，但 toUid 不是当前用户（session.userId=1001L）
+    fun unauthorizedRejectShouldThrowForbidden() = runTest {
+        // Given: 申请记录存在，但 toUid 不是当前用户
         val req = FriendRejectReq.newBuilder()
             .setRequestId(42L)
             .build()
 
-        // toUid=3001L 不等于 session.userId=1001L
-        val entity = FriendRequestEntity(fromUid = 2001L, toUid = 3001L, status = 0, message = "加个好友")
-        entity.id = 42L
-        coEvery { friendRequestRepository.findById(42L) } returns Optional.of(entity)
+        coEvery { friendService.rejectFriendRequest(any<FriendRejectReq>(), any()) } throws FriendException(BizCode.FORBIDDEN)
 
         // When & Then: 应抛出 FriendException(FORBIDDEN)
         val ex = assertFailsWith<FriendException> {

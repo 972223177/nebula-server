@@ -28,7 +28,7 @@ class ConversationLockManagerTest {
     }
 
     @Test
-    fun `withLock executes block and returns result`() = runTest {
+    fun withLockShouldExecuteBlockAndReturnResult() = runTest {
         val result = lockManager.withLock("conv-001") {
             "done"
         }
@@ -36,7 +36,7 @@ class ConversationLockManagerTest {
     }
 
     @Test
-    fun `same conversationId is serialized`() = runTest {
+    fun sameConversationIdShouldBeSerialized() = runTest {
         val order = mutableListOf<Int>()
         val counter = AtomicInteger(0)
 
@@ -63,7 +63,7 @@ class ConversationLockManagerTest {
     }
 
     @Test
-    fun `different conversationIds execute concurrently`() = runTest {
+    fun differentConversationIdsShouldExecuteConcurrently() = runTest {
         val counter = AtomicInteger(0)
 
         // 不同会话 ID 下的操作不应互斥
@@ -85,7 +85,7 @@ class ConversationLockManagerTest {
     }
 
     @Test
-    fun `withLock supports nested calls on same conversationId`() = runTest {
+    fun withLockShouldSupportNestedCallsOnSameConversationId() = runTest {
         // 相同 conversationId 的嵌套调用应正常工作（已持有锁时再次进入不阻塞）
         val result = lockManager.withLock("conv-001") {
             "done"

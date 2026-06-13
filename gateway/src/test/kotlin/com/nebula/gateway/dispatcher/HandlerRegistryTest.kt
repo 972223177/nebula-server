@@ -19,7 +19,7 @@ import kotlin.test.assertNotNull
 class HandlerRegistryTest {
 
     @Test
-    fun `register and lookup handler`() = runTest {
+    fun registerAndLookupHandler() = runTest {
         val registry = HandlerRegistry()
         val handler = mockk<Handler<*, *>> {
             every { method } returns "test.method"
@@ -40,7 +40,7 @@ class HandlerRegistryTest {
     }
 
     @Test
-    fun `duplicate registration throws`() = runTest {
+    fun duplicateRegistrationThrows() = runTest {
         val registry = HandlerRegistry()
         val handler1 = mockk<Handler<*, *>> {
             every { method } returns "test.method"

@@ -37,7 +37,7 @@ class ValidateStepTest {
     }
 
     @Test
-    fun `内容为空时抛出 INVALID_PARAM 异常`() = runTest {
+    fun emptyContentShouldThrowInvalidParam() = runTest {
         val req = SendMessageReq.newBuilder()
             .setConversationId(convId)
             .setContent("")  // 空内容
@@ -54,7 +54,7 @@ class ValidateStepTest {
     }
 
     @Test
-    fun `client_message_id 为空时抛出 INVALID_PARAM 异常`() = runTest {
+    fun emptyClientMessageIdShouldThrowInvalidParam() = runTest {
         val req = SendMessageReq.newBuilder()
             .setConversationId(convId)
             .setContent("Hello")
@@ -71,7 +71,7 @@ class ValidateStepTest {
     }
 
     @Test
-    fun `非会话成员抛出 NOT_MEMBER 异常`() = runTest {
+    fun nonMemberShouldThrowNotMember() = runTest {
         val req = SendMessageReq.newBuilder()
             .setConversationId(convId)
             .setContent("Hello")
@@ -93,7 +93,7 @@ class ValidateStepTest {
     }
 
     @Test
-    fun `合法请求返回 true 继续链`() = runTest {
+    fun validRequestShouldReturnTrue() = runTest {
         val req = SendMessageReq.newBuilder()
             .setConversationId(convId)
             .setContent("Hello, World!")

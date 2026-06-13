@@ -32,7 +32,7 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `register adds observer and getStreams returns it`() {
+    fun registerAddsObserverAndGetStreamsReturnsIt() {
         registry.register(1001L, observer1)
         val streams = registry.getStreams(1001L)
         assertTrue(streams.contains(observer1))
@@ -40,7 +40,7 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `same userId registers multiple observers`() {
+    fun sameUserIdRegistersMultipleObservers() {
         registry.register(1001L, observer1)
         registry.register(1001L, observer2)
         val streams = registry.getStreams(1001L)
@@ -50,7 +50,7 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `removeStream removes single observer and keeps others`() {
+    fun removeStreamRemovesSingleObserverAndKeepsOthers() {
         registry.register(1001L, observer1)
         registry.register(1001L, observer2)
         registry.removeStream(1001L, observer1)
@@ -60,7 +60,7 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `removeUser removes all observers for userId`() {
+    fun removeUserRemovesAllObserversForUserId() {
         registry.register(1001L, observer1)
         registry.register(1001L, observer2)
         registry.removeUser(1001L)
@@ -69,13 +69,13 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `getStreams returns empty list for unregistered userId`() {
+    fun getStreamsReturnsEmptyListForUnregisteredUserId() {
         val streams = registry.getStreams(9999L)
         assertTrue(streams.isEmpty())
     }
 
     @Test
-    fun `removeStream on empty list does not throw`() {
+    fun removeStreamOnEmptyListDoesNotThrow() {
         // 不应该抛异常
         registry.removeStream(9999L, observer1)
         val streams = registry.getStreams(9999L)
@@ -83,14 +83,14 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `removeUser on non-existent userId does not throw`() {
+    fun removeUserOnNonExistentUserIdDoesNotThrow() {
         registry.removeUser(9999L)
         val streams = registry.getStreams(9999L)
         assertTrue(streams.isEmpty())
     }
 
     @Test
-    fun `register after removeUser re-adds observer`() {
+    fun registerAfterRemoveUserReAddsObserver() {
         registry.register(1001L, observer1)
         registry.removeUser(1001L)
         registry.register(1001L, observer2)
@@ -100,7 +100,7 @@ class UserStreamRegistryTest {
     }
 
     @Test
-    fun `removeStream removes last observer and cleans up key`() {
+    fun removeStreamRemovesLastObserverAndCleansUpKey() {
         registry.register(1001L, observer1)
         registry.removeStream(1001L, observer1)
         val streams = registry.getStreams(1001L)

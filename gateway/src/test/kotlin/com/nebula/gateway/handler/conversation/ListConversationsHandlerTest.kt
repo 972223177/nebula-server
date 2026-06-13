@@ -1,15 +1,12 @@
 package com.nebula.gateway.handler.conversation
 
 import com.nebula.chat.conversation.ConvListReq
+import com.nebula.chat.conversation.ConvListResp
 import com.nebula.chat.conversation.ConversationBrief
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
-import io.mockk.every
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -36,42 +33,44 @@ import kotlin.test.assertTrue
 class ListConversationsHandlerTest {
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationRepository: ConversationRepository
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var handler: ListConversationsHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
 
+    /** 构建一个 ConversationBrief */
+    private fun brief(
+        id: String,
+        type: String = "private",
+        name: String = "",
+        lastReadMsgId: Long = 0L,
+        updatedAt: Long = 0L
+    ) = ConversationBrief.newBuilder()
+        .setConversationId(id)
+        .setType(type)
+        .setName(name)
+        .setLastReadMsgId(lastReadMsgId)
+        .setLastUpdatedAt(updatedAt)
+        .build()
+
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationRepository = mockk()
-        conversationMemberRepository = mockk()
         handler = ListConversationsHandler(conversationService)
     }
 
     @Test
-    fun `cursor=0首次查询返回会话列表`() = runTest {
+    fun cursorZeroShouldReturnConversationList() = runTest {
         val now = LocalDateTime.now()
-        val conv1 = ConversationEntity(type = 0).apply { id = "conv-001"; updatedAt = now }
-        val conv2 = ConversationEntity(type = 1).apply { id = "conv-002"; updatedAt = now.minusDays(1) }
-        val conversations = listOf(conv1, conv2)
-
-        every {
-            conversationRepository.findConversationsByUserId(1001L, null, any())
-        } returns conversations
-        every {
-            conversationMemberRepository.findByConversationIdsAndUserId(
-                listOf("conv-001", "conv-002"), 1001L
-            )
-        } returns listOf(
-            ConversationMemberEntity("conv-001", 1001L).apply { lastReadMessageId = 50001L },
-            ConversationMemberEntity("conv-002", 1001L).apply { lastReadMessageId = 60001L }
-        )
-
-        val req = ConvListReq.newBuilder()
-            .setLimit(20)
+        val epochMs = now.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val mockResp = ConvListResp.newBuilder()
+            .addConversations(brief("conv-001", type = "private", updatedAt = epochMs))
+            .addConversations(brief("conv-002", type = "group", updatedAt = now.minusDays(1).atZone(ZoneOffset.UTC).toInstant().toEpochMilli()))
+            .setHasMore(false)
             .build()
+
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns mockResp
+
+        val req = ConvListReq.newBuilder().setLimit(20).build()
         val resp = withContext(SessionKey(session)) { handler.handle(req) }
 
         assertNotNull(resp)
@@ -79,31 +78,21 @@ class ListConversationsHandlerTest {
         assertFalse(resp.hasMore)
         assertEquals("conv-001", resp.conversationsList[0].conversationId)
         assertEquals("conv-002", resp.conversationsList[1].conversationId)
-        // 群聊 type=1 映射为 "group"
         assertEquals("group", resp.conversationsList[1].type)
     }
 
     @Test
-    fun `cursor大于0翻页返回更旧的会话`() = runTest {
+    fun cursorGreaterThanZeroShouldReturnOlderConversations() = runTest {
         val now = LocalDateTime.now()
         val cursorMillis = now.minusDays(1).atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
-        val oldConv = ConversationEntity(type = 0).apply {
-            id = "conv-003"; updatedAt = now.minusDays(2)
-        }
-
-        every {
-            conversationRepository.findConversationsByUserId(1001L, any(), any())
-        } returns listOf(oldConv)
-        every {
-            conversationMemberRepository.findByConversationIdsAndUserId(listOf("conv-003"), 1001L)
-        } returns listOf(
-            ConversationMemberEntity("conv-003", 1001L).apply { lastReadMessageId = 70001L }
-        )
-
-        val req = ConvListReq.newBuilder()
-            .setCursor(cursorMillis)
-            .setLimit(20)
+        val mockResp = ConvListResp.newBuilder()
+            .addConversations(brief("conv-003", lastReadMsgId = 70001L))
+            .setHasMore(false)
             .build()
+
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns mockResp
+
+        val req = ConvListReq.newBuilder().setCursor(cursorMillis).setLimit(20).build()
         val resp = withContext(SessionKey(session)) { handler.handle(req) }
 
         assertNotNull(resp)
@@ -113,30 +102,15 @@ class ListConversationsHandlerTest {
     }
 
     @Test
-    fun `hasMore为true返回数超过limit时截断`() = runTest {
-        val now = LocalDateTime.now()
-        // 返回 limit+1 条（11 条，实际截断为 10 条）
-        val conversations = (1..11).map { i ->
-            ConversationEntity(type = 0).apply {
-                id = "conv-${i.toString().padStart(2, '0')}"
-                updatedAt = now.minusHours(i.toLong())
-            }
+    fun hasMoreTrueShouldTruncateExceedingLimit() = runTest {
+        val mockResp = ConvListResp.newBuilder()
+        for (i in 1..10) {
+            mockResp.addConversations(brief("conv-${i.toString().padStart(2, '0')}"))
         }
+        mockResp.setHasMore(true)
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns mockResp.build()
 
-        every {
-            conversationRepository.findConversationsByUserId(1001L, null, any())
-        } returns conversations
-        // 截断后只有 10 个会话 ID 参与批量查成员
-        val resultIds = conversations.dropLast(1).map { it.id!! }
-        every {
-            conversationMemberRepository.findByConversationIdsAndUserId(resultIds, 1001L)
-        } returns resultIds.map {
-            ConversationMemberEntity(it, 1001L).apply { lastReadMessageId = 0 }
-        }
-
-        val req = ConvListReq.newBuilder()
-            .setLimit(10)
-            .build()
+        val req = ConvListReq.newBuilder().setLimit(10).build()
         val resp = withContext(SessionKey(session)) { handler.handle(req) }
 
         assertNotNull(resp)
@@ -145,29 +119,15 @@ class ListConversationsHandlerTest {
     }
 
     @Test
-    fun `hasMore为false返回数不超过limit`() = runTest {
-        val now = LocalDateTime.now()
-        // 返回 5 条，少于 limit=10
-        val conversations = (1..5).map { i ->
-            ConversationEntity(type = 0).apply {
-                id = "conv-0${i}"
-                updatedAt = now.minusHours(i.toLong())
-            }
+    fun hasMoreFalseShouldNotExceedLimit() = runTest {
+        val mockResp = ConvListResp.newBuilder()
+        for (i in 1..5) {
+            mockResp.addConversations(brief("conv-0$i"))
         }
-        val convIds = conversations.map { it.id!! }
+        mockResp.setHasMore(false)
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns mockResp.build()
 
-        every {
-            conversationRepository.findConversationsByUserId(1001L, null, any())
-        } returns conversations
-        every {
-            conversationMemberRepository.findByConversationIdsAndUserId(convIds, 1001L)
-        } returns convIds.map {
-            ConversationMemberEntity(it, 1001L).apply { lastReadMessageId = 0 }
-        }
-
-        val req = ConvListReq.newBuilder()
-            .setLimit(10)
-            .build()
+        val req = ConvListReq.newBuilder().setLimit(10).build()
         val resp = withContext(SessionKey(session)) { handler.handle(req) }
 
         assertNotNull(resp)
@@ -176,14 +136,11 @@ class ListConversationsHandlerTest {
     }
 
     @Test
-    fun `空列表用户无会话返回空`() = runTest {
-        every {
-            conversationRepository.findConversationsByUserId(1001L, null, any())
-        } returns emptyList()
+    fun emptyListShouldReturnEmpty() = runTest {
+        val emptyResp = ConvListResp.newBuilder().setHasMore(false).build()
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns emptyResp
 
-        val req = ConvListReq.newBuilder()
-            .setLimit(20)
-            .build()
+        val req = ConvListReq.newBuilder().setLimit(20).build()
         val resp = withContext(SessionKey(session)) { handler.handle(req) }
 
         assertNotNull(resp)
@@ -192,45 +149,38 @@ class ListConversationsHandlerTest {
     }
 
     @Test
-    fun `ConversationBrief字段映射验证`() = runTest {
+    fun conversationBriefFieldMappingShouldBeCorrect() = runTest {
         val now = LocalDateTime.now()
         val epochMilli = now.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
-        val conv = ConversationEntity(type = 0).apply {
-            id = "conv-001"
-            name = "测试私聊"
-            avatar = "http://a.com/1.png"
-            lastMessageId = 999L
-            lastMessagePreview = "最后一句话"
-            lastMessageTs = 1700000000000L
-            updatedAt = now
-        }
-
-        every {
-            conversationRepository.findConversationsByUserId(1001L, null, any())
-        } returns listOf(conv)
-        every {
-            conversationMemberRepository.findByConversationIdsAndUserId(listOf("conv-001"), 1001L)
-        } returns listOf(
-            ConversationMemberEntity("conv-001", 1001L).apply { lastReadMessageId = 50001L }
-        )
-
-        val req = ConvListReq.newBuilder()
-            .setLimit(20)
+        val mockResp = ConvListResp.newBuilder()
+            .addConversations(ConversationBrief.newBuilder()
+                .setConversationId("conv-001")
+                .setType("private")
+                .setName("测试私聊")
+                .setAvatarUrl("http://a.com/1.png")
+                .setLastMessageId(999L)
+                .setLastMessagePreview("最后一句话")
+                .setLastMessageTs(1700000000000L)
+                .setLastUpdatedAt(epochMilli)
+                .setLastReadMsgId(50001L)
+                .build())
+            .setHasMore(false)
             .build()
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns mockResp
+
+        val req = ConvListReq.newBuilder().setLimit(20).build()
         val resp = withContext(SessionKey(session)) { handler.handle(req) }
 
         assertNotNull(resp)
         assertEquals(1, resp.conversationsCount)
         val brief = resp.conversationsList[0]
         assertEquals("conv-001", brief.conversationId)
-        // type=0 → "private"
         assertEquals("private", brief.type)
         assertEquals("测试私聊", brief.name)
         assertEquals("http://a.com/1.png", brief.avatarUrl)
         assertEquals(999L, brief.lastMessageId)
         assertEquals("最后一句话", brief.lastMessagePreview)
         assertEquals(1700000000000L, brief.lastMessageTs)
-        // updatedAt → epoch millis
         assertEquals(epochMilli, brief.lastUpdatedAt)
         assertEquals(50001L, brief.lastReadMsgId)
     }

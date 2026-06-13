@@ -24,7 +24,7 @@ import kotlin.test.assertEquals
 class AuthInterceptorTest {
 
     @Test
-    fun `skip auth for system-ping`() = runTest {
+    fun skipAuthForSystemPing() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
         val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping"))
 
@@ -41,7 +41,7 @@ class AuthInterceptorTest {
     }
 
     @Test
-    fun `reject when token missing`() = runTest {
+    fun rejectWhenTokenMissing() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
         val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping"))
 
@@ -57,7 +57,7 @@ class AuthInterceptorTest {
     }
 
     @Test
-    fun `reject when token invalid`() = runTest {
+    fun rejectWhenTokenInvalid() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
         coEvery { sessionRegistry.validate(any()) } returns null
 
@@ -79,7 +79,7 @@ class AuthInterceptorTest {
     }
 
     @Test
-    fun `inject session to coroutine context when token valid`() = runTest {
+    fun injectSessionToCoroutineContextWhenTokenValid() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
         val session = Session(
             userId = 1001L,

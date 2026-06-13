@@ -237,7 +237,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 1 组：deliver() 测试 ====================
 
     @Test
-    fun `deliver should directly onNext when delivery is active`() {
+    fun deliverShouldDirectlyOnNextWhenDeliveryIsActive() {
         // Given: 创建 ChatStreamObserver 实例，deliveryActive = true
         val observer = createChatStreamObserver(mockResponseObserver)
         setField(observer, "deliveryActive", true)
@@ -251,7 +251,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `deliver should buffer to pendingBuffer when delivery is not active`() {
+    fun deliverShouldBufferToPendingBufferWhenDeliveryIsNotActive() {
         // Given: 创建 ChatStreamObserver 实例，deliveryActive = false（默认）
         val observer = createChatStreamObserver(mockResponseObserver)
         val envelope = Envelope.getDefaultInstance()
@@ -267,7 +267,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `deliver should drop oldest message when buffer exceeds 1000 limit`() {
+    fun deliverShouldDropOldestMessageWhenBufferExceeds1000Limit() {
         // Given: pendingBuffer 已有 1000 条消息
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -293,7 +293,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 2 组：activateDelivery() 测试 ====================
 
     @Test
-    fun `activateDelivery should deliver all buffered messages then set active()`() = runTest {
+    fun activateDeliveryShouldDeliverAllBufferedMessagesThenSetActive() = runTest {
         // Given: pendingBuffer 有 3 条缓存消息
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -319,7 +319,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `activateDelivery should continue delivery on individual message failure()`() = runTest {
+    fun activateDeliveryShouldContinueDeliveryOnIndividualMessageFailure() = runTest {
         // Given: pendingBuffer 有 3 条消息，第 2 条 onNext 抛异常
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -351,7 +351,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 3 组：cleanupConnection() 测试 ====================
 
     @Test
-    fun `cleanupConnection should remove observer from tokenToObserver`() {
+    fun cleanupConnectionShouldRemoveObserverFromTokenToObserver() {
         // Given: tokenToObserver 中包含 responseObserver
         val observer = createChatStreamObserver(mockResponseObserver)
         val tokenToObserver: ConcurrentHashMap<String, StreamObserver<Envelope>> =
@@ -369,7 +369,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `cleanupConnection should remove from UserStreamRegistry only when observer present`() {
+    fun cleanupConnectionShouldRemoveFromUserStreamRegistryOnlyWhenObserverPresent() {
         // Given: userStreamRegistry.getStreams 包含 responseObserver
         val observer = createChatStreamObserver(mockResponseObserver)
         setField(observer, "userId", 1001L)
@@ -383,7 +383,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `cleanupConnection should NOT remove from UserStreamRegistry when observer not present`() {
+    fun cleanupConnectionShouldNOTRemoveFromUserStreamRegistryWhenObserverNotPresent() {
         // Given: userStreamRegistry.getStreams 不包含 responseObserver（被新连接替换）
         val observer = createChatStreamObserver(mockResponseObserver)
         setField(observer, "userId", 1001L)
@@ -397,7 +397,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `cleanupConnection should start delayed offline task when no other devices`() {
+    fun cleanupConnectionShouldStartDelayedOfflineTaskWhenNoOtherDevices() {
         // Given: userStreamRegistry.getStreams(uid) 返回空列表
         val observer = createChatStreamObserver(mockResponseObserver)
         setField(observer, "userId", 1001L)
@@ -413,7 +413,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `cleanupConnection should skip delayed offline task when userId is null`() {
+    fun cleanupConnectionShouldSkipDelayedOfflineTaskWhenUserIdIsNull() {
         // Given: userId = null（连接未登录即关闭）
         val observer = createChatStreamObserver(mockResponseObserver)
 
@@ -428,7 +428,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 4 组：onCompleted/onError 生命周期测试 ====================
 
     @Test
-    fun `onCompleted should cleanup pending buffer and connection`() {
+    fun onCompletedShouldCleanupPendingBufferAndConnection() {
         // Given: ChatStreamObserver 实例，pendingBuffer 有缓存消息
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -444,7 +444,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `onError should cleanup pending buffer and connection`() {
+    fun onErrorShouldCleanupPendingBufferAndConnection() {
         // Given: ChatStreamObserver 实例，pendingBuffer 有缓存消息
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -464,7 +464,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 5 组：handleLoginSuccess 分支测试 ====================
 
     @Test
-    fun `handleLoginSuccess should set deliveryActive when no evicted token()`() = runTest {
+    fun handleLoginSuccessShouldSetDeliveryActiveWhenNoEvictedToken() = runTest {
         // Given: 创建 ChatStreamObserver，首次注册无旧连接被驱逐
         val observer = createChatStreamObserver(mockResponseObserver)
         coEvery { sessionRegistry.registerWithDeviceType(any()) } returns null
@@ -482,7 +482,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `handleLoginSuccess should activate delivery when evicted token exists()`() = runTest {
+    fun handleLoginSuccessShouldActivateDeliveryWhenEvictedTokenExists() = runTest {
         // Given: 创建 ChatStreamObserver，有旧连接被驱逐
         val oldToken = "old-token"
         val observer = createChatStreamObserver(mockResponseObserver)
@@ -503,7 +503,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 6 组：tokenToObserver eviction 测试 ====================
 
     @Test
-    fun `eviction callback should remove observer and push DISCONNECT when token matches`() {
+    fun evictionCallbackShouldRemoveObserverAndPushDISCONNECTWhenTokenMatches() {
         // Given: 确保 eviction callback 已注册 + tokenToObserver 包含 token→observer 映射
         ensureEvictionRegistered()
         val evictedObserver = mockk<StreamObserver<Envelope>>(relaxed = true)
@@ -533,7 +533,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun `eviction callback should skip when token not in tokenToObserver`() {
+    fun evictionCallbackShouldSkipWhenTokenNotInTokenToObserver() {
         // Given: 确保 eviction callback 已注册 + tokenToObserver 为空
         ensureEvictionRegistered()
         val evictedObserver = mockk<StreamObserver<Envelope>>(relaxed = true)

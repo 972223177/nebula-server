@@ -15,7 +15,7 @@ import kotlin.test.assertNotNull
 class ProtoCodecTest {
 
     @Test
-    fun `build codec for Request proto`() = runTest {
+    fun buildCodecForRequestProto() = runTest {
         val codec = ProtoCodec.buildCodec(Request::class)
 
         assertNotNull(codec)
@@ -24,7 +24,7 @@ class ProtoCodecTest {
     }
 
     @Test
-    fun `empty bytes returns default instance`() = runTest {
+    fun emptyBytesReturnsDefaultInstance() = runTest {
         val codec = ProtoCodec.buildCodec(Request::class)
 
         val result = codec.parseFrom(ByteArray(0))
@@ -32,7 +32,7 @@ class ProtoCodecTest {
     }
 
     @Test
-    fun `serialize and deserialize roundtrip`() = runTest {
+    fun serializeAndDeserializeRoundtrip() = runTest {
         val codec = ProtoCodec.buildCodec(Request::class)
 
         val original = Request.newBuilder()

@@ -14,8 +14,8 @@ import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.testutil.buildTestDispatcher
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
+import com.nebula.gateway.testutil.singleHandlerDispatcher
 import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
@@ -42,7 +42,6 @@ class PrivacySmokeTest {
     // ========== Mock 依赖 ==========
 
     private lateinit var userPrivacyService: UserPrivacyService
-    private lateinit var privacyRepo: PrivacyRepository
     private lateinit var onlineStatusRepo: OnlineStatusRepository
     private lateinit var pushService: PushService
     private lateinit var friendshipRepo: FriendshipRepository
@@ -54,7 +53,6 @@ class PrivacySmokeTest {
     @BeforeEach
     fun setUp() {
         userPrivacyService = mockk()
-        privacyRepo = mockk()
         onlineStatusRepo = mockk()
         pushService = mockk(relaxed = true)
         friendshipRepo = mockk(relaxed = true)
@@ -62,34 +60,17 @@ class PrivacySmokeTest {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 辅助：构建单 Handler Dispatcher
+    // 辅助：构建单 Handler Dispatcher（使用 TestHelper.singleHandlerDispatcher）
     // ═══════════════════════════════════════════════════════════
-
-    /**
-     * 构建只注册一个 Handler 的 Dispatcher。
-     *
-     * @param handler Handler 实例
-     * @param reqClass 请求类型
-     * @param respClass 响应类型
-     * @return 配置好的 Dispatcher
-     */
-    private fun <Req : Any, Resp : Any> singleHandlerDispatcher(
-        handler: Handler<Req, Resp>,
-        reqClass: kotlin.reflect.KClass<Req>,
-        respClass: kotlin.reflect.KClass<Resp>
-    ) = buildTestDispatcher(
-        HandlerRegistry().apply { register(handlerEntry(handler, reqClass, respClass)) },
-        session = session, sessionRegistry = sessionRegistry
-    )
 
     // ===================================================================
     // 1. user/setPrivacy — 设置在线状态可见性
     // ===================================================================
 
     @Test
-    fun `setPrivacy - 设置隐藏状态返回200并同步更新状态`() = runTest {
+    fun setPrivacyShouldHideStatusAndReturn200() = runTest {
         // Given
-        coEvery { privacyRepo.setHideOnlineStatus(1001L, true) } returns Unit
+        coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
         coEvery { onlineStatusRepo.setHidden(1001L) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
@@ -104,14 +85,14 @@ class PrivacySmokeTest {
         // Then
         assertEquals(BizCode.OK.code, response.code, "设置隐藏状态应返回 200")
         assertEquals("user/setPrivacy", response.method, "method 应正确回显")
-        coVerify(exactly = 1) { privacyRepo.setHideOnlineStatus(1001L, true) }
+        coVerify(exactly = 1) { userPrivacyService.setHideOnlineStatus(any(), any()) }
         coVerify(exactly = 1) { onlineStatusRepo.setHidden(1001L) }
     }
 
     @Test
-    fun `setPrivacy - 设置可见返回200并同步更新状态`() = runTest {
+    fun setPrivacyShouldShowStatusAndReturn200() = runTest {
         // Given
-        coEvery { privacyRepo.setHideOnlineStatus(1001L, false) } returns Unit
+        coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
         coEvery { onlineStatusRepo.setOnline(1001L) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
@@ -125,7 +106,7 @@ class PrivacySmokeTest {
 
         // Then
         assertEquals(BizCode.OK.code, response.code, "设置可见应返回 200")
-        coVerify(exactly = 1) { privacyRepo.setHideOnlineStatus(1001L, false) }
+        coVerify(exactly = 1) { userPrivacyService.setHideOnlineStatus(any(), any()) }
         coVerify(exactly = 1) { onlineStatusRepo.setOnline(1001L) }
     }
 
@@ -134,9 +115,9 @@ class PrivacySmokeTest {
     // ===================================================================
 
     @Test
-    fun `getPrivacy - 读取隐藏状态返回true`() = runTest {
+    fun getPrivacyShouldReturnTrueForHidden() = runTest {
         // Given
-        coEvery { privacyRepo.getHideOnlineStatus(1001L) } returns true
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
 
         val dispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),
@@ -154,9 +135,9 @@ class PrivacySmokeTest {
     }
 
     @Test
-    fun `getPrivacy - 读取可见状态返回false`() = runTest {
+    fun getPrivacyShouldReturnFalseForVisible() = runTest {
         // Given
-        coEvery { privacyRepo.getHideOnlineStatus(1001L) } returns false
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
 
         val dispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),
@@ -173,9 +154,9 @@ class PrivacySmokeTest {
     }
 
     @Test
-    fun `getPrivacy - 默认状态返回false`() = runTest {
+    fun getPrivacyDefaultShouldReturnFalse() = runTest {
         // Given: 未设置过隐私，默认返回 false
-        coEvery { privacyRepo.getHideOnlineStatus(1001L) } returns false
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
 
         val dispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),
@@ -196,9 +177,9 @@ class PrivacySmokeTest {
     // ===================================================================
 
     @Test
-    fun `完整流程 - 设置隐藏后读取确认`() = runTest {
+    fun fullFlowShouldHideThenVerify() = runTest {
         // ---- 步骤 1: 设置隐藏 ----
-        coEvery { privacyRepo.setHideOnlineStatus(1001L, true) } returns Unit
+        coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
         coEvery { onlineStatusRepo.setHidden(1001L) } returns Unit
 
         val setDispatcher = singleHandlerDispatcher(
@@ -211,7 +192,7 @@ class PrivacySmokeTest {
         assertEquals(BizCode.OK.code, setResp.code, "步骤1: 设置隐藏应返回 200")
 
         // ---- 步骤 2: 读取确认 ----
-        coEvery { privacyRepo.getHideOnlineStatus(1001L) } returns true
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
 
         val getDispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),
@@ -226,9 +207,9 @@ class PrivacySmokeTest {
     }
 
     @Test
-    fun `完整流程 - 设置可见后读取确认`() = runTest {
+    fun fullFlowShouldShowThenVerify() = runTest {
         // ---- 步骤 1: 设置可见 ----
-        coEvery { privacyRepo.setHideOnlineStatus(1001L, false) } returns Unit
+        coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
         coEvery { onlineStatusRepo.setOnline(1001L) } returns Unit
 
         val setDispatcher = singleHandlerDispatcher(
@@ -241,7 +222,7 @@ class PrivacySmokeTest {
         assertEquals(BizCode.OK.code, setResp.code, "步骤1: 设置可见应返回 200")
 
         // ---- 步骤 2: 读取确认 ----
-        coEvery { privacyRepo.getHideOnlineStatus(1001L) } returns false
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
 
         val getDispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),

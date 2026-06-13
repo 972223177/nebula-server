@@ -51,7 +51,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `群聊会话 — 跳过好友检查返回 true`() = runTest {
+    fun groupChatShouldSkipFriendCheck() = runTest {
         // Given: 会话类型为群聊（type != 1）
         val groupConv = ConversationEntity(type = 2, name = "技术交流群")  // type=2 为群聊
         groupConv.id = groupConvId
@@ -75,7 +75,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `私聊会话且是好友 — 通过检查返回 true`() = runTest {
+    fun privateChatWithFriendShouldReturnTrue() = runTest {
         // Given: 私聊会话 + 双方是好友（deleted=0）
         val privateConv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
         privateConv.id = privateConvId
@@ -103,7 +103,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `私聊会话但非好友 — 抛出 NOT_FRIEND 异常`() = runTest {
+    fun privateChatNonFriendShouldThrowNotFriend() = runTest {
         // Given: 私聊会话，但双方不是好友
         val privateConv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
         privateConv.id = privateConvId
@@ -130,7 +130,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `私聊会话但好友已删除 — 抛出 NOT_FRIEND 异常`() = runTest {
+    fun privateChatDeletedFriendShouldThrowNotFriend() = runTest {
         // Given: 私聊会话，好友关系存在但已软删除（deleted=1）
         val privateConv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
         privateConv.id = privateConvId
@@ -158,7 +158,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `会话不存在 — 返回 true 由后续 Step 处理`() = runTest {
+    fun conversationNotFoundShouldReturnTrue() = runTest {
         // Given: 会话不存在
         coEvery { conversationRepo.findById("nonexistent:conv") } returns Optional.empty()
 
@@ -180,7 +180,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `私聊 ID 格式异常 — 返回 true 由后续逻辑处理`() = runTest {
+    fun malformedPrivateConvIdShouldReturnTrue() = runTest {
         // Given: 私聊会话，但 ID 格式不符合 private:smaller:larger
         val privateConv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
         privateConv.id = "malformed:conv:id"
@@ -204,7 +204,7 @@ class FriendCheckStepTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `parsePrivateConvId — 正常解析私聊会话 ID`() {
+    fun parsePrivateConvIdShouldReturnCorrectUidPair() {
         // Given: 标准格式的私聊会话 ID
         val convId = "private:1001:2001"
 
@@ -216,7 +216,7 @@ class FriendCheckStepTest {
     }
 
     @Test
-    fun `parsePrivateConvId — 格式不匹配返回 null`() {
+    fun parsePrivateConvIdMismatchShouldReturnNull() {
         // Given: 前缀不是 private 的 ID
         val result = FriendCheckStep.parsePrivateConvId("group:abc123")
 
@@ -225,7 +225,7 @@ class FriendCheckStepTest {
     }
 
     @Test
-    fun `parsePrivateConvId — uid 非数字返回 null`() {
+    fun parsePrivateConvIdNonNumericUidShouldReturnNull() {
         // Given: 包含非数字 uid 的 ID
         val result = FriendCheckStep.parsePrivateConvId("private:abc:2001")
 

@@ -17,7 +17,7 @@ import kotlin.test.assertNotNull
 class SystemHandlerCollectorTest {
 
     @Test
-    fun `registerAll registers ping handler`() = runTest {
+    fun registerAllShouldRegisterPingHandler() = runTest {
         val registry = HandlerRegistry()
         val collector = SystemHandlerCollector(PingHandler())
 

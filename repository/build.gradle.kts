@@ -55,6 +55,14 @@ dependencies {
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.flyway.core)
+    testImplementation(libs.flyway.mysql)
+    testImplementation(libs.mysql.connector)
+    testImplementation(libs.testcontainers.core)
+    testImplementation(libs.testcontainers.mysql)
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.hikaricp)
 }
 repositories {
     mavenCentral()

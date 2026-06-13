@@ -25,4 +25,16 @@ dependencies {
 
     // Koin DI — 模块初始化器需要 KoinComponent 和 Koin API
     implementation(libs.koin.core)
+
+    // ─── 测试依赖 ───
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.kotlin.test)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

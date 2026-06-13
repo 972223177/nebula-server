@@ -4,7 +4,6 @@ import com.nebula.chat.user.GetPrivacyReq
 import com.nebula.chat.user.GetPrivacyResp
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
-import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -26,7 +25,6 @@ import kotlin.test.assertEquals
 class GetPrivacyHandlerTest {
 
     private lateinit var userPrivacyService: UserPrivacyService
-    private lateinit var privacyRepository: PrivacyRepository
     private lateinit var handler: GetPrivacyHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -34,13 +32,13 @@ class GetPrivacyHandlerTest {
     @BeforeEach
     fun setup() {
         userPrivacyService = mockk()
-        privacyRepository = mockk()
         handler = GetPrivacyHandler(userPrivacyService)
     }
 
     @Test
-    fun `读取隐藏状态`() = runTest {
-        coEvery { privacyRepository.getHideOnlineStatus(1001L) } returns true
+    fun getPrivacyShouldReturnHiddenStatus() = runTest {
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any<GetPrivacyReq>()) } returns
+                GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
 
         val req = GetPrivacyReq.getDefaultInstance()
         val result = withContext(SessionKey(session)) {
@@ -51,8 +49,9 @@ class GetPrivacyHandlerTest {
     }
 
     @Test
-    fun `读取可见状态`() = runTest {
-        coEvery { privacyRepository.getHideOnlineStatus(1001L) } returns false
+    fun getPrivacyShouldReturnVisibleStatus() = runTest {
+        coEvery { userPrivacyService.getHideOnlineStatus(any(), any<GetPrivacyReq>()) } returns
+                GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
 
         val req = GetPrivacyReq.getDefaultInstance()
         val result = withContext(SessionKey(session)) {

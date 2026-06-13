@@ -3,6 +3,7 @@ package com.nebula.gateway.dispatcher
 import com.nebula.chat.user.BatchGetStatusResp
 import com.nebula.chat.user.BatchGetUserResp
 import com.nebula.chat.user.BatchIdRequest
+import com.nebula.chat.user.UserBrief
 import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
@@ -12,11 +13,10 @@ import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.testutil.buildTestDispatcher
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
-import com.nebula.repository.entity.UserEntity
+import com.nebula.gateway.testutil.singleHandlerDispatcher
 import com.nebula.repository.redis.OnlineStatusData
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -41,7 +41,6 @@ class UserSmokeTest {
     // ========== Mock 依赖 ==========
 
     private lateinit var userService: UserService
-    private lateinit var userRepo: UserRepository
     private lateinit var onlineStatusRepo: OnlineStatusRepository
     private lateinit var privacyRepo: PrivacyRepository
     private lateinit var sessionRegistry: SessionRegistry
@@ -52,48 +51,26 @@ class UserSmokeTest {
     @BeforeEach
     fun setUp() {
         userService = mockk()
-        userRepo = mockk()
         onlineStatusRepo = mockk()
         privacyRepo = mockk()
         sessionRegistry = mockk()
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 辅助：构建单 Handler Dispatcher
+    // 辅助：构建单 Handler Dispatcher（使用 TestHelper.singleHandlerDispatcher）
     // ═══════════════════════════════════════════════════════════
-
-    /**
-     * 构建只注册一个 Handler 的 Dispatcher。
-     *
-     * @param handler Handler 实例
-     * @param reqClass 请求类型
-     * @param respClass 响应类型
-     * @return 配置好的 Dispatcher
-     */
-    private fun <Req : Any, Resp : Any> singleHandlerDispatcher(
-        handler: Handler<Req, Resp>,
-        reqClass: kotlin.reflect.KClass<Req>,
-        respClass: kotlin.reflect.KClass<Resp>
-    ) = buildTestDispatcher(
-        HandlerRegistry().apply { register(handlerEntry(handler, reqClass, respClass)) },
-        session = session, sessionRegistry = sessionRegistry
-    )
 
     // ===================================================================
     // 1. user/batchGet — 批量用户摘要查询
     // ===================================================================
 
     @Test
-    fun `batchGet - 批量获取用户返回正确数量和字段`() = runTest {
+    fun batchGetShouldReturnCorrectCountAndFields() = runTest {
         // Given
-        val user1 = UserEntity(username = "user1", passwordHash = "hash1", nickname = "User One").apply {
-            id = 1L
-            avatar = "https://example.com/avatar1.jpg"
-        }
-        val user2 = UserEntity(username = "user2", passwordHash = "hash2", nickname = "User Two").apply {
-            id = 2L
-        }
-        coEvery { userRepo.findAllById(listOf(1L, 2L)) } returns listOf(user1, user2)
+        coEvery { userService.batchGetUsers(any()) } returns BatchGetUserResp.newBuilder()
+            .addUsers(UserBrief.newBuilder().setUid(1L).setUsername("user1").setDisplayName("User One").setAvatarUrl("https://example.com/avatar1.jpg"))
+            .addUsers(UserBrief.newBuilder().setUid(2L).setUsername("user2").setDisplayName("User Two"))
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             BatchGetUserHandler(userService),
@@ -117,9 +94,9 @@ class UserSmokeTest {
     }
 
     @Test
-    fun `batchGet - 空列表返回空结果`() = runTest {
+    fun batchGetWithEmptyListShouldReturnEmpty() = runTest {
         // Given
-        coEvery { userRepo.findAllById(emptyList<Long>()) } returns emptyList()
+        coEvery { userService.batchGetUsers(any()) } returns BatchGetUserResp.getDefaultInstance()
 
         val dispatcher = singleHandlerDispatcher(
             BatchGetUserHandler(userService),
@@ -136,10 +113,11 @@ class UserSmokeTest {
     }
 
     @Test
-    fun `batchGet - 部分ID不存在只返回存在的用户`() = runTest {
+    fun batchGetWithPartialIdsShouldReturnExistingUsers() = runTest {
         // Given
-        val user1 = UserEntity(username = "user1", passwordHash = "hash1", nickname = "User One").apply { id = 1L }
-        coEvery { userRepo.findAllById(listOf(1L, 999L)) } returns listOf(user1)
+        coEvery { userService.batchGetUsers(any()) } returns BatchGetUserResp.newBuilder()
+            .addUsers(UserBrief.newBuilder().setUid(1L).setUsername("user1").setDisplayName("User One"))
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             BatchGetUserHandler(userService),
@@ -157,10 +135,11 @@ class UserSmokeTest {
     }
 
     @Test
-    fun `batchGet - 单个用户`() = runTest {
+    fun batchGetSingleUser() = runTest {
         // Given
-        val user1 = UserEntity(username = "user1", passwordHash = "hash1", nickname = "User One").apply { id = 1L }
-        coEvery { userRepo.findAllById(listOf(1L)) } returns listOf(user1)
+        coEvery { userService.batchGetUsers(any()) } returns BatchGetUserResp.newBuilder()
+            .addUsers(UserBrief.newBuilder().setUid(1L).setUsername("user1"))
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             BatchGetUserHandler(userService),
@@ -181,7 +160,7 @@ class UserSmokeTest {
     // ===================================================================
 
     @Test
-    fun `batchGetStatus - 无隐藏用户返回所有用户在线状态`() = runTest {
+    fun batchGetStatusShouldReturnAllOnlineStatus() = runTest {
         // Given
         coEvery { privacyRepo.batchGetHideOnlineStatus(listOf(1L)) } returns emptySet()
         coEvery { onlineStatusRepo.getStatus(1L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
@@ -199,12 +178,12 @@ class UserSmokeTest {
         assertEquals(BizCode.OK.code, response.code, "状态查询应返回 200")
         val resp = BatchGetStatusResp.parseFrom(response.result)
         assertEquals(1, resp.statusesCount, "应有 1 个状态")
-        assertEquals(1L, resp.getStatuses(0).uid)
+        assertEquals(1L, resp.getStatuses(0).uid, "用户 ID 应为 1")
         assertEquals(1, resp.getStatuses(0).status, "状态应为在线(1)")
     }
 
     @Test
-    fun `batchGetStatus - 隐藏用户被过滤`() = runTest {
+    fun batchGetStatusHiddenUsersShouldBeFiltered() = runTest {
         // Given: uid=1 隐藏，uid=2 在线
         coEvery { privacyRepo.batchGetHideOnlineStatus(listOf(1L, 2L)) } returns setOf(1L)
         coEvery { onlineStatusRepo.getStatus(2L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
@@ -226,7 +205,7 @@ class UserSmokeTest {
     }
 
     @Test
-    fun `batchGetStatus - 混合状态`() = runTest {
+    fun batchGetStatusMixedStatuses() = runTest {
         // Given: uid=1 隐藏，uid=2 在线，uid=3 离线
         coEvery { privacyRepo.batchGetHideOnlineStatus(listOf(1L, 2L, 3L)) } returns setOf(1L)
         coEvery { onlineStatusRepo.getStatus(2L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)

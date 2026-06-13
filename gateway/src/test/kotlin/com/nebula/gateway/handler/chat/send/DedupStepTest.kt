@@ -53,7 +53,7 @@ class DedupStepTest {
     }
 
     @Test
-    fun `首次消息 SETNX 成功返回 true`() = runTest {
+    fun firstMessageSetnxShouldReturnTrue() = runTest {
         injectMockRedis()
         coEvery { redis.setnx(dedupKey, "pending") } returns true
         coEvery { redis.expire(dedupKey, 7 * 24 * 3600L) } returns true
@@ -73,7 +73,7 @@ class DedupStepTest {
     }
 
     @Test
-    fun `重复消息 SETNX 失败抛出 SEND_FAILED 异常`() = runTest {
+    fun duplicateMessageSetnxShouldThrowSendFailed() = runTest {
         injectMockRedis()
         coEvery { redis.setnx(dedupKey, "pending") } returns false
 

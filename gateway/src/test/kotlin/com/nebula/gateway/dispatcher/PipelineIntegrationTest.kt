@@ -95,7 +95,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `full pipeline processes ping request`() = runTest {
+    fun fullPipelineProcessesPingRequest() = runTest {
         // 准备 HandlerRegistry 并注册 PingHandler
         val registry = HandlerRegistry()
         val pingHandler = PingHandler()
@@ -135,7 +135,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `authenticated handler receives session via AuthInterceptor`() = runTest {
+    fun authenticatedHandlerReceivesSessionViaAuthInterceptor() = runTest {
         // 准备 HandlerRegistry 并注册 MockAuthenticatedHandler
         val registry = HandlerRegistry()
         val handler = MockAuthenticatedHandler()
@@ -197,7 +197,7 @@ class PipelineIntegrationTest : KoinTest {
     // ========== Phase 5 用户 Handler 集成测试 ==========
 
     @Test
-    fun `login dispatch test - correct password returns token`() = runTest {
+    fun loginDispatchWithCorrectPasswordReturnsToken() = runTest {
         // 准备 HandlerRegistry
         val registry = HandlerRegistry()
         val userService = mockk<UserService>()
@@ -250,7 +250,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `login dispatch test - wrong password returns non 200`() = runTest {
+    fun loginDispatchWithWrongPasswordReturnsNon200() = runTest {
         // 准备 HandlerRegistry
         val registry = HandlerRegistry()
         val userService = mockk<UserService>()
@@ -294,7 +294,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `register dispatch test - success returns uid`() = runTest {
+    fun registerDispatchSuccessReturnsUid() = runTest {
         val registry = HandlerRegistry()
         val userService = mockk<UserService>()
 
@@ -340,7 +340,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `search dispatch test - keyword returns user list`() = runTest {
+    fun searchDispatchWithKeywordReturnsUserList() = runTest {
         val registry = HandlerRegistry()
         val userService = mockk<UserService>()
 
@@ -417,7 +417,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `getProfile dispatch test - existing user returns profile`() = runTest {
+    fun getProfileDispatchExistingUserReturnsProfile() = runTest {
         val registry = HandlerRegistry()
         val userService = mockk<UserService>()
 
@@ -487,7 +487,7 @@ class PipelineIntegrationTest : KoinTest {
     }
 
     @Test
-    fun `getProfile dispatch test - non existent user returns error`() = runTest {
+    fun getProfileDispatchNonExistentUserReturnsError() = runTest {
         val registry = HandlerRegistry()
         val userService = mockk<UserService>()
 

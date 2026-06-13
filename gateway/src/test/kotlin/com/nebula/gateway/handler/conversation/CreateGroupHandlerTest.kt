@@ -8,15 +8,10 @@ import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
-import com.nebula.gateway.testutil.mockTransactionTemplate
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
+import com.nebula.service.conversation.CreateGroupResult
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -43,8 +38,6 @@ import kotlin.test.assertTrue
 class CreateGroupHandlerTest {
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationRepository: ConversationRepository
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
     private lateinit var handler: CreateGroupHandler
 
@@ -53,8 +46,6 @@ class CreateGroupHandlerTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationRepository = mockk()
-        conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
 
         val lockManager = mockLockManager()
@@ -67,9 +58,13 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `正常创建群聊返回conversationId`() = runTest {
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+    fun createGroupShouldReturnConversationId() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } returns CreateGroupResult(
+            convId = "test-conv-id",
+            name = "测试群聊",
+            ownerUid = 1001L,
+            memberUids = listOf(2001L, 3001L)
+        )
 
         val req = CreateGroupReq.newBuilder()
             .setName("测试群聊")
@@ -83,7 +78,9 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `name为空抛INVALID_PARAM`() = runTest {
+    fun emptyNameShouldThrowInvalidParam() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
+
         val req = CreateGroupReq.newBuilder()
             .setName("")
             .addMemberUids(2001L)
@@ -96,7 +93,9 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `创建者在memberUids中抛INVALID_PARAM`() = runTest {
+    fun creatorInMemberUidsShouldThrowInvalidParam() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
+
         val req = CreateGroupReq.newBuilder()
             .setName("测试群名")
             .addAllMemberUids(listOf(1001L, 2001L))
@@ -109,7 +108,9 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `初始成员数超200抛GROUP_FULL`() = runTest {
+    fun exceedingMaxMembersShouldThrowGroupFull() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.GROUP_FULL)
+
         // 创建者 1 + 200 个成员 = 201 > 200
         val tooManyUids = (2001L..2200L).toList()
         val req = CreateGroupReq.newBuilder()
@@ -124,9 +125,13 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `GROUP_CREATED推送排除创建者`() = runTest {
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+    fun groupCreatedPushShouldExcludeCreator() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } returns CreateGroupResult(
+            convId = "conv-push-test",
+            name = "推送测试群",
+            ownerUid = 1001L,
+            memberUids = listOf(2001L, 3001L)
+        )
 
         val req = CreateGroupReq.newBuilder()
             .setName("推送测试群")
@@ -146,9 +151,13 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `conversationId为UUID格式`() = runTest {
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+    fun conversationIdShouldBeUuidFormat() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } returns CreateGroupResult(
+            convId = "550e8400-e29b-41d4-a716-446655440000",
+            name = "UUID测试群",
+            ownerUid = 1001L,
+            memberUids = listOf(2001L)
+        )
 
         val req = CreateGroupReq.newBuilder()
             .setName("UUID测试群")
@@ -164,7 +173,9 @@ class CreateGroupHandlerTest {
     }
 
     @Test
-    fun `name超过128字符抛INVALID_PARAM`() = runTest {
+    fun nameExceeding128CharsShouldThrowInvalidParam() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
+
         val longName = "a".repeat(129)
         val req = CreateGroupReq.newBuilder()
             .setName(longName)

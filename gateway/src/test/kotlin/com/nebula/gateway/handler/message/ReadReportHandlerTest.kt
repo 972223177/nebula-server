@@ -73,6 +73,9 @@ class ReadReportHandlerTest {
         )
         // 通过反射注入 mock redis，避免使用 connection.reactive() 创建的实例
         injectMockRedis()
+
+        // MessageService 已读报告默认返回成功（handler 先委托 messageService，再执行自有的 gateway 逻辑）
+        coEvery { messageService.readReport(any<ReadReportReq>(), any()) } returns Unit
     }
 
     /**
@@ -85,7 +88,7 @@ class ReadReportHandlerTest {
     }
 
     @Test
-    fun `会话不存在时抛出ConversationException`() = runTest {
+    fun convNotFoundShouldThrowConversationException() = runTest {
         every { conversationRepository.findById("conv-not-exists") } returns Optional.empty()
 
         val req = ReadReportReq.newBuilder()
@@ -100,7 +103,7 @@ class ReadReportHandlerTest {
     }
 
     @Test
-    fun `非会话成员时抛出ConversationException`() = runTest {
+    fun nonMemberShouldThrowConversationException() = runTest {
         val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
         every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
         every {
@@ -119,7 +122,7 @@ class ReadReportHandlerTest {
     }
 
     @Test
-    fun `私聊场景更新已读并推送READ_RECEIPT`() = runTest {
+    fun privateChatReadReportShouldUpdateAndPushReadReceipt() = runTest {
         // 模拟私聊会话（type=0）
         val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
         every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
@@ -170,7 +173,7 @@ class ReadReportHandlerTest {
     }
 
     @Test
-    fun `群聊场景更新已读但不推送READ_RECEIPT`() = runTest {
+    fun groupChatReadReportShouldUpdateWithoutPush() = runTest {
         // 模拟群聊会话（type=1）
         val convEntity = ConversationEntity(type = 1).apply { id = "conv-002" }
         every { conversationRepository.findById("conv-002") } returns Optional.of(convEntity)
@@ -214,7 +217,7 @@ class ReadReportHandlerTest {
     }
 
     @Test
-    fun `私聊另一方已退出时不推送不抛异常`() = runTest {
+    fun otherPartyLeftShouldSkipPush() = runTest {
         // 模拟私聊会话（type=0）
         val convEntity = ConversationEntity(type = 0).apply { id = "conv-003" }
         every { conversationRepository.findById("conv-003") } returns Optional.of(convEntity)

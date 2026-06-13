@@ -21,7 +21,7 @@ import kotlin.test.assertEquals
 class ExceptionInterceptorTest {
 
     @Test
-    fun `handle BizException`() = runTest {
+    fun handleBizException() = runTest {
         val interceptor = ExceptionInterceptor()
 
         val request = Request.newBuilder().setMethod("user/getProfile").build()
@@ -37,7 +37,7 @@ class ExceptionInterceptorTest {
     }
 
     @Test
-    fun `handle IllegalArgumentException`() = runTest {
+    fun handleIllegalArgumentException() = runTest {
         val interceptor = ExceptionInterceptor()
 
         val request = Request.newBuilder().setMethod("test.method").build()
@@ -53,7 +53,7 @@ class ExceptionInterceptorTest {
     }
 
     @Test
-    fun `handle unexpected exception`() = runTest {
+    fun handleUnexpectedException() = runTest {
         val interceptor = ExceptionInterceptor()
 
         val request = Request.newBuilder().setMethod("test.method").build()

@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 class LogInterceptorTest {
 
     @Test
-    fun `log success request`() = runTest {
+    fun logSuccessRequest() = runTest {
         val interceptor = LogInterceptor()
 
         val request = Request.newBuilder().setMethod("test.method").build()

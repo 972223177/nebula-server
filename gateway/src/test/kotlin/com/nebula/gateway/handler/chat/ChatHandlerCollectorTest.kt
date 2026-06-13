@@ -16,7 +16,7 @@ import kotlin.test.assertNotNull
 class ChatHandlerCollectorTest {
 
     @Test
-    fun `registerAll registers chat and message handlers`() = runTest {
+    fun registerAllShouldRegisterChatAndMessageHandlers() = runTest {
         val registry = HandlerRegistry()
         val collector = ChatHandlerCollector(
             sendMessageHandler = mockk { every { method } returns "chat/send" },
