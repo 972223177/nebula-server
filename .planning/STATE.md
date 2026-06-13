@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 07 complete
-last_updated: "2026-06-13T02:47:00.000Z"
+status: Phase 08 contexted
+last_updated: "2026-06-13T04:00:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 7
@@ -34,14 +34,14 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 5 — User & Authentication | Complete | 2026-06-12 | 2026-06-12 |
 | 6 — Chat & Message | Complete | 2026-06-12 | 2026-06-12 |
 | 7 — Conversation | Complete | 2026-06-13 | 2026-06-13 |
-| 8 — Friend & Online Status | Pending | — | — |
+| 8 — Friend & Online Status | Discussed | — | — |
 | 9 — Reconnection | Pending | — | — |
 | 10 — Message Reliability | Pending | — | — |
 | 11 — Performance & Monitoring | Pending | — | — |
 
 ## Next Actions
 
-1. `/nx-discuss 8` — 开始 Phase 8（Friend & Online Status）讨论
+1. `/nx-plan 8` — 为 Phase 8 生成执行计划
 2. Phase 7 PullMessagesHandler 成员检查已修复（D-07 安全修复）
 3. 全量构建验证：`./gradlew build`
 
@@ -69,6 +69,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 4 | ✅ (20 threats, 0 open) | ✅ (已存在) | ✅ (已存在) |
 | 5 | ✅ (15 threats, 0 open) | ✅ (100% coverage) | ✅ (22/22 tests pass) |
 | 6 | ✅ (18 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 42/42 tests) |
+| 7 | ✅ (19 threats, 0 open) | ✅ (100% coverage, 17 new tests) | ✅ (77 tests pass) |
 
 ## Quick Tasks Completed
 
@@ -77,4 +78,4 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-12 after Phase 6 security audit (nx-secure)*
+*Last updated: 2026-06-13 after Phase 7 security audit (nx-secure)*

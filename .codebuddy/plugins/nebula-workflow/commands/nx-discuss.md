@@ -72,6 +72,8 @@ fi
 
 ### 步骤 3：交互式讨论
 
+**讨论开始前**，在 `NN-DISCUSSION-LOG.md` frontmatter 中写入 `discussion_status: in_progress`，供 `/nx-status` 识别中断状态。
+
 **讨论流程：**
 1. 呈现所有已识别的灰区，让用户选择优先讨论哪些（multiSelect）
 2. 逐项讨论选中的灰区，每项提供选项（含优缺点），收集用户决策
@@ -89,6 +91,8 @@ fi
 - 用户选择缺口选项后 → 将维度翻译为 1-2 个针对本阶段的具体问题 → 回到逐项讨论流程
 - 循环直到用户选择 "讨论完成"
 - 记录讨论过程中的关键观点到 `NN-DISCUSSION-LOG.md`
+
+**讨论完成后**，在 `NN-DISCUSSION-LOG.md` frontmatter 中更新 `discussion_status: completed`，供 `/nx-status` 推荐 `/nx-plan N` 而非重复讨论。
 
 ### 步骤 4：生成 CONTEXT.md
 
