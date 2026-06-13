@@ -188,6 +188,76 @@ class InviteMemberHandlerTest {
     }
 
     @Test
+    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
+        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+
+        val req = InviteMemberReq.newBuilder()
+            .setConversationId("conv-missing")
+            .addUids(2001L)
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.CONV_NOT_FOUND, exception.bizCode)
+    }
+
+    @Test
+    fun `邀请列表为空抛INVALID_PARAM`() = runTest {
+        val req = InviteMemberReq.newBuilder()
+            .setConversationId("conv-001")
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
+    }
+
+    @Test
+    fun `部分被邀请者已在群中仅添加新成员`() = runTest {
+        val convEntity = ConversationEntity(type = 2).apply {
+            id = "conv-001"; status = 0; memberCount = 5
+        }
+        val inviterMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
+        // 3001L 已在群中
+        val existingMember = ConversationMemberEntity("conv-001", 3001L).apply { role = "member" }
+
+        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
+        } returns inviterMember
+        // 邀请 4 人（2001, 3001, 4001, 5001），其中 3001 已在群中
+        every {
+            conversationMemberRepository.findByConversationIdAndUserIds(
+                "conv-001", listOf(2001L, 3001L, 4001L, 5001L)
+            )
+        } returns listOf(existingMember)
+        every { conversationMemberRepository.countActiveByConversationId("conv-001") } returns 5L
+        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+
+        val req = InviteMemberReq.newBuilder()
+            .setConversationId("conv-001")
+            .addAllUids(listOf(2001L, 3001L, 4001L, 5001L))
+            .build()
+        val resp = withContext(SessionKey(session)) { handler.handle(req) }
+
+        assertNotNull(resp)
+        assertEquals(BizCode.OK.code, resp.code)
+
+        // 验证推送排除已在群中的 3001L，仅包含新成员 2001L/4001L/5001L
+        coVerify {
+            pushService.pushConversationEvent(
+                convId = "conv-001",
+                eventType = PushEventType.MEMBER_JOINED,
+                payloadBytes = any(),
+                excludeUids = setOf(2001L, 4001L, 5001L)
+            )
+        }
+    }
+
+    @Test
     fun `会话已解散抛GROUP_DISSOLVED`() = runTest {
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 1; memberCount = 5

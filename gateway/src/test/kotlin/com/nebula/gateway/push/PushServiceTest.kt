@@ -1,11 +1,13 @@
 package com.nebula.gateway.push
 
 import com.nebula.chat.Envelope
+import com.nebula.chat.PushEventType
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
+import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 import io.mockk.every
 import io.mockk.mockk
@@ -23,6 +25,8 @@ import org.junit.jupiter.api.Test
  * - 单个 observer.onNext 异常不影响其他 observer（D-05 容错）
  * - pushReadReceipt 投递 READ_RECEIPT Envelope
  * - pushReadReceipt 异常容错
+ * - pushConversationEvent 向会话成员推送事件（排除 excludeUids）
+ * - pushEventToUser 向指定用户推送单独事件
  */
 class PushServiceTest {
 
@@ -134,5 +138,104 @@ class PushServiceTest {
         pushService.pushMessage(convId, chatMessage, senderUid)
         // 没有 observer，getStreams 被调用但 onNext 从未被调用
         verify(exactly = 1) { userStreamRegistry.getStreams(receiverUid) }
+    }
+
+    // ========== Phase 7: pushConversationEvent + pushEventToUser ==========
+
+    @Test
+    fun `pushConversationEvent excludes specified uids from push targets`() = runTest {
+        val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val members = listOf(
+            ConversationMemberEntity(convId, receiverUid),
+            ConversationMemberEntity(convId, otherUid)
+        )
+        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
+        every { userStreamRegistry.getStreams(otherUid) } returns emptyList()
+
+        // 排除 otherUid，receiverUid 应收到推送
+        pushService.pushConversationEvent(
+            convId = convId,
+            eventType = PushEventType.GROUP_CREATED,
+            payloadBytes = ByteString.EMPTY,
+            excludeUids = setOf(otherUid)
+        )
+
+        // receiverUid 未在排除列表，应收到推送
+        verify(exactly = 1) { observer.onNext(any()) }
+    }
+
+    @Test
+    fun `pushConversationEvent excludes all uids with emptySet as default`() = runTest {
+        val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val members = listOf(
+            ConversationMemberEntity(convId, receiverUid)
+        )
+        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
+
+        // 默认 excludeUids = emptySet，所有成员均收到推送
+        pushService.pushConversationEvent(
+            convId = convId,
+            eventType = PushEventType.GROUP_UPDATED,
+            payloadBytes = ByteString.EMPTY
+        )
+
+        verify(exactly = 1) { observer.onNext(any()) }
+    }
+
+    @Test
+    fun `pushConversationEvent handles observer exception gracefully`() = runTest {
+        val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val members = listOf(
+            ConversationMemberEntity(convId, receiverUid)
+        )
+        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer1, observer2)
+        // observer1 异常
+        every { observer1.onNext(any()) } throws RuntimeException("push failed")
+
+        pushService.pushConversationEvent(
+            convId = convId,
+            eventType = PushEventType.GROUP_CREATED,
+            payloadBytes = ByteString.EMPTY
+        )
+
+        // observer1 调用一次后异常，catch 后移除失败流
+        verify(exactly = 1) { observer1.onNext(any()) }
+        // observer2 仍正常接收
+        verify(exactly = 1) { observer2.onNext(any()) }
+    }
+
+    @Test
+    fun `pushEventToUser sends event to specified user`() {
+        val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
+        every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
+
+        pushService.pushEventToUser(
+            targetUid = receiverUid,
+            eventType = PushEventType.MEMBER_KICKED,
+            payloadBytes = ByteString.EMPTY
+        )
+
+        verify(exactly = 1) { observer.onNext(any()) }
+    }
+
+    @Test
+    fun `pushEventToUser handles exception gracefully`() {
+        val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
+        every { userStreamRegistry.getStreams(senderUid) } returns listOf(observer1, observer2)
+        every { observer1.onNext(any()) } throws RuntimeException("push failed")
+
+        pushService.pushEventToUser(
+            targetUid = senderUid,
+            eventType = PushEventType.MEMBER_KICKED,
+            payloadBytes = ByteString.EMPTY
+        )
+
+        // observer2 仍正常接收
+        verify(exactly = 1) { observer2.onNext(any()) }
     }
 }
