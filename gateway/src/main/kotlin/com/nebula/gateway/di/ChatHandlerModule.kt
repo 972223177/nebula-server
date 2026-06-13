@@ -5,6 +5,9 @@ import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
+import com.nebula.gateway.delivery.DeliveryHandlerCollector
+import com.nebula.gateway.delivery.DeliveryTrackingService
+import com.nebula.gateway.delivery.RedisDeliveryTracker
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +25,9 @@ val chatHandlerModule = module {
     /** SendMessageHandler 使用 IO 调度器的后台协程执行 fire-and-forget 推送 */
     single(named("sendHandlerScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
     single { UserStreamRegistry() }
-    single { PushService(get(), get()) }
+    single { PushService(get(), get(), get()) }
+    single { RedisDeliveryTracker(get()) }
+    single { DeliveryTrackingService(get()) }
 
     // Handler 注册 — 依赖 Service 层
     single { SendMessageHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) }
@@ -30,5 +35,6 @@ val chatHandlerModule = module {
     single { ReadReportHandler(get(), get(), get(), get(), get()) }
 
     // HandlerCollector 注册
-    single<HandlerCollector> { ChatHandlerCollector(get(), get(), get()) }
+    single<HandlerCollector> { ChatHandlerCollector(get(), get(), get(), get()) }
+    single<HandlerCollector> { DeliveryHandlerCollector() }
 }

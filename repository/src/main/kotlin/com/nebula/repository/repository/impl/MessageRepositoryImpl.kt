@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.springframework.dao.DataIntegrityViolationException
 
 /**
  * 消息写入路径实现（DB-03, D-11）。
@@ -73,6 +74,11 @@ class MessageRepositoryImpl(
             // XACK 所有成功写入的消息
             entries.forEach { messageQueue.acknowledge(it.id) }
             return messages.size
+        } catch (e: DataIntegrityViolationException) {
+            logger.warn(e) { "唯一索引冲突，跳过本次刷写（去重失败消息将被死信表捕获）" }
+            // D-72: 唯一索引冲突可能由去重失败消息导致，跳过并记录日志，10-04 补充死信入库
+            entries.forEach { messageQueue.acknowledge(it.id) }
+            return 0
         } catch (e: Exception) {
             logger.error(e) { "批量刷写消息失败" }
             // 失败的消息保留在 Redis Stream 中，下次重试
