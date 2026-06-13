@@ -7,7 +7,9 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
+import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.MessageEntity
+import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.MessageRepository
 import io.mockk.coEvery
@@ -32,6 +34,7 @@ import kotlin.test.assertTrue
  * - limit=0 → coerceIn 到 1（T-06-08）
  * - limit=200 → coerceIn 到 100（D-19）
  * - 会话不存在 → 抛出 ConversationException(BizCode.CONV_NOT_FOUND)（REVIEW-MEDIUM-9）
+ * - 非成员拉取消息 → 抛出 ConversationException(BizCode.NOT_MEMBER)
  * - hasMore = (返回数量 >= limit) 正确设置
  * - toChatMessage() 映射所有字段正确（REVIEW-MEDIUM-11）
  */
@@ -39,6 +42,7 @@ class PullMessagesHandlerTest {
 
     private lateinit var messageRepository: MessageRepository
     private lateinit var conversationRepository: ConversationRepository
+    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var handler: PullMessagesHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -47,11 +51,13 @@ class PullMessagesHandlerTest {
     fun setUp() {
         messageRepository = mockk()
         conversationRepository = mockk()
-        handler = PullMessagesHandler(messageRepository, conversationRepository)
+        conversationMemberRepository = mockk()
+        handler = PullMessagesHandler(messageRepository, conversationRepository, conversationMemberRepository)
     }
 
     @Test
     fun `cursor为0时使用LongMAX_VALUE查询最新消息`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         coEvery {
             messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
@@ -69,6 +75,7 @@ class PullMessagesHandlerTest {
 
     @Test
     fun `cursor大于0时传递cursor值查询历史消息`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         coEvery {
             messageRepository.findMessagesBackward("conv-001", 50000L, any())
@@ -86,6 +93,7 @@ class PullMessagesHandlerTest {
 
     @Test
     fun `limit为0时coerceIn到1`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         coEvery {
             messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
@@ -102,6 +110,7 @@ class PullMessagesHandlerTest {
 
     @Test
     fun `limit为200时coerceIn到100`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         // 模拟返回 100 条数据
         val mockMessages = (1L..100L).map { createMessageEntity(it) }
@@ -120,6 +129,7 @@ class PullMessagesHandlerTest {
 
     @Test
     fun `返回数据达到limit时hasMore为true`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         val mockMessages = (1L..20L).map { createMessageEntity(it) }
         coEvery {
@@ -137,6 +147,7 @@ class PullMessagesHandlerTest {
 
     @Test
     fun `返回数据未达到limit时hasMore为false`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         val mockMessages = (1L..5L).map { createMessageEntity(it) }
         coEvery {
@@ -154,6 +165,7 @@ class PullMessagesHandlerTest {
 
     @Test
     fun `toChatMessage映射所有字段正确`() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
         every { conversationRepository.existsById("conv-001") } returns true
         val entity = MessageEntity(
             conversationId = "conv-001",
@@ -183,6 +195,21 @@ class PullMessagesHandlerTest {
         assertEquals("Hello World", msg.content)
         assertEquals(1000L, msg.clientTs)
         assertEquals(2000L, msg.serverTs)
+    }
+
+    @Test
+    fun `非成员拉取消息抛出NOT_MEMBER`() = runTest {
+        // 查找成员返回 null，表示当前用户不是该会话的成员
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns null
+
+        val req = PullMessagesReq.newBuilder()
+            .setConversationId("conv-001")
+            .build()
+
+        val ex = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+        assertEquals(BizCode.NOT_MEMBER, ex.bizCode)
     }
 
     /** 创建模拟的 MessageEntity 用于测试。 */
