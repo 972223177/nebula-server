@@ -28,4 +28,5 @@ enum PushEventType {
   MEMBER_KICKED = 11;                   // payload = MemberKickedPayload
   READ_RECEIPT = 12;                    // payload = ReadReceiptPayload
   DELIVERY_ACK = 13;                    // payload = DeliveryAckPayload
+  STATUS_CHANGED = 14;                  // payload = StatusChangedPayload
 }
