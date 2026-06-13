@@ -125,7 +125,7 @@ class GatewayModuleTest {
         single { BatchGetUserHandler(get()) }
         single { privacyRepo }         // 使用 mock PrivacyRepository
         single { BatchGetStatusHandler(get(), get()) }
-        single { SetPrivacyHandler(get(), get(), get()) }
+        single { SetPrivacyHandler(get(), get(), get(), get()) }
         single { GetPrivacyHandler(get()) }
 
         // Phase 6: Chat & Message — 使用 mock 外部依赖

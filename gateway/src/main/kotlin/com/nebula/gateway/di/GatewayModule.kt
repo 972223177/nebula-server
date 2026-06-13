@@ -94,7 +94,7 @@ val handlerModule = module {
     single { GetProfileHandler(get()) }          // UserRepository
     single { BatchGetUserHandler(get()) }        // UserRepository
     single { BatchGetStatusHandler(get(), get()) } // OnlineStatusRepository + PrivacyRepository
-    single { SetPrivacyHandler(get(), get(), get()) }          // PrivacyRepository + OnlineStatusRepository + PushService
+    single { SetPrivacyHandler(get(), get(), get(), get()) }          // PrivacyRepository + OnlineStatusRepository + PushService + FriendshipRepository
     single { GetPrivacyHandler(get()) }          // PrivacyRepository
 
     // Phase 6: Chat & Message（D-13 Step 链 + PushService + 推送基础设施）

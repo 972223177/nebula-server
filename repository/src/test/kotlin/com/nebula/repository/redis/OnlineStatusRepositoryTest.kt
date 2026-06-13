@@ -5,6 +5,7 @@ import io.lettuce.core.KeyValue
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -18,8 +19,12 @@ import org.junit.jupiter.api.Test
  * 覆盖场景：
  * - setOnline/getStatus 往返验证
  * - setHidden/getStatus 验证 status=2
+ * - setOffline 验证 del 被调用
+ * - getStatus key 不存在返回 null
  * - refreshTtl 调用验证
  * - batchGetStatus 批量查询验证
+ * - batchGetStatus 空列表返回 emptyMap
+ * - isOnline 在线/离线验证
  *
  * 注：通过反射注入 mock Redis commands 以控制 Redis 行为。
  */
@@ -103,5 +108,41 @@ class OnlineStatusRepositoryTest {
         val result = repository.isOnline(5L)
 
         assertFalse(result)
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 补充测试：setOffline、getStatus null、batchGetStatus 空列表
+    // ═══════════════════════════════════════════════════════════
+
+    @Test
+    fun `setOffline 调用 del 删除 key`() = runTest {
+        // Given: 用户在线状态的 key 存在
+        // When: 标记用户离线
+        repository.setOffline(6L)
+
+        // Then: 验证 del 被调用，key 格式正确
+        coVerify(exactly = 1) { redis.del("online:user:6") }
+    }
+
+    @Test
+    fun `getStatus key 不存在返回 null`() = runTest {
+        // Given: Redis 中不存在该 key
+        coEvery { redis.get("online:user:999") } returns null
+
+        // When: 查询不存在的用户在线状态
+        val result = repository.getStatus(999L)
+
+        // Then: 返回 null
+        assertNull(result)
+    }
+
+    @Test
+    fun `batchGetStatus 空列表返回 emptyMap`() = runTest {
+        // Given: 传入空的 userIds 列表
+        // When: 批量查询
+        val result = repository.batchGetStatus(emptyList())
+
+        // Then: 返回空的 Map
+        assertTrue(result.isEmpty())
     }
 }
