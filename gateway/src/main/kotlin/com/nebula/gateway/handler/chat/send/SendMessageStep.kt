@@ -4,7 +4,7 @@ package com.nebula.gateway.handler.chat.send
  * Step 链接口 — 将 chat/send 拆分为独立可测试的单元（D-13）。
  *
  * 每个 Step 负责单一职责，通过 [SendContext] 传递共享状态。
- * 执行顺序：ValidateStep → DedupStep → WriteStep
+ * 执行顺序：ValidateStep → FriendCheckStep → DedupStep → WriteStep
  * （推送和未读计数在 SendMessageHandler 中异步 fire-and-forget 执行）
  *
  * Step 链终止策略：
