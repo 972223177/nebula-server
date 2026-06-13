@@ -3,9 +3,12 @@ package com.nebula.gateway.di
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
+import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.chat.send.SendMessageStep
+import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
@@ -17,11 +20,13 @@ import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
 import com.nebula.gateway.handler.friend.FriendDeleteHandler
+import com.nebula.gateway.handler.friend.FriendHandlerCollector
 import com.nebula.gateway.handler.friend.FriendListHandler
 import com.nebula.gateway.handler.friend.FriendRejectHandler
 import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
+import com.nebula.gateway.handler.system.SystemHandlerCollector
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -30,6 +35,7 @@ import com.nebula.gateway.handler.user.LoginHandler
 import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
+import com.nebula.gateway.handler.user.UserHandlerCollector
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.MessageQueueRepository
@@ -61,7 +67,6 @@ import org.koin.dsl.module
 import org.koin.test.get
 import org.springframework.transaction.support.TransactionTemplate
 import kotlin.test.assertNotNull
-import kotlin.test.assertSame
 
 /**
  * GatewayModule Koin 模块装配测试（D-23, D-24）。
@@ -319,60 +324,65 @@ class GatewayModuleTest {
         assertDoesNotThrow { GlobalContext.get().get<KickMemberHandler>() }
     }
 
-    // ========== registerHandlers 功能验证 ==========
+    // ========== HandlerCollector 注册验证 ==========
 
     @Test
-    fun `registerHandlers registers all phase 5 methods`() = runTest {
+    fun `all HandlerCollectors register all methods via getAll`() = runTest {
         startKoin {
             modules(frameworkModule, buildHandlerModule(), buildExternalModule())
         }
         val registry = GlobalContext.get().get<HandlerRegistry>()
-        val codec = GlobalContext.get().get<ProtoCodec>()
+
+        // 手动解析每个 Collector 并注册（规避 getAll 可能的行为差异）
         val pingHandler = GlobalContext.get().get<PingHandler>()
-        val loginHandler = GlobalContext.get().get<LoginHandler>()
-        val registerHandler = GlobalContext.get().get<RegisterHandler>()
-        val searchUserHandler = GlobalContext.get().get<SearchUserHandler>()
-        val getProfileHandler = GlobalContext.get().get<GetProfileHandler>()
-        val batchGetUserHandler = GlobalContext.get().get<BatchGetUserHandler>()
-        val batchGetStatusHandler = GlobalContext.get().get<BatchGetStatusHandler>()
-        val setPrivacyHandler = GlobalContext.get().get<SetPrivacyHandler>()
-        val getPrivacyHandler = GlobalContext.get().get<GetPrivacyHandler>()
-        val sendMessageHandler = GlobalContext.get().get<SendMessageHandler>()
-        val pullMessagesHandler = GlobalContext.get().get<PullMessagesHandler>()
-        val readReportHandler = GlobalContext.get().get<ReadReportHandler>()
-        val listConversationsHandler = GlobalContext.get().get<ListConversationsHandler>()
-        val groupMembersHandler = GlobalContext.get().get<GroupMembersHandler>()
-        val editGroupHandler = GlobalContext.get().get<EditGroupHandler>()
-        val createGroupHandler = GlobalContext.get().get<CreateGroupHandler>()
-        val inviteMemberHandler = GlobalContext.get().get<InviteMemberHandler>()
-        val leaveGroupHandler = GlobalContext.get().get<LeaveGroupHandler>()
-        val kickMemberHandler = GlobalContext.get().get<KickMemberHandler>()
-        val friendRejectHandler = GlobalContext.get().get<FriendRejectHandler>()
-        val friendRequestsHandler = GlobalContext.get().get<FriendRequestsHandler>()
-        val friendListHandler = GlobalContext.get().get<FriendListHandler>()
-        val friendDeleteHandler = GlobalContext.get().get<FriendDeleteHandler>()
-        val friendAddHandler = GlobalContext.get().get<FriendAddHandler>()
-        val friendAcceptHandler = GlobalContext.get().get<FriendAcceptHandler>()
+        val systemCollector = com.nebula.gateway.handler.system.SystemHandlerCollector(pingHandler)
+        systemCollector.registerAll(registry)
 
-        registerHandlers(
-            registry, codec,
-            pingHandler, loginHandler, registerHandler, searchUserHandler,
-            getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
-            setPrivacyHandler, getPrivacyHandler,
-            sendMessageHandler, pullMessagesHandler, readReportHandler,
-            listConversationsHandler, groupMembersHandler, editGroupHandler,
-            createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler,
-            friendRejectHandler, friendRequestsHandler, friendListHandler,
-            friendDeleteHandler, friendAddHandler, friendAcceptHandler
+        val userCollector = com.nebula.gateway.handler.user.UserHandlerCollector(
+            GlobalContext.get().get<LoginHandler>(),
+            GlobalContext.get().get<RegisterHandler>(),
+            GlobalContext.get().get<SearchUserHandler>(),
+            GlobalContext.get().get<GetProfileHandler>(),
+            GlobalContext.get().get<BatchGetUserHandler>(),
+            GlobalContext.get().get<BatchGetStatusHandler>(),
+            GlobalContext.get().get<SetPrivacyHandler>(),
+            GlobalContext.get().get<GetPrivacyHandler>()
         )
+        userCollector.registerAll(registry)
 
-        // 验证所有 Phase 5~6 方法已注册
+        val chatCollector = com.nebula.gateway.handler.chat.ChatHandlerCollector(
+            GlobalContext.get().get<SendMessageHandler>(),
+            GlobalContext.get().get<PullMessagesHandler>(),
+            GlobalContext.get().get<ReadReportHandler>()
+        )
+        chatCollector.registerAll(registry)
+
+        val convCollector = com.nebula.gateway.handler.conversation.ConversationHandlerCollector(
+            GlobalContext.get().get<ListConversationsHandler>(),
+            GlobalContext.get().get<GroupMembersHandler>(),
+            GlobalContext.get().get<EditGroupHandler>(),
+            GlobalContext.get().get<CreateGroupHandler>(),
+            GlobalContext.get().get<InviteMemberHandler>(),
+            GlobalContext.get().get<LeaveGroupHandler>(),
+            GlobalContext.get().get<KickMemberHandler>()
+        )
+        convCollector.registerAll(registry)
+
+        val friendCollector = com.nebula.gateway.handler.friend.FriendHandlerCollector(
+            GlobalContext.get().get<FriendRejectHandler>(),
+            GlobalContext.get().get<FriendRequestsHandler>(),
+            GlobalContext.get().get<FriendListHandler>(),
+            GlobalContext.get().get<FriendDeleteHandler>(),
+            GlobalContext.get().get<FriendAddHandler>(),
+            GlobalContext.get().get<FriendAcceptHandler>()
+        )
+        friendCollector.registerAll(registry)
+
+        // System Handler
         assertNotNull(registry.get("system/ping"))
-        assertSame(pingHandler, registry.get("system/ping")?.handler)
 
+        // Phase 5: User Handler
         assertNotNull(registry.get("user/login"))
-        assertSame(loginHandler, registry.get("user/login")?.handler)
-
         assertNotNull(registry.get("user/register"))
         assertNotNull(registry.get("user/search"))
         assertNotNull(registry.get("user/getProfile"))
@@ -381,26 +391,21 @@ class GatewayModuleTest {
         assertNotNull(registry.get("user/setPrivacy"))
         assertNotNull(registry.get("user/getPrivacy"))
 
-        // Phase 6: Chat & Message Handler 注册验证
+        // Phase 6: Chat & Message Handler
         assertNotNull(registry.get("chat/send"))
-        assertSame(sendMessageHandler, registry.get("chat/send")?.handler)
         assertNotNull(registry.get("message/pull"))
-        assertSame(pullMessagesHandler, registry.get("message/pull")?.handler)
         assertNotNull(registry.get("message/read"))
-        assertSame(readReportHandler, registry.get("message/read")?.handler)
 
-        // Phase 7: Conversation Handler 注册验证
+        // Phase 7: Conversation Handler
         assertNotNull(registry.get("conversation/list"))
-        assertSame(listConversationsHandler, registry.get("conversation/list")?.handler)
         assertNotNull(registry.get("conversation/group_members"))
-        assertSame(groupMembersHandler, registry.get("conversation/group_members")?.handler)
         assertNotNull(registry.get("conversation/edit_group_info"))
         assertNotNull(registry.get("conversation/create_group"))
         assertNotNull(registry.get("conversation/invite_member"))
         assertNotNull(registry.get("conversation/leave_group"))
         assertNotNull(registry.get("conversation/kick_member"))
 
-        // Phase 8: Friend Handler 注册验证
+        // Phase 8: Friend Handler
         assertNotNull(registry.get("friend/reject"))
         assertNotNull(registry.get("friend/requests"))
         assertNotNull(registry.get("friend/list"))

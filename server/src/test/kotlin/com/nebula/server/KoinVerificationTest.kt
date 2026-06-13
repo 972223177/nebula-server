@@ -2,7 +2,10 @@ package com.nebula.server
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.di.frameworkModule
-import com.nebula.gateway.di.handlerModule
+import com.nebula.gateway.di.userHandlerModule
+import com.nebula.gateway.di.chatHandlerModule
+import com.nebula.gateway.di.conversationHandlerModule
+import com.nebula.gateway.di.friendHandlerModule
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.chat.send.SendMessageStep
 import com.nebula.gateway.handler.conversation.ConversationLockManager
@@ -69,7 +72,7 @@ class KoinVerificationTest {
     @Test
     fun `all phase components are resolvable`() {
         startKoin {
-            modules(frameworkModule, handlerModule, buildMockModule())
+            modules(frameworkModule, userHandlerModule, chatHandlerModule, conversationHandlerModule, friendHandlerModule, buildMockModule())
         }
 
         // Phase 6 基础设施组件

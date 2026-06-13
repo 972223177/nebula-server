@@ -4,36 +4,10 @@ import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.datasource.HikariDataSourceProvider
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
-import com.nebula.gateway.di.frameworkModule
-import com.nebula.gateway.di.handlerModule
-import com.nebula.gateway.di.registerHandlers
+import com.nebula.gateway.di.gatewayModules
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
-import com.nebula.gateway.handler.PingHandler
-import com.nebula.gateway.handler.chat.send.SendMessageHandler
-import com.nebula.gateway.handler.conversation.CreateGroupHandler
-import com.nebula.gateway.handler.conversation.EditGroupHandler
-import com.nebula.gateway.handler.conversation.GroupMembersHandler
-import com.nebula.gateway.handler.conversation.InviteMemberHandler
-import com.nebula.gateway.handler.conversation.KickMemberHandler
-import com.nebula.gateway.handler.conversation.LeaveGroupHandler
-import com.nebula.gateway.handler.conversation.ListConversationsHandler
-import com.nebula.gateway.handler.friend.FriendAcceptHandler
-import com.nebula.gateway.handler.friend.FriendAddHandler
-import com.nebula.gateway.handler.friend.FriendDeleteHandler
-import com.nebula.gateway.handler.friend.FriendListHandler
-import com.nebula.gateway.handler.friend.FriendRejectHandler
-import com.nebula.gateway.handler.friend.FriendRequestsHandler
-import com.nebula.gateway.handler.message.PullMessagesHandler
-import com.nebula.gateway.handler.message.ReadReportHandler
-import com.nebula.gateway.handler.user.BatchGetStatusHandler
-import com.nebula.gateway.handler.user.BatchGetUserHandler
-import com.nebula.gateway.handler.user.GetPrivacyHandler
-import com.nebula.gateway.handler.user.GetProfileHandler
-import com.nebula.gateway.handler.user.LoginHandler
-import com.nebula.gateway.handler.user.RegisterHandler
-import com.nebula.gateway.handler.user.SearchUserHandler
-import com.nebula.gateway.handler.user.SetPrivacyHandler
+import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.service.ChatService
@@ -151,49 +125,15 @@ fun main() {
     }
 
     startKoin {
-        modules(frameworkModule, handlerModule, externalModule)
+        modules(*gatewayModules.toTypedArray(), externalModule)
     }
 
-    // Phase 5: 从 Koin 获取所有 Handler 并注册到 HandlerRegistry
-    // Review 修复：注册方式通过 handlerModule + externalModule 由 Koin 管理依赖
+    // Phase 5: 通过 HandlerCollector 模式统一注册所有 Handler 到 HandlerRegistry
+    // 各业务包实现 HandlerCollector 接口，通过 Koin 的 getAll() 自动发现
     val registry = GlobalContext.get().get<HandlerRegistry>()
     val codec = GlobalContext.get().get<ProtoCodec>()
-    val pingHandler = GlobalContext.get().get<PingHandler>()
-    val loginHandler = GlobalContext.get().get<LoginHandler>()
-    val registerHandler = GlobalContext.get().get<RegisterHandler>()
-    val searchUserHandler = GlobalContext.get().get<SearchUserHandler>()
-    val getProfileHandler = GlobalContext.get().get<GetProfileHandler>()
-    val batchGetUserHandler = GlobalContext.get().get<BatchGetUserHandler>()
-    val batchGetStatusHandler = GlobalContext.get().get<BatchGetStatusHandler>()
-    val setPrivacyHandler = GlobalContext.get().get<SetPrivacyHandler>()
-    val getPrivacyHandler = GlobalContext.get().get<GetPrivacyHandler>()
-    val sendMessageHandler = GlobalContext.get().get<SendMessageHandler>()
-    val pullMessagesHandler = GlobalContext.get().get<PullMessagesHandler>()
-    val readReportHandler = GlobalContext.get().get<ReadReportHandler>()
-    val listConversationsHandler = GlobalContext.get().get<ListConversationsHandler>()
-    val groupMembersHandler = GlobalContext.get().get<GroupMembersHandler>()
-    val editGroupHandler = GlobalContext.get().get<EditGroupHandler>()
-    val createGroupHandler = GlobalContext.get().get<CreateGroupHandler>()
-    val inviteMemberHandler = GlobalContext.get().get<InviteMemberHandler>()
-    val leaveGroupHandler = GlobalContext.get().get<LeaveGroupHandler>()
-    val kickMemberHandler = GlobalContext.get().get<KickMemberHandler>()
-    val friendRejectHandler = GlobalContext.get().get<FriendRejectHandler>()
-    val friendRequestsHandler = GlobalContext.get().get<FriendRequestsHandler>()
-    val friendListHandler = GlobalContext.get().get<FriendListHandler>()
-    val friendDeleteHandler = GlobalContext.get().get<FriendDeleteHandler>()
-    val friendAddHandler = GlobalContext.get().get<FriendAddHandler>()
-    val friendAcceptHandler = GlobalContext.get().get<FriendAcceptHandler>()
-    registerHandlers(
-        registry, codec,
-        pingHandler, loginHandler, registerHandler, searchUserHandler,
-        getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
-        setPrivacyHandler, getPrivacyHandler,
-        sendMessageHandler, pullMessagesHandler, readReportHandler,
-        listConversationsHandler, groupMembersHandler, editGroupHandler,
-        createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler,
-        friendRejectHandler, friendRequestsHandler, friendListHandler,
-        friendDeleteHandler, friendAddHandler, friendAcceptHandler
-    )
+    val collectors: List<HandlerCollector> = GlobalContext.get().getAll()
+    collectors.forEach { it.registerAll(registry) }
 
     // Step 4.8: Phase 5 — 构造 ChatService 依赖
     // Dispatcher: 注入 HandlerRegistry + 拦截器链 + ProtoCodec
