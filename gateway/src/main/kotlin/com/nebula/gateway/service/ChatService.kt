@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * gRPC 双向流聊天服务 — 实现 Envelope 协议的分发、登录响应拦截和 Session 绑定（D-05）。
@@ -106,6 +107,11 @@ class ChatService(
     /**
      * 内部 StreamObserver — 处理双向流消息，管理连接生命周期。
      *
+     * 职责（D-67）：
+     * - 接收 Envelope 消息，分发给 handleRequest/handlePing
+     * - 在重连期间缓存消息（pendingBuffer），待旧连接清理后投递
+     * - 管理连接清理（tokenToObserver 移除、UserStreamRegistry 注销、延迟离线）
+     *
      * @param responseObserver gRPC 响应观察者，用于发送响应消息给客户端
      */
     private inner class ChatStreamObserver(
@@ -118,6 +124,26 @@ class ChatService(
         /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏 */
         var delayedOfflineJob: Job? = null
 
+        /**
+         * 缓存再投递缓冲区 — 使用 ConcurrentLinkedQueue（无界、无锁、高性能 FIFO，
+         * 适合生产者-消费者缓存模式，与 PushService 的 CopyOnWriteArrayList 和
+         * SessionRegistry 的 ConcurrentHashMap 不同，此处需要 FIFO 顺序保证）。
+         * 在旧连接清理完成前，所有推送消息先缓存到此队列（D-67）。
+         */
+        private val pendingBuffer = ConcurrentLinkedQueue<Envelope>()
+
+        /** 是否已进入正常投递模式（D-67） */
+        @Volatile
+        var deliveryActive = false
+
+        companion object {
+            /** 缓冲区上限（D-67）：超过此数量丢弃最旧消息，防止内存泄漏 */
+            private const val MAX_PENDING = 1000
+
+            /** 超时时间（D-67）：超过此时间强制激活投递，防止"防饿死" */
+            private const val DELIVERY_TIMEOUT_MS = 10_000L
+        }
+
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
                 Direction.REQUEST -> scope.launch {
@@ -129,29 +155,91 @@ class ChatService(
         }
 
         override fun onCompleted() {
+            cleanupPending()
             cleanupConnection()
             responseObserver.onCompleted()
         }
 
         override fun onError(t: Throwable) {
             logger.error(t) { "ChatService stream error" }
+            cleanupPending()
             cleanupConnection()
             responseObserver.onError(t)
+        }
+
+        /**
+         * 缓存再投递入口（D-67）。
+         *
+         * 在重连期间（deliveryActive = false），将消息缓存到 pendingBuffer；
+         * 在正常投递模式（deliveryActive = true），直接通过 responseObserver 投递。
+         *
+         * 所有通过 UserStreamRegistry.getStreams() 获取 StreamObserver 后调用 onNext()
+         * 的代码路径（PushService.pushEventToUser 等），应切换为此方法。
+         * 外部调用：`(observer as? ChatStreamObserver)?.deliver(envelope) ?: observer.onNext(envelope)`
+         *
+         * @param envelope 待投递的 Envelope
+         */
+        fun deliver(envelope: Envelope) {
+            if (deliveryActive) {
+                responseObserver.onNext(envelope)
+            } else {
+                // 超限保护：丢弃最旧消息
+                if (pendingBuffer.size >= MAX_PENDING) {
+                    pendingBuffer.poll()
+                }
+                pendingBuffer.add(envelope)
+            }
+        }
+
+        /**
+         * 激活投递模式，投递所有缓存消息（D-67）。
+         *
+         * 由 handleLoginSuccess 在旧连接清理完成后调用。
+         * 使用 withContext(Dispatchers.Default) 避免阻塞 gRPC 事件循环线程。
+         * 使用 Default 而非 IO，因为 onNext() 是非阻塞的 gRPC 调用。
+         */
+        suspend fun activateDelivery() {
+            // 投递所有缓存消息
+            withContext(Dispatchers.Default) {
+                while (true) {
+                    val envelope = pendingBuffer.poll() ?: break
+                    try {
+                        responseObserver.onNext(envelope)
+                    } catch (e: Exception) {
+                        // 与 PushService 容错模式一致（D-05）：单个消息异常不影响剩余缓存投递
+                        logger.error(e) { "Failed to deliver cached envelope after reconnect" }
+                    }
+                }
+            }
+            deliveryActive = true
+        }
+
+        /** 连接清理时清理缓冲区，防止内存泄漏（D-67） */
+        fun cleanupPending() {
+            pendingBuffer.clear()
         }
 
         /**
          * 清理此连接持有的所有资源（Review 修复：防止内存泄漏）。
          *
          * 清理操作：
-         * 1. 从 tokenToObserver 移除当前 responseObserver 的所有 token 映射
-         * 2. 从 UserStreamRegistry 移除当前设备的 StreamObserver（D-01）
+         * 1. 从 tokenToObserver 移除当前 responseObserver（精确匹配实例，D-67 并发安全）
+         * 2. 从 UserStreamRegistry 移除当前设备的 StreamObserver（防御性检查，D-01）
          * 3. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
         private fun cleanupConnection() {
-            tokenToObserver.entries.removeIf { it.value == responseObserver }
+            // D-67 并发安全：使用 values.remove() 精确匹配当前 observer 实例
+            // 避免 entries.removeIf 遍历所有条目时误匹配其他线程新注册的 observer
+            tokenToObserver.values.remove(responseObserver)
+
             // D-01: 移除当前设备 StreamObserver（不调 removeUser 以免移除其他设备的流）
             userId?.let { uid ->
-                userStreamRegistry.removeStream(uid, responseObserver)
+                // 防御性检查：仅当当前 observer 仍在注册表中时才移除
+                // 防止多设备重连场景下误删新连接的 StreamObserver（D-67）
+                val currentStreams = userStreamRegistry.getStreams(uid)
+                if (currentStreams.any { it == responseObserver }) {
+                    userStreamRegistry.removeStream(uid, responseObserver)
+                }
             }
 
             // D-57: 60s 延迟离线任务（伪在线）
@@ -257,6 +345,21 @@ class ChatService(
             pushStatusChangeToFriends(loginResp.userId, 1)
         }
 
+        // D-67: 激活缓存再投递
+        if (evictedToken != null) {
+            // eviction callback 在 registerWithDeviceType 中同步执行完成
+            // 注意：如果旧连接清理超过 10s，缓冲区超时保护会强制激活投递。
+            // 此时旧连接可能仍在，投递到旧连接的消息在 onCompleted 后丢失。
+            // 这是"防饿死"权衡：宁可丢失少量消息也不阻塞新连接。
+            // 丢失的消息可通过 Phase 10 的 gap detect + auto-pull 恢复。
+            (responseObserver as? ChatStreamObserver)?.activateDelivery()
+        } else {
+            // 无旧连接，直接激活投递（首次登录或超时重连后旧连接已清理）
+            (responseObserver as? ChatStreamObserver)?.let {
+                it.deliveryActive = true
+            }
+        }
+
         // 发送 LoginResp Envelope 给客户端
         val loginRespEnvelope = Envelope.newBuilder()
             .setDirection(Direction.RESPONSE)
@@ -296,7 +399,15 @@ class ChatService(
      * 确保 eviction callback 已注册（首次请求时注册一次）。
      *
      * eviction callback 在 Session 被驱逐（同类型设备互踢）时被触发：
-     * 通过 tokenToObserver 查找当前连接，推送 LOGOUT 通知并关闭连接。
+     * 通过 tokenToObserver 查找当前连接，推送 DISCONNECT 通知并关闭连接。
+     *
+     * 推送步骤（D-68）：
+     * 1. 推送 DISCONNECT 到旧连接，通知客户端触发重连流程
+     * 2. 关闭旧连接（onCompleted）
+     *
+     * 异常容错：推送失败时 try-catch 保护，不阻止后续连接清理。
+     * 不使用 PushService.pushEventToUser()：需要通过 tokenToObserver 精确推送到
+     * 即将被关闭的旧连接，而非通过 UserStreamRegistry 推送到所有设备。
      */
     private fun ensureEvictionCallbackRegistered() {
         if (!evictionCallbackRegistered) {
@@ -304,16 +415,23 @@ class ChatService(
             sessionRegistry.onEviction { token ->
                 val observer = tokenToObserver.remove(token)
                 if (observer != null) {
-                    // 构建 PUSH LOGOUT Envelope
-                    val logoutEnvelope = Envelope.newBuilder()
-                        .setDirection(Direction.PUSH)
-                        .setRequestId("")  // 系统推送无 request_id
-                        .setMessage(Message.newBuilder()
-                            .setEventType(PushEventType.LOGOUT)
-                            .setContent("相同设备类型在其他地方登录")
-                            .build())
-                        .build()
-                    observer.onNext(logoutEnvelope)
+                    // Step 1: 推送 DISCONNECT 通知（D-68）
+                    try {
+                        val disconnectEnvelope = Envelope.newBuilder()
+                            .setDirection(Direction.PUSH)
+                            .setRequestId("")  // 系统推送无 request_id
+                            .setMessage(Message.newBuilder()
+                                .setEventType(PushEventType.DISCONNECT)
+                                .setContent("连接将被关闭，请触发重连流程")
+                                .build())
+                            .build()
+                        observer.onNext(disconnectEnvelope)
+                    } catch (e: Exception) {
+                        // 连接可能已损坏，推送失败不阻塞清理
+                        logger.warn(e) { "Failed to push DISCONNECT, connection may already be broken" }
+                    }
+
+                    // Step 2: 关闭连接（触发 cleanupConnection）
                     observer.onCompleted()
                 }
             }
