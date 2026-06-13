@@ -69,7 +69,9 @@ class LeaveGroupHandlerTest {
     }
 
     @Test
-    fun `群主退群解散群并推送GROUP_DISSOLVED`() = runTest {
+    fun ownerLeaveShouldDissolveAndPushGroupDissolved() = runTest {
+        coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -103,7 +105,9 @@ class LeaveGroupHandlerTest {
     }
 
     @Test
-    fun `普通成员退群软删除自己并推送MEMBER_LEFT`() = runTest {
+    fun memberLeaveShouldSoftDeleteAndPushMemberLeft() = runTest {
+        coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -138,7 +142,9 @@ class LeaveGroupHandlerTest {
     }
 
     @Test
-    fun `非成员退群抛NOT_MEMBER`() = runTest {
+    fun leaveNonMemberShouldThrowNotMember() = runTest {
+        coEvery { conversationService.leaveGroup(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -160,8 +166,9 @@ class LeaveGroupHandlerTest {
     }
 
     @Test
-    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
-        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+    fun leaveConvNotFoundShouldThrowConvNotFound() = runTest {
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-missing", 1001L) } returns null
+        coEvery { conversationService.leaveGroup(any(), any()) } throws ConversationException(BizCode.CONV_NOT_FOUND)
 
         val req = LeaveGroupReq.newBuilder()
             .setConversationId("conv-missing")
@@ -174,7 +181,11 @@ class LeaveGroupHandlerTest {
     }
 
     @Test
-    fun `已解散群退群抛GROUP_DISSOLVED`() = runTest {
+    fun leaveDissolvedGroupShouldThrowGroupDissolved() = runTest {
+        val normalMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
+        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns normalMember
+        coEvery { conversationService.leaveGroup(any(), any()) } throws ConversationException(BizCode.GROUP_DISSOLVED)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 1; memberCount = 0
         }

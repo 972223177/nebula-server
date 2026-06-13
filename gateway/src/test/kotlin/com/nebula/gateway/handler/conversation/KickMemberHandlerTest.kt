@@ -72,7 +72,9 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `正常踢人软删除推送MEMBER_KICKED和MEMBER_LEFT`() = runTest {
+    fun kickMemberShouldSoftDeleteAndPushEvents() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } returns 2001L
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -126,7 +128,9 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `踢群主抛GROUP_PERM_DENIED`() = runTest {
+    fun kickOwnerShouldThrowGroupPermDenied() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -153,7 +157,9 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `踢自己抛INVALID_PARAM`() = runTest {
+    fun kickSelfShouldThrowInvalidParam() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
+
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
             .setUid(1001L)
@@ -166,7 +172,9 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `非群主踢人抛GROUP_PERM_DENIED`() = runTest {
+    fun nonOwnerKickShouldThrowGroupPermDenied() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -189,7 +197,9 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `被踢者非成员抛NOT_MEMBER`() = runTest {
+    fun targetNonMemberShouldThrowNotMember() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -215,8 +225,8 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
-        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+    fun kickConvNotFoundShouldThrowConvNotFound() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.CONV_NOT_FOUND)
 
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-missing")
@@ -230,7 +240,9 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `群已解散抛GROUP_DISSOLVED`() = runTest {
+    fun kickDissolvedGroupShouldThrowGroupDissolved() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_DISSOLVED)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 1; memberCount = 5
         }

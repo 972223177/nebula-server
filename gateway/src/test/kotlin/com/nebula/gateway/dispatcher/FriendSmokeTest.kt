@@ -5,13 +5,16 @@ import com.nebula.chat.Response
 import com.nebula.chat.friend.FriendAcceptReq
 import com.nebula.chat.friend.FriendAddReq
 import com.nebula.chat.friend.FriendAddResp
+import com.nebula.chat.friend.FriendBrief
 import com.nebula.chat.friend.FriendDeleteReq
 import com.nebula.chat.friend.FriendListReq
 import com.nebula.chat.friend.FriendListResp
 import com.nebula.chat.friend.FriendRejectReq
+import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendRequestsReq
 import com.nebula.chat.friend.FriendRequestsResp
 import com.nebula.common.BizCode
+import com.nebula.common.exception.FriendException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
@@ -26,30 +29,15 @@ import com.nebula.gateway.testutil.buildTestDispatcher
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.gateway.testutil.mockLockManager
-import com.nebula.gateway.testutil.mockTransactionTemplate
-import com.nebula.gateway.testutil.testUser
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.entity.FriendRequestEntity
-import com.nebula.repository.entity.FriendshipEntity
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.FriendRequestRepository
-import com.nebula.repository.repository.FriendshipRepository
-import com.nebula.repository.repository.UserRepository
+import com.nebula.service.friend.FriendAcceptResult
+import com.nebula.service.friend.FriendAddResult
 import com.nebula.service.friend.FriendService
-import com.google.protobuf.ByteString
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.PageRequest
-import java.util.Optional
 import kotlin.test.assertEquals
 
 /**
@@ -69,13 +57,6 @@ class FriendSmokeTest {
     // ========== Mock 依赖 ==========
 
     private lateinit var friendService: FriendService
-    private lateinit var friendRequestRepo: FriendRequestRepository
-    private lateinit var friendshipRepo: FriendshipRepository
-    private lateinit var conversationRepo: ConversationRepository
-    private lateinit var memberRepo: ConversationMemberRepository
-    private lateinit var userRepo: UserRepository
-    private lateinit var onlineStatusRepo: OnlineStatusRepository
-    private lateinit var privacyRepo: PrivacyRepository
     private lateinit var pushService: PushService
     private lateinit var sessionRegistry: SessionRegistry
 
@@ -92,13 +73,6 @@ class FriendSmokeTest {
     @BeforeEach
     fun setUp() {
         friendService = mockk()
-        friendRequestRepo = mockk()
-        friendshipRepo = mockk()
-        conversationRepo = mockk()
-        memberRepo = mockk()
-        userRepo = mockk(relaxed = true)
-        onlineStatusRepo = mockk()
-        privacyRepo = mockk()
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
     }
@@ -117,7 +91,7 @@ class FriendSmokeTest {
      * @return 配置好的 Dispatcher
      */
     private fun <Req : Any, Resp : Any> singleHandlerDispatcher(
-        handler: com.nebula.gateway.handler.Handler<Req, Resp>,
+        handler: Handler<Req, Resp>,
         reqClass: kotlin.reflect.KClass<Req>,
         respClass: kotlin.reflect.KClass<Resp>,
         session: Session = userA
@@ -131,15 +105,11 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `friend add - 正常申请返回requestId并推送FRIEND_REQUEST`() = runTest {
-        // Given: A 向 B 发起好友申请，无双向竞赛、无重复申请、非好友
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns null
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(2001L, 1001L, 0) } returns null
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(1001L, 2001L, 0) } returns null
-
-        val savedRequest = FriendRequestEntity(fromUid = 1001L, toUid = 2001L, status = 0, message = "你好")
-        savedRequest.id = 42L
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } returns savedRequest
+    fun friendAddShouldReturnRequestIdAndPushFriendRequest() = runTest {
+        // Given: A 向 B 发起好友申请
+        coEvery { friendService.addFriend(any(), any()) } returns FriendAddResult(
+            requestId = 42L, isMutualAccept = false, convId = null, fromUid = 1001L, toUid = 2001L
+        )
 
         val dispatcher = singleHandlerDispatcher(
             FriendAddHandler(friendService, pushService, mockLockManager()),
@@ -151,19 +121,20 @@ class FriendSmokeTest {
             FriendAddReq.newBuilder().setToUid(2001L).setMessage("你好").build())
 
         // Then
-        assertEquals(200, response.code, "正常申请应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "正常申请应返回 200")
         assertEquals(42L, FriendAddResp.parseFrom(response.result).requestId)
         coVerify(exactly = 1) {
-            pushService.pushEventToUser(2001L, PushEventType.FRIEND_REQUEST, any<ByteString>())
+            pushService.pushEventToUser(2001L, PushEventType.FRIEND_REQUEST, any())
         }
     }
 
     @Test
-    fun `friend add - 自我申请返回SELF_FRIEND`() = runTest {
+    fun friendAddSelfApplicationShouldReturnSelfFriend() = runTest {
         val dispatcher = singleHandlerDispatcher(
             FriendAddHandler(friendService, pushService, mockLockManager()),
             FriendAddReq::class, FriendAddResp::class
         )
+        coEvery { friendService.addFriend(any(), any()) } throws FriendException(BizCode.SELF_FRIEND)
 
         val response = dispatcher.dispatchAs("friend/add",
             FriendAddReq.newBuilder().setToUid(1001L).setMessage("加自己").build())
@@ -172,18 +143,11 @@ class FriendSmokeTest {
     }
 
     @Test
-    fun `friend add - 双向竞赛自动创建好友关系并推送FRIEND_ACCEPTED`() = runTest {
-        // Given: A 向 B 申请时，B 已向 A 发送了 pending 申请
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns null
-        val reverseRequest = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0)
-        reverseRequest.id = 5L
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(2001L, 1001L, 0) } returns reverseRequest
-        coEvery { conversationRepo.findById(abConvId) } returns Optional.empty()
-        coEvery { memberRepo.findByConversationIdAndUserId(abConvId, any()) } returns null
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } answers { firstArg() }
-        coEvery { friendshipRepo.save(any<FriendshipEntity>()) } answers { firstArg() }
-        coEvery { conversationRepo.save(any<ConversationEntity>()) } answers { firstArg() }
-        coEvery { memberRepo.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+    fun friendAddMutualShouldCreateFriendshipAndPushAccepted() = runTest {
+        // Given: 双向竞赛场景
+        coEvery { friendService.addFriend(any(), any()) } returns FriendAddResult(
+            requestId = 5L, isMutualAccept = true, convId = abConvId, fromUid = 1001L, toUid = 2001L
+        )
 
         val dispatcher = singleHandlerDispatcher(
             FriendAddHandler(friendService, pushService, mockLockManager()),
@@ -193,10 +157,10 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/add",
             FriendAddReq.newBuilder().setToUid(2001L).setMessage("你好").build())
 
-        assertEquals(200, response.code, "双向竞赛应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "双向竞赛应返回 200")
         assertEquals(5L, FriendAddResp.parseFrom(response.result).requestId)
         coVerify(exactly = 2) {
-            pushService.pushEventToUser(any(), eq(PushEventType.FRIEND_ACCEPTED), any<ByteString>())
+            pushService.pushEventToUser(any(), eq(PushEventType.FRIEND_ACCEPTED), any())
         }
     }
 
@@ -205,18 +169,11 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `friend accept - 正常接受创建好友关系并推送FRIEND_ACCEPTED`() = runTest {
+    fun friendAcceptShouldCreateFriendshipAndPushAccepted() = runTest {
         // Given: 存在 pending 好友申请，A 接受
-        val request = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0)
-        request.id = 10L
-        coEvery { friendRequestRepo.findById(10L) } returns Optional.of(request)
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns null
-        coEvery { conversationRepo.findById(abConvId) } returns Optional.empty()
-        coEvery { memberRepo.findByConversationIdAndUserId(abConvId, any()) } returns null
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } answers { firstArg() }
-        coEvery { friendshipRepo.save(any<FriendshipEntity>()) } answers { firstArg() }
-        coEvery { conversationRepo.save(any<ConversationEntity>()) } answers { firstArg() }
-        coEvery { memberRepo.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+        coEvery { friendService.acceptFriendRequest(any(), any()) } returns FriendAcceptResult(
+            fromUid = 2001L, toUid = 1001L, convId = abConvId
+        )
 
         val dispatcher = singleHandlerDispatcher(
             FriendAcceptHandler(friendService, pushService, mockLockManager()),
@@ -226,15 +183,15 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/accept",
             FriendAcceptReq.newBuilder().setRequestId(10L).build())
 
-        assertEquals(200, response.code, "接受申请应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "接受申请应返回 200")
         coVerify(exactly = 2) {
-            pushService.pushEventToUser(any(), eq(PushEventType.FRIEND_ACCEPTED), any<ByteString>())
+            pushService.pushEventToUser(any(), eq(PushEventType.FRIEND_ACCEPTED), any())
         }
     }
 
     @Test
-    fun `friend accept - 请求不存在返回REQUEST_NOT_FOUND`() = runTest {
-        coEvery { friendRequestRepo.findById(999L) } returns Optional.empty()
+    fun friendAcceptWithNonExistentRequestShouldReturnNotFound() = runTest {
+        coEvery { friendService.acceptFriendRequest(any(), any()) } throws FriendException(BizCode.REQUEST_NOT_FOUND)
 
         val dispatcher = singleHandlerDispatcher(
             FriendAcceptHandler(friendService, pushService, mockLockManager()),
@@ -252,12 +209,8 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `friend reject - 正常拒绝返回200`() = runTest {
-        // Given: 存在 pending 好友申请，A 拒绝
-        val request = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0)
-        request.id = 10L
-        coEvery { friendRequestRepo.findById(10L) } returns Optional.of(request)
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } answers { firstArg() }
+    fun friendRejectShouldReturn200() = runTest {
+        coEvery { friendService.rejectFriendRequest(any(), any()) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
             FriendRejectHandler(friendService),
@@ -267,13 +220,12 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/reject",
             FriendRejectReq.newBuilder().setRequestId(10L).build())
 
-        assertEquals(200, response.code, "拒绝申请应返回 200")
-        assertEquals(2, request.status, "申请状态应为 rejected(2)")
+        assertEquals(BizCode.OK.code, response.code, "拒绝申请应返回 200")
     }
 
     @Test
-    fun `friend reject - 请求不存在返回REQUEST_NOT_FOUND`() = runTest {
-        coEvery { friendRequestRepo.findById(999L) } returns Optional.empty()
+    fun friendRejectWithNonExistentRequestShouldReturnNotFound() = runTest {
+        coEvery { friendService.rejectFriendRequest(any(), any()) } throws FriendException(BizCode.REQUEST_NOT_FOUND)
 
         val dispatcher = singleHandlerDispatcher(
             FriendRejectHandler(friendService),
@@ -287,10 +239,8 @@ class FriendSmokeTest {
     }
 
     @Test
-    fun `friend reject - 已处理的申请返回REQUEST_HANDLED`() = runTest {
-        val request = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 1) // 已接受
-        request.id = 10L
-        coEvery { friendRequestRepo.findById(10L) } returns Optional.of(request)
+    fun friendRejectHandledRequestShouldReturnRequestHandled() = runTest {
+        coEvery { friendService.rejectFriendRequest(any(), any()) } throws FriendException(BizCode.REQUEST_HANDLED)
 
         val dispatcher = singleHandlerDispatcher(
             FriendRejectHandler(friendService),
@@ -308,12 +258,8 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `friend delete - 正常删除返回200`() = runTest {
-        // Given: A 和 B 已是好友
-        val friendship = FriendshipEntity(userId = 1001L, friendId = 2001L)
-        friendship.deleted = 0
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns friendship
-        coEvery { friendshipRepo.save(any<FriendshipEntity>()) } answers { firstArg() }
+    fun friendDeleteShouldReturn200() = runTest {
+        coEvery { friendService.deleteFriend(any(), any()) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
             FriendDeleteHandler(friendService),
@@ -323,13 +269,12 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/delete",
             FriendDeleteReq.newBuilder().setUid(2001L).build())
 
-        assertEquals(200, response.code, "删除好友应返回 200")
-        assertEquals(1, friendship.deleted, "好友关系应为软删除状态")
+        assertEquals(BizCode.OK.code, response.code, "删除好友应返回 200")
     }
 
     @Test
-    fun `friend delete - 好友不存在返回FRIEND_NOT_FOUND`() = runTest {
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns null
+    fun friendDeleteNotFoundShouldReturnFriendNotFound() = runTest {
+        coEvery { friendService.deleteFriend(any(), any()) } throws FriendException(BizCode.FRIEND_NOT_FOUND)
 
         val dispatcher = singleHandlerDispatcher(
             FriendDeleteHandler(friendService),
@@ -347,19 +292,12 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `friend list - 正常查询返回好友列表`() = runTest {
+    fun friendListShouldReturnFriendList() = runTest {
         // Given: A 有 2 个好友 B 和 C
-        val fb1 = FriendshipEntity(userId = 1001L, friendId = 2001L).apply { deleted = 0 }
-        val fb2 = FriendshipEntity(userId = 1001L, friendId = 3001L).apply { deleted = 0 }
-        coEvery {
-            friendshipRepo.findFriendsByUserId(1001L, 0L, PageRequest.of(0, 20))
-        } returns listOf(fb1, fb2)
-        coEvery { userRepo.findAllById(listOf(2001L, 3001L)) } returns listOf(
-            testUser(2001L, "userb", "用户B"),
-            testUser(3001L, "userc", "用户C")
-        )
-        coEvery { privacyRepo.batchGetHideOnlineStatus(listOf(2001L, 3001L)) } returns emptySet()
-        coEvery { onlineStatusRepo.batchGetStatus(listOf(2001L, 3001L)) } returns emptyMap()
+        coEvery { friendService.listFriends(any(), any()) } returns FriendListResp.newBuilder()
+            .addFriends(FriendBrief.newBuilder().setUid(2001L).build())
+            .addFriends(FriendBrief.newBuilder().setUid(3001L).build())
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             FriendListHandler(friendService),
@@ -369,15 +307,13 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/list",
             FriendListReq.newBuilder().setLimit(20).build())
 
-        assertEquals(200, response.code, "好友列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "好友列表应返回 200")
         assertEquals(2, FriendListResp.parseFrom(response.result).friendsCount, "应有 2 个好友")
     }
 
     @Test
-    fun `friend list - 空列表返回200`() = runTest {
-        coEvery {
-            friendshipRepo.findFriendsByUserId(1001L, 0L, PageRequest.of(0, 20))
-        } returns emptyList()
+    fun friendListEmptyShouldReturn200() = runTest {
+        coEvery { friendService.listFriends(any(), any()) } returns FriendListResp.getDefaultInstance()
 
         val dispatcher = singleHandlerDispatcher(
             FriendListHandler(friendService),
@@ -387,7 +323,7 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/list",
             FriendListReq.newBuilder().setLimit(20).build())
 
-        assertEquals(200, response.code, "空好友列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "空好友列表应返回 200")
         assertEquals(0, FriendListResp.parseFrom(response.result).friendsCount)
     }
 
@@ -396,19 +332,12 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `friend requests - 正常查询返回pending申请列表`() = runTest {
+    fun friendRequestsShouldReturnPendingList() = runTest {
         // Given: A 有 2 个待处理的好友申请
-        val req1 = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0, message = "你好")
-        req1.id = 10L
-        val req2 = FriendRequestEntity(fromUid = 3001L, toUid = 1001L, status = 0, message = "加好友")
-        req2.id = 11L
-        coEvery {
-            friendRequestRepo.findByToUidAndStatusOrderByCreatedAtDesc(1001L, 0)
-        } returns listOf(req1, req2)
-        coEvery { userRepo.findAllById(listOf(2001L, 3001L)) } returns listOf(
-            testUser(2001L, "userb", "用户B"),
-            testUser(3001L, "userc", "用户C")
-        )
+        coEvery { friendService.getFriendRequests(any(), any()) } returns FriendRequestsResp.newBuilder()
+            .addRequests(FriendRequestItem.newBuilder().setRequestId(10L).build())
+            .addRequests(FriendRequestItem.newBuilder().setRequestId(11L).build())
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             FriendRequestsHandler(friendService),
@@ -418,15 +347,13 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/requests",
             FriendRequestsReq.getDefaultInstance())
 
-        assertEquals(200, response.code, "申请列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "申请列表应返回 200")
         assertEquals(2, FriendRequestsResp.parseFrom(response.result).requestsCount, "应有 2 个待处理申请")
     }
 
     @Test
-    fun `friend requests - 无申请返回空列表`() = runTest {
-        coEvery {
-            friendRequestRepo.findByToUidAndStatusOrderByCreatedAtDesc(1001L, 0)
-        } returns emptyList()
+    fun friendRequestsEmptyShouldReturnEmptyList() = runTest {
+        coEvery { friendService.getFriendRequests(any(), any()) } returns FriendRequestsResp.getDefaultInstance()
 
         val dispatcher = singleHandlerDispatcher(
             FriendRequestsHandler(friendService),
@@ -436,7 +363,7 @@ class FriendSmokeTest {
         val response = dispatcher.dispatchAs("friend/requests",
             FriendRequestsReq.getDefaultInstance())
 
-        assertEquals(200, response.code, "空列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "空列表应返回 200")
         assertEquals(0, FriendRequestsResp.parseFrom(response.result).requestsCount)
     }
 
@@ -445,7 +372,7 @@ class FriendSmokeTest {
     // ===================================================================
 
     @Test
-    fun `完整流程 - 好友全链路冒烟`() = runTest {
+    fun fullFlowShouldCompleteFriendLifecycle() = runTest {
         // 预创建所有 Handler
         val addHandler = FriendAddHandler(
             friendService, pushService, mockLockManager()
@@ -472,87 +399,65 @@ class FriendSmokeTest {
         val dispatcherC = buildTestDispatcher(registry, session = userC, sessionRegistry = sessionRegistry)
 
         // ---- 步骤 1: B 向 A 发送好友申请 ----
-        val savedBtoA = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0, message = "B想加A")
-        savedBtoA.id = 100L
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns null
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(1001L, 2001L, 0) } returns null
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(2001L, 1001L, 0) } returns null
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } returns savedBtoA
+        coEvery { friendService.addFriend(any(), any()) } returns FriendAddResult(
+            requestId = 100L, isMutualAccept = false, convId = null, fromUid = 2001L, toUid = 1001L
+        )
 
         val step1Resp = dispatcherB.dispatchAs("friend/add",
             FriendAddReq.newBuilder().setToUid(1001L).setMessage("B想加A").build())
-        assertEquals(200, step1Resp.code, "步骤1: B向A申请应返回 200")
+        assertEquals(BizCode.OK.code, step1Resp.code, "步骤1: B向A申请应返回 200")
         assertEquals(100L, FriendAddResp.parseFrom(step1Resp.result).requestId)
 
         // ---- 步骤 2: A 接受 B 的申请 ----
-        val requestEntity = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0, message = "B想加A")
-        requestEntity.id = 100L
-        coEvery { friendRequestRepo.findById(100L) } returns Optional.of(requestEntity)
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns null
-        coEvery { conversationRepo.findById(abConvId) } returns Optional.empty()
-        coEvery { memberRepo.findByConversationIdAndUserId(abConvId, any()) } returns null
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } answers { firstArg() }
-        coEvery { friendshipRepo.save(any<FriendshipEntity>()) } answers { firstArg() }
-        coEvery { conversationRepo.save(any<ConversationEntity>()) } answers { firstArg() }
-        coEvery { memberRepo.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+        coEvery { friendService.acceptFriendRequest(any(), any()) } returns FriendAcceptResult(
+            fromUid = 2001L, toUid = 1001L, convId = abConvId
+        )
 
         val step2Resp = dispatcherA.dispatchAs("friend/accept",
             FriendAcceptReq.newBuilder().setRequestId(100L).build())
-        assertEquals(200, step2Resp.code, "步骤2: A接受申请应返回 200")
+        assertEquals(BizCode.OK.code, step2Resp.code, "步骤2: A接受申请应返回 200")
 
         // ---- 步骤 3: A 查看好友列表（应有 B） ----
-        val fbAB = FriendshipEntity(userId = 1001L, friendId = 2001L).apply { deleted = 0 }
-        coEvery { friendshipRepo.findFriendsByUserId(1001L, 0L, PageRequest.of(0, 20)) } returns listOf(fbAB)
-        coEvery { userRepo.findAllById(listOf(2001L)) } returns listOf(testUser(2001L, "userb", "用户B"))
-        coEvery { privacyRepo.batchGetHideOnlineStatus(listOf(2001L)) } returns emptySet()
-        coEvery { onlineStatusRepo.batchGetStatus(listOf(2001L)) } returns emptyMap()
+        coEvery { friendService.listFriends(any(), any()) } returns FriendListResp.newBuilder()
+            .addFriends(FriendBrief.newBuilder().setUid(2001L).build())
+            .build()
 
         val step3Resp = dispatcherA.dispatchAs("friend/list",
             FriendListReq.newBuilder().setLimit(20).build())
-        assertEquals(200, step3Resp.code, "步骤3: 好友列表应返回 200")
+        assertEquals(BizCode.OK.code, step3Resp.code, "步骤3: 好友列表应返回 200")
         assertEquals(1, FriendListResp.parseFrom(step3Resp.result).friendsCount, "步骤3: 应有 1 个好友")
 
         // ---- 步骤 4: C 向 A 发申请，A 查看待处理列表 ----
-        val reqCtoA = FriendRequestEntity(fromUid = 3001L, toUid = 1001L, status = 0, message = "C加A")
-        reqCtoA.id = 101L
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(1001L, 3001L, 0) } returns null
-        coEvery { friendRequestRepo.findByFromUidAndToUidAndStatus(3001L, 1001L, 0) } returns null
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 3001L) } returns null
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } returns reqCtoA
+        coEvery { friendService.addFriend(any(), any()) } returns FriendAddResult(
+            requestId = 101L, isMutualAccept = false, convId = null, fromUid = 3001L, toUid = 1001L
+        )
 
         val step4aResp = dispatcherC.dispatchAs("friend/add",
             FriendAddReq.newBuilder().setToUid(1001L).setMessage("C加A").build())
-        assertEquals(200, step4aResp.code, "步骤4a: C向A申请应返回 200")
+        assertEquals(BizCode.OK.code, step4aResp.code, "步骤4a: C向A申请应返回 200")
 
         // A 查看待处理列表
-        coEvery {
-            friendRequestRepo.findByToUidAndStatusOrderByCreatedAtDesc(1001L, 0)
-        } returns listOf(reqCtoA)
-        coEvery { userRepo.findAllById(listOf(3001L)) } returns listOf(testUser(3001L, "userc", "用户C"))
+        coEvery { friendService.getFriendRequests(any(), any()) } returns FriendRequestsResp.newBuilder()
+            .addRequests(FriendRequestItem.newBuilder().setRequestId(101L).build())
+            .build()
 
         val step4bResp = dispatcherA.dispatchAs("friend/requests",
             FriendRequestsReq.getDefaultInstance())
-        assertEquals(200, step4bResp.code, "步骤4b: 待处理列表应返回 200")
+        assertEquals(BizCode.OK.code, step4bResp.code, "步骤4b: 待处理列表应返回 200")
         assertEquals(1, FriendRequestsResp.parseFrom(step4bResp.result).requestsCount, "步骤4b: 应有 1 个待处理申请")
 
         // ---- 步骤 5: A 拒绝 C 的申请 ----
-        val rejectEntity = FriendRequestEntity(fromUid = 3001L, toUid = 1001L, status = 0, message = "C加A")
-        rejectEntity.id = 101L
-        coEvery { friendRequestRepo.findById(101L) } returns Optional.of(rejectEntity)
-        coEvery { friendRequestRepo.save(any<FriendRequestEntity>()) } answers { firstArg() }
+        coEvery { friendService.rejectFriendRequest(any(), any()) } returns Unit
 
         val step5Resp = dispatcherA.dispatchAs("friend/reject",
             FriendRejectReq.newBuilder().setRequestId(101L).build())
-        assertEquals(200, step5Resp.code, "步骤5: A拒绝C应返回 200")
+        assertEquals(BizCode.OK.code, step5Resp.code, "步骤5: A拒绝C应返回 200")
 
         // ---- 步骤 6: A 删除好友 B ----
-        val friendshipAB = FriendshipEntity(userId = 1001L, friendId = 2001L).apply { deleted = 0 }
-        coEvery { friendshipRepo.findByUserIdAndFriendId(1001L, 2001L) } returns friendshipAB
-        coEvery { friendshipRepo.save(any<FriendshipEntity>()) } answers { firstArg() }
+        coEvery { friendService.deleteFriend(any(), any()) } returns Unit
 
         val step6Resp = dispatcherA.dispatchAs("friend/delete",
             FriendDeleteReq.newBuilder().setUid(2001L).build())
-        assertEquals(200, step6Resp.code, "步骤6: A删除好友B应返回 200")
-        assertEquals(1, friendshipAB.deleted, "步骤6: 好友关系应为软删除")
+        assertEquals(BizCode.OK.code, step6Resp.code, "步骤6: A删除好友B应返回 200")
     }
 }

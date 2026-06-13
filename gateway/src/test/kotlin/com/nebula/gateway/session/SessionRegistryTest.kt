@@ -40,7 +40,7 @@ class SessionRegistryTest {
     }
 
     @Test
-    fun `validate returns session from L1 cache`() = runTest {
+    fun validateReturnsSessionFromL1Cache() = runTest {
         // 先注册到 L1（模拟已登录状态）
         registry.addToLocalCache(testSession)
 
@@ -54,7 +54,7 @@ class SessionRegistryTest {
     }
 
     @Test
-    fun `validate queries L2 when L1 misses`() = runTest {
+    fun validateQueriesL2WhenL1Misses() = runTest {
         // L1 未命中，Mock L2 返回 Session 的 JSON
         val sessionJson = """{"userId":1001,"token":"test-token-abc","deviceType":"android","deviceId":"device-001","connectionId":"conn-001"}"""
         coEvery { sessionRepository.findByToken(testSession.token) } returns sessionJson
@@ -72,7 +72,7 @@ class SessionRegistryTest {
     }
 
     @Test
-    fun `register stores to L1 and L2`() = runTest {
+    fun registerStoresToL1AndL2() = runTest {
         coEvery { sessionRepository.save(any(), any()) } returns Unit
 
         registry.register(testSession)
@@ -87,7 +87,7 @@ class SessionRegistryTest {
     }
 
     @Test
-    fun `unregister triggers eviction callbacks`() = runTest {
+    fun unregisterTriggersEvictionCallbacks() = runTest {
         coEvery { sessionRepository.delete(any()) } returns Unit
         registry.addToLocalCache(testSession)
 

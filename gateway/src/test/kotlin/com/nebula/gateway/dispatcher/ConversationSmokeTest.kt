@@ -3,6 +3,7 @@ package com.nebula.gateway.dispatcher
 import com.nebula.chat.Response
 import com.nebula.chat.conversation.ConvListReq
 import com.nebula.chat.conversation.ConvListResp
+import com.nebula.chat.conversation.ConversationBrief
 import com.nebula.chat.conversation.CreateGroupReq
 import com.nebula.chat.conversation.CreateGroupResp
 import com.nebula.chat.conversation.EditGroupReq
@@ -11,7 +12,9 @@ import com.nebula.chat.conversation.GroupMembersResp
 import com.nebula.chat.conversation.InviteMemberReq
 import com.nebula.chat.conversation.KickMemberReq
 import com.nebula.chat.conversation.LeaveGroupReq
+import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
+import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
@@ -31,23 +34,15 @@ import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.gateway.testutil.testConversation
 import com.nebula.gateway.testutil.testMember
 import com.nebula.gateway.testutil.testUser
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.conversation.ConversationService
+import com.nebula.service.conversation.CreateGroupResult
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import io.mockk.runs
-import java.util.Optional
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.PageRequest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -68,9 +63,7 @@ class ConversationSmokeTest {
     // ========== Mock 依赖 ==========
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationRepository: ConversationRepository
     private lateinit var conversationMemberRepository: ConversationMemberRepository
-    private lateinit var userRepository: UserRepository
     private lateinit var pushService: PushService
     private lateinit var sessionRegistry: SessionRegistry
 
@@ -89,9 +82,7 @@ class ConversationSmokeTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationRepository = mockk()
         conversationMemberRepository = mockk()
-        userRepository = mockk()
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
     }
@@ -126,10 +117,8 @@ class ConversationSmokeTest {
     // ---------- conversation/list ----------
 
     @Test
-    fun `conversation list - 空列表返回200`() = runTest {
-        coEvery {
-            conversationRepository.findConversationsByUserId(1001L, null, any<PageRequest>())
-        } returns emptyList()
+    fun conversationListEmptyShouldReturn200() = runTest {
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns ConvListResp.getDefaultInstance()
 
         val dispatcher = singleHandlerDispatcher(
             ListConversationsHandler(conversationService),
@@ -139,23 +128,17 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/list",
             ConvListReq.newBuilder().setLimit(20).build())
 
-        assertEquals(200, response.code, "空会话列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "空会话列表应返回 200")
         val resp = ConvListResp.parseFrom(response.result)
         assertEquals(0, resp.conversationsCount, "空列表应有 0 个会话")
         assertEquals(false, resp.hasMore, "空列表 hasMore 应为 false")
     }
 
     @Test
-    fun `conversation list - 有会话返回列表`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        coEvery {
-            conversationRepository.findConversationsByUserId(1001L, null, any<PageRequest>())
-        } returns listOf(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdsAndUserId(any(), 1001L)
-        } returns listOf(
-            testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        )
+    fun conversationListShouldReturnList() = runTest {
+        coEvery { conversationService.listConversations(any(), any(), any()) } returns ConvListResp.newBuilder()
+            .addConversations(ConversationBrief.newBuilder().setConversationId(testConvId).setName(testGroupName).build())
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             ListConversationsHandler(conversationService),
@@ -165,16 +148,20 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/list",
             ConvListReq.newBuilder().setLimit(20).build())
 
-        assertEquals(200, response.code, "会话列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "会话列表应返回 200")
         assertEquals(1, ConvListResp.parseFrom(response.result).conversationsCount, "应有 1 个会话")
     }
 
     // ---------- conversation/create_group ----------
 
     @Test
-    fun `create group - 正常创建返回conversationId`() = runTest {
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+    fun createGroupShouldReturnConversationId() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } returns CreateGroupResult(
+            convId = testConvId,
+            name = "新测试群",
+            ownerUid = 1001L,
+            memberUids = listOf(2001L, 3001L)
+        )
 
         val dispatcher = singleHandlerDispatcher(
             CreateGroupHandler(conversationService, mockLockManager(), pushService),
@@ -184,7 +171,7 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/create_group",
             CreateGroupReq.newBuilder().setName("新测试群").addAllMemberUids(listOf(2001L, 3001L)).build())
 
-        assertEquals(200, response.code, "创建群聊应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "创建群聊应返回 200")
         val resp = CreateGroupResp.parseFrom(response.result)
         assertTrue(resp.conversationId.isNotEmpty(), "conversationId 不应为空")
         assertEquals("新测试群", resp.name, "群名称应匹配")
@@ -192,7 +179,9 @@ class ConversationSmokeTest {
     }
 
     @Test
-    fun `create group - name为空返回非200`() = runTest {
+    fun createGroupWithEmptyNameShouldReturnNon200() = runTest {
+        coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
+
         val dispatcher = singleHandlerDispatcher(
             CreateGroupHandler(conversationService, mockLockManager(), pushService),
             CreateGroupReq::class, CreateGroupResp::class
@@ -201,17 +190,18 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/create_group",
             CreateGroupReq.newBuilder().setName("").build())
 
-        assertTrue(response.code != 200, "空名称应返回非 200 错误码")
+        assertEquals(BizCode.INVALID_PARAM.code, response.code, "空名称应返回 INVALID_PARAM")
     }
 
     @Test
-    fun `create group - 成员数超上限返回GROUP_FULL`() = runTest {
+    fun createGroupExceedsLimitShouldReturnGroupFull() = runTest {
         val dispatcher = singleHandlerDispatcher(
             CreateGroupHandler(conversationService, mockLockManager(), pushService),
             CreateGroupReq::class, CreateGroupResp::class
         )
 
         val tooManyMembers = (2001L..2201L).toList()
+        coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.GROUP_FULL)
         val response = dispatcher.dispatchAs("conversation/create_group",
             CreateGroupReq.newBuilder().setName("超大群").addAllMemberUids(tooManyMembers).build())
 
@@ -221,22 +211,14 @@ class ConversationSmokeTest {
     // ---------- conversation/group_members ----------
 
     @Test
-    fun `group members - 成员可查看成员列表`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-
-        val owner = testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        val member1 = testMember(testConvId, 2001L)
-        val member2 = testMember(testConvId, 3001L)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns owner
-        coEvery { conversationMemberRepository.findByConversationId(testConvId) } returns listOf(owner, member1, member2)
-        every { userRepository.findAllById(listOf(1001L, 2001L, 3001L)) } returns listOf(
-            testUser(1001L, "owner", "群主"),
-            testUser(2001L, "member1", "成员1"),
-            testUser(3001L, "member2", "成员2")
-        )
+    fun groupMembersShouldReturnMemberList() = runTest {
+        coEvery { conversationService.getGroupMembers(any(), any()) } returns GroupMembersResp.newBuilder()
+            .addAllMembers(listOf(
+                GroupMember.newBuilder().setUid(1001L).setRole("owner").build(),
+                GroupMember.newBuilder().setUid(2001L).setRole("member").build(),
+                GroupMember.newBuilder().setUid(3001L).setRole("member").build()
+            ))
+            .build()
 
         val dispatcher = singleHandlerDispatcher(
             GroupMembersHandler(conversationService),
@@ -246,17 +228,13 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/group_members",
             GroupMembersReq.newBuilder().setConversationId(testConvId).build())
 
-        assertEquals(200, response.code, "成员查看列表应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "成员查看列表应返回 200")
         assertEquals(3, GroupMembersResp.parseFrom(response.result).membersCount, "应有 3 个成员")
     }
 
     @Test
-    fun `group members - 非成员返回NOT_MEMBER`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 3001L)
-        } returns null  // 非成员
+    fun groupMembersNonMemberShouldReturnNotMember() = runTest {
+        coEvery { conversationService.getGroupMembers(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
 
         val dispatcher = singleHandlerDispatcher(
             GroupMembersHandler(conversationService),
@@ -273,13 +251,8 @@ class ConversationSmokeTest {
     // ---------- conversation/edit_group_info ----------
 
     @Test
-    fun `edit group - 群主修改名称返回200`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+    fun editGroupOwnerShouldReturn200() = runTest {
+        coEvery { conversationService.editGroupInfo(any(), any()) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
             EditGroupHandler(conversationService, pushService),
@@ -289,17 +262,13 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/edit_group_info",
             EditGroupReq.newBuilder().setConversationId(testConvId).setName("新群名称").build())
 
-        assertEquals(200, response.code, "群主修改名称应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "群主修改名称应返回 200")
         coVerify(exactly = 1) { pushService.pushConversationEvent(any(), any(), any(), any<Set<Long>>()) }
     }
 
     @Test
-    fun `edit group - 非群主返回GROUP_PERM_DENIED`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 2001L)
-        } returns testMember(testConvId, 2001L)  // 普通成员
+    fun editGroupNonOwnerShouldReturnGroupPermDenied() = runTest {
+        coEvery { conversationService.editGroupInfo(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
 
         val dispatcher = singleHandlerDispatcher(
             EditGroupHandler(conversationService, pushService),
@@ -316,18 +285,8 @@ class ConversationSmokeTest {
     // ---------- conversation/invite_member ----------
 
     @Test
-    fun `invite member - 正常邀请返回200`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserIds(testConvId, listOf(4001L))
-        } returns emptyList()
-        coEvery { conversationMemberRepository.countActiveByConversationId(testConvId) } returns 3
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+    fun inviteMemberShouldReturn200() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } returns listOf(4001L)
 
         val dispatcher = singleHandlerDispatcher(
             InviteMemberHandler(conversationService,
@@ -338,17 +297,13 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/invite_member",
             InviteMemberReq.newBuilder().setConversationId(testConvId).addAllUids(listOf(4001L)).build())
 
-        assertEquals(200, response.code, "邀请成员应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "邀请成员应返回 200")
         coVerify(exactly = 1) { pushService.pushConversationEvent(any(), any(), any(), any<Set<Long>>()) }
     }
 
     @Test
-    fun `invite member - 非成员无法邀请`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 3001L)
-        } returns null  // outsider
+    fun inviteMemberNonMemberShouldReturnError() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
 
         val dispatcher = singleHandlerDispatcher(
             InviteMemberHandler(conversationService,
@@ -366,16 +321,11 @@ class ConversationSmokeTest {
     // ---------- conversation/leave_group ----------
 
     @Test
-    fun `leave group - 普通成员退群返回200`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
+    fun leaveGroupMemberShouldReturn200() = runTest {
         coEvery {
             conversationMemberRepository.findByConversationIdAndUserId(testConvId, 2001L)
         } returns testMember(testConvId, 2001L)
-        coEvery {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId(testConvId, 2001L)
-        } just runs
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
             LeaveGroupHandler(conversationService,
@@ -387,20 +337,15 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/leave_group",
             LeaveGroupReq.newBuilder().setConversationId(testConvId).build())
 
-        assertEquals(200, response.code, "成员退群应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "成员退群应返回 200")
     }
 
     @Test
-    fun `leave group - 群主退群触发解散`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
+    fun leaveGroupOwnerShouldDissolveGroup() = runTest {
         coEvery {
             conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
         } returns testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        coEvery {
-            conversationMemberRepository.softDeleteAllByConversationId(testConvId)
-        } just runs
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
         val dispatcher = singleHandlerDispatcher(
             LeaveGroupHandler(conversationService,
@@ -411,26 +356,15 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/leave_group",
             LeaveGroupReq.newBuilder().setConversationId(testConvId).build())
 
-        assertEquals(200, response.code, "群主退群应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "群主退群应返回 200")
         coVerify(exactly = 1) { pushService.pushConversationEvent(any(), any(), any(), any<Set<Long>>()) }
     }
 
     // ---------- conversation/kick_member ----------
 
     @Test
-    fun `kick member - 群主踢人返回200`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 2001L)
-        } returns testMember(testConvId, 2001L)
-        coEvery {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId(testConvId, 2001L)
-        } just runs
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+    fun kickMemberOwnerShouldReturn200() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } returns 2001L
 
         val dispatcher = singleHandlerDispatcher(
             KickMemberHandler(conversationService,
@@ -441,18 +375,14 @@ class ConversationSmokeTest {
         val response = dispatcher.dispatchAs("conversation/kick_member",
             KickMemberReq.newBuilder().setConversationId(testConvId).setUid(2001L).build())
 
-        assertEquals(200, response.code, "群主踢人应返回 200")
+        assertEquals(BizCode.OK.code, response.code, "群主踢人应返回 200")
         coVerify(exactly = 1) { pushService.pushEventToUser(any(), any(), any()) }
         coVerify(exactly = 1) { pushService.pushConversationEvent(any(), any(), any(), any<Set<Long>>()) }
     }
 
     @Test
-    fun `kick member - 非群主踢人返回GROUP_PERM_DENIED`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 2001L)
-        } returns testMember(testConvId, 2001L)  // 普通成员尝试踢人
+    fun kickMemberNonOwnerShouldReturnGroupPermDenied() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
 
         val dispatcher = singleHandlerDispatcher(
             KickMemberHandler(conversationService,
@@ -468,16 +398,8 @@ class ConversationSmokeTest {
     }
 
     @Test
-    fun `kick member - 踢群主返回GROUP_PERM_DENIED`() = runTest {
-        val conv = testConversation(testConvId, testGroupName)
-        every { conversationRepository.findById(any()) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        // 目标成员也是群主（反踢群主）
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1002L)
-        } returns ConversationMemberEntity(testConvId, 1002L, "owner").apply { id = 5L }
+    fun kickMemberTargetingOwnerShouldReturnGroupPermDenied() = runTest {
+        coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
 
         val dispatcher = singleHandlerDispatcher(
             KickMemberHandler(conversationService,
@@ -496,7 +418,7 @@ class ConversationSmokeTest {
     // ===================================================================
 
     @Test
-    fun `完整流程 - 创建群聊→查看成员→修改名称→邀请成员→踢人→退群`() = runTest {
+    fun fullFlowShouldCreateGroupThroughAllOperations() = runTest {
         val lockManager = mockLockManager()
         val transactionTemplate = mockTransactionTemplate()
 
@@ -528,81 +450,65 @@ class ConversationSmokeTest {
         val dispatcher = buildTestDispatcher(registry, session = ownerSession, sessionRegistry = sessionRegistry)
 
         // ---- 创建群聊 ----
-        val conv = testConversation(testConvId, "综合测试群")
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-
-        // ---- 查看成员 ----
-        val owner = testMember(testConvId, 1001L, "owner").apply { id = 1L }
-        val member1 = testMember(testConvId, 2001L)
-        val member2 = testMember(testConvId, 3001L)
-        coEvery { conversationMemberRepository.findByConversationId(testConvId) } returns listOf(owner, member1, member2)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns owner
-        every { userRepository.findAllById(any<List<Long>>()) } returns listOf(
-            testUser(1001L, "owner", "群主"),
-            testUser(2001L, "m1", "成员1"),
-            testUser(3001L, "m2", "成员2")
+        coEvery { conversationService.createGroup(any(), any()) } returns CreateGroupResult(
+            convId = testConvId,
+            name = "综合测试群",
+            ownerUid = 1001L,
+            memberUids = listOf(2001L, 3001L)
         )
 
+        // ---- 查看成员 ----
+        coEvery { conversationService.getGroupMembers(any(), any()) } returns GroupMembersResp.newBuilder()
+            .addAllMembers(listOf(
+                GroupMember.newBuilder().setUid(1001L).setRole("owner").build(),
+                GroupMember.newBuilder().setUid(2001L).setRole("member").build(),
+                GroupMember.newBuilder().setUid(3001L).setRole("member").build()
+            ))
+            .build()
+
         // ---- 修改群名称 ----
-        every { conversationRepository.findById(testConvId) } returns Optional.of(conv)
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns owner
+        coEvery { conversationService.editGroupInfo(any(), any()) } returns Unit
 
         // ---- 邀请成员 ----
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserIds(testConvId, listOf(4001L))
-        } returns emptyList()
-        coEvery { conversationMemberRepository.countActiveByConversationId(testConvId) } returns 3
+        coEvery { conversationService.inviteMember(any(), any()) } returns listOf(4001L)
 
         // ---- 踢人 ----
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 2001L)
-        } returns testMember(testConvId, 2001L) andThen null
-        coEvery {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId(testConvId, 2001L)
-        } just runs
+        coEvery { conversationService.kickMember(any(), any()) } returns 2001L
 
         // ---- 退群 ----
-        coEvery {
-            conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L)
-        } returns owner
-        coEvery {
-            conversationMemberRepository.softDeleteAllByConversationId(testConvId)
-        } just runs
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L) } returns
+            testMember(testConvId, 1001L, "owner").apply { id = 1L }
+        coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
         // 步骤 1: 创建群聊
         val createResp = dispatcher.dispatchAs("conversation/create_group",
             CreateGroupReq.newBuilder().setName("综合测试群").addAllMemberUids(listOf(2001L, 3001L)).build())
-        assertEquals(200, createResp.code, "步骤1: 创建群聊应返回 200")
+        assertEquals(BizCode.OK.code, createResp.code, "步骤1: 创建群聊应返回 200")
 
         // 步骤 2: 查看成员列表
         val membersResp = dispatcher.dispatchAs("conversation/group_members",
             GroupMembersReq.newBuilder().setConversationId(testConvId).build())
-        assertEquals(200, membersResp.code, "步骤2: 查看成员应返回 200")
+        assertEquals(BizCode.OK.code, membersResp.code, "步骤2: 查看成员应返回 200")
         assertEquals(3, GroupMembersResp.parseFrom(membersResp.result).membersCount, "步骤2: 应有 3 个成员")
 
         // 步骤 3: 修改群名称
         val editResp = dispatcher.dispatchAs("conversation/edit_group_info",
             EditGroupReq.newBuilder().setConversationId(testConvId).setName("改名后的群").build())
-        assertEquals(200, editResp.code, "步骤3: 修改名称应返回 200")
+        assertEquals(BizCode.OK.code, editResp.code, "步骤3: 修改名称应返回 200")
 
         // 步骤 4: 邀请新成员
         val inviteResp = dispatcher.dispatchAs("conversation/invite_member",
             InviteMemberReq.newBuilder().setConversationId(testConvId).addAllUids(listOf(4001L)).build())
-        assertEquals(200, inviteResp.code, "步骤4: 邀请成员应返回 200")
+        assertEquals(BizCode.OK.code, inviteResp.code, "步骤4: 邀请成员应返回 200")
 
         // 步骤 5: 踢出成员
         val kickResp = dispatcher.dispatchAs("conversation/kick_member",
             KickMemberReq.newBuilder().setConversationId(testConvId).setUid(2001L).build())
-        assertEquals(200, kickResp.code, "步骤5: 踢人应返回 200")
+        assertEquals(BizCode.OK.code, kickResp.code, "步骤5: 踢人应返回 200")
 
         // 步骤 6: 群主退群（解散）
         val leaveResp = dispatcher.dispatchAs("conversation/leave_group",
             LeaveGroupReq.newBuilder().setConversationId(testConvId).build())
-        assertEquals(200, leaveResp.code, "步骤6: 群主退群应返回 200")
+        assertEquals(BizCode.OK.code, leaveResp.code, "步骤6: 群主退群应返回 200")
     }
 }

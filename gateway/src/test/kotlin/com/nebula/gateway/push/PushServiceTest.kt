@@ -47,7 +47,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushMessage excludes sender from push targets`() = runTest {
+    fun pushMessageExcludesSenderFromPushTargets() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val members = listOf(
             ConversationMemberEntity(convId, senderUid),
@@ -65,7 +65,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushMessage sends CHAT_MESSAGE envelope to online members`() = runTest {
+    fun pushMessageSendsCHAT_MESSAGEEnvelopeToOnlineMembers() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
@@ -81,7 +81,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushMessage single observer exception does not affect others`() = runTest {
+    fun pushMessageSingleObserverExceptionDoesNotAffectOthers() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
@@ -102,7 +102,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushReadReceipt sends READ_RECEIPT envelope`() {
+    fun pushReadReceiptSendsREAD_RECEIPTEnvelope() {
         val payload = mockk<ReadReceiptPayload>(relaxed = true)
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         every { userStreamRegistry.getStreams(senderUid) } returns listOf(observer)
@@ -113,7 +113,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushReadReceipt handles exception gracefully`() {
+    fun pushReadReceiptHandlesExceptionGracefully() {
         val payload = mockk<ReadReceiptPayload>(relaxed = true)
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
@@ -127,7 +127,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushMessage no online members does nothing`() = runTest {
+    fun pushMessageNoOnlineMembersDoesNothing() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val members = listOf(
             ConversationMemberEntity(convId, receiverUid)
@@ -143,7 +143,7 @@ class PushServiceTest {
     // ========== Phase 7: pushConversationEvent + pushEventToUser ==========
 
     @Test
-    fun `pushConversationEvent excludes specified uids from push targets`() = runTest {
+    fun pushConversationEventExcludesSpecifiedUidsFromPushTargets() = runTest {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
             ConversationMemberEntity(convId, receiverUid),
@@ -166,7 +166,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushConversationEvent excludes all uids with emptySet as default`() = runTest {
+    fun pushConversationEventExcludesAllUidsWithEmptySetAsDefault() = runTest {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
             ConversationMemberEntity(convId, receiverUid)
@@ -185,7 +185,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushConversationEvent handles observer exception gracefully`() = runTest {
+    fun pushConversationEventHandlesObserverExceptionGracefully() = runTest {
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
@@ -209,7 +209,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushEventToUser sends event to specified user`() {
+    fun pushEventToUserSendsEventToSpecifiedUser() {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
 
@@ -223,7 +223,7 @@ class PushServiceTest {
     }
 
     @Test
-    fun `pushEventToUser handles exception gracefully`() {
+    fun pushEventToUserHandlesExceptionGracefully() {
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
         every { userStreamRegistry.getStreams(senderUid) } returns listOf(observer1, observer2)

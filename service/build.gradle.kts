@@ -33,4 +33,17 @@ dependencies {
 
     // kotlinx.serialization — 反序列化 Redis JSON 数据
     implementation(libs.kotlinx.serialization.json)
+
+    // ─── 测试依赖 ───
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.kotlinx.coroutines.core)
+    testImplementation(libs.kotlin.test)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

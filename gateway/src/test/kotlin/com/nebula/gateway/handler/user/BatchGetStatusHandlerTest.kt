@@ -37,7 +37,7 @@ class BatchGetStatusHandlerTest {
     }
 
     @Test
-    fun `查询在线状态 — 无隐藏用户`() = runTest {
+    fun queryOnlineStatusWithoutHiddenUsers() = runTest {
         coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L)) } returns emptySet()
         // D-57: 使用 getStatus 替代 isOnline
         coEvery { onlineStatusRepository.getStatus(1L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
@@ -51,7 +51,7 @@ class BatchGetStatusHandlerTest {
     }
 
     @Test
-    fun `隐藏用户被过滤`() = runTest {
+    fun hiddenUsersShouldBeFiltered() = runTest {
         coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L, 2L)) } returns setOf(1L)
         coEvery { onlineStatusRepository.getStatus(2L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
 
@@ -64,7 +64,7 @@ class BatchGetStatusHandlerTest {
     }
 
     @Test
-    fun `混合状态`() = runTest {
+    fun mixedStatusShouldBeHandled() = runTest {
         val hiddenUid = 1L
         val onlineUid = 2L
         val offlineUid = 3L
@@ -85,7 +85,7 @@ class BatchGetStatusHandlerTest {
     }
 
     @Test
-    fun `空列表`() = runTest {
+    fun batchStatusEmptyListShouldReturnEmpty() = runTest {
         coEvery { privacyRepository.batchGetHideOnlineStatus(emptyList()) } returns emptySet()
 
         val req = BatchIdRequest.getDefaultInstance()
