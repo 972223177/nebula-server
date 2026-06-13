@@ -8,6 +8,7 @@ import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.repository.repository.FriendshipRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -31,6 +32,7 @@ class SetPrivacyHandlerTest {
     private lateinit var privacyRepository: PrivacyRepository
     private lateinit var onlineStatusRepository: OnlineStatusRepository
     private lateinit var pushService: PushService
+    private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var handler: SetPrivacyHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -40,7 +42,8 @@ class SetPrivacyHandlerTest {
         privacyRepository = mockk()
         onlineStatusRepository = mockk()
         pushService = mockk()
-        handler = SetPrivacyHandler(privacyRepository, onlineStatusRepository, pushService)
+        friendshipRepository = mockk(relaxed = true)
+        handler = SetPrivacyHandler(privacyRepository, onlineStatusRepository, pushService, friendshipRepository)
     }
 
     @Test
