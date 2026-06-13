@@ -29,4 +29,5 @@ enum PushEventType {
   READ_RECEIPT = 12;                    // payload = ReadReceiptPayload
   DELIVERY_ACK = 13;                    // payload = DeliveryAckPayload
   STATUS_CHANGED = 14;                  // payload = StatusChangedPayload
+  DISCONNECT = 15;                      // 服务端主动断连通知：旧连接关闭前推送，触发客户端重连流程（D-68）
 }
