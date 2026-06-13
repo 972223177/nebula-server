@@ -7,10 +7,13 @@ import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
+import com.nebula.gateway.testutil.mockLockManager
+import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
+import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -19,7 +22,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.transaction.support.TransactionTemplate
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -40,10 +42,9 @@ import kotlin.test.assertTrue
  */
 class CreateGroupHandlerTest {
 
+    private lateinit var conversationService: ConversationService
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var conversationMemberRepository: ConversationMemberRepository
-    private lateinit var lockManager: ConversationLockManager
-    private lateinit var transactionTemplate: TransactionTemplate
     private lateinit var pushService: PushService
     private lateinit var handler: CreateGroupHandler
 
@@ -51,30 +52,16 @@ class CreateGroupHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        conversationService = mockk()
         conversationRepository = mockk()
         conversationMemberRepository = mockk()
-        lockManager = mockk()
-        transactionTemplate = mockk()
         pushService = mockk(relaxed = true)
 
-        // Mock 锁管理器：直接执行代码块
-        coEvery { lockManager.withLock(any(), any<suspend () -> kotlin.Any>()) } coAnswers {
-            @Suppress("UNCHECKED_CAST")
-            (args[1] as suspend () -> kotlin.Any).invoke()
-        }
-
-        // Mock 事务模板：在事务内执行回调
-        every { transactionTemplate.execute(any<org.springframework.transaction.support.TransactionCallback<Any?>>()) } answers {
-            @Suppress("UNCHECKED_CAST")
-            (it.invocation.args[0] as org.springframework.transaction.support.TransactionCallback<Any?>)
-                .doInTransaction(mockk(relaxed = true))
-        }
+        val lockManager = mockLockManager()
 
         handler = CreateGroupHandler(
-            conversationRepository,
-            conversationMemberRepository,
+            conversationService,
             lockManager,
-            transactionTemplate,
             pushService
         )
     }

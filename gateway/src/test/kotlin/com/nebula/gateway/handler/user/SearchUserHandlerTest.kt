@@ -3,6 +3,7 @@ package com.nebula.gateway.handler.user
 import com.nebula.chat.user.SearchUserReq
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -25,13 +26,15 @@ import kotlin.test.assertTrue
  */
 class SearchUserHandlerTest {
 
+    private lateinit var userService: UserService
     private lateinit var userRepository: UserRepository
     private lateinit var handler: SearchUserHandler
 
     @BeforeEach
     fun setUp() {
+        userService = mockk()
         userRepository = mockk<UserRepository>()
-        handler = SearchUserHandler(userRepository)
+        handler = SearchUserHandler(userService)
     }
 
     /** 创建测试用户实体 */

@@ -15,17 +15,17 @@ import org.koin.dsl.module
 /**
  * 会话 Handler Koin 模块 — 注册 Conversation 相关的 Handler 和组件。
  *
- * Phase 7: Conversation（D-19 事务 + 锁 + 7 个 Handler）
+ * Handler 依赖 Service 层 + gateway 组件（锁、事务、推送）。
  */
 val conversationHandlerModule = module {
     single { ConversationLockManager() }
-    single { ListConversationsHandler(get(), get()) }       // ConvRepo + ConvMemberRepo
-    single { GroupMembersHandler(get(), get()) }            // ConvMemberRepo + UserRepo
-    single { EditGroupHandler(get(), get(), get()) }        // ConvRepo + ConvMemberRepo + PushService
-    single { CreateGroupHandler(get(), get(), get(), get(), get()) } // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
-    single { InviteMemberHandler(get(), get(), get(), get(), get()) } // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
-    single { LeaveGroupHandler(get(), get(), get(), get(), get()) }  // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
-    single { KickMemberHandler(get(), get(), get(), get(), get()) }  // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+    single { ListConversationsHandler(get()) }                        // ConversationService
+    single { GroupMembersHandler(get()) }                             // ConversationService
+    single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
+    single { CreateGroupHandler(get(), get(), get()) }               // ConversationService + LockManager + PushService
+    single { InviteMemberHandler(get(), get(), get(), get(), get()) } // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
+    single { LeaveGroupHandler(get(), get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
+    single { KickMemberHandler(get(), get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
 
     // HandlerCollector 注册
     single<HandlerCollector> { ConversationHandlerCollector(
