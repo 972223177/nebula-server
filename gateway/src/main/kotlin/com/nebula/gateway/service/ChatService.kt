@@ -34,6 +34,12 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 
+/** 缓存再投递缓冲区上限（D-67）：超过此数量丢弃最旧消息，防止内存泄漏 */
+private const val MAX_PENDING = 1000
+
+/** 缓存再投递超时时间（D-67）：超过此时间强制激活投递，防止"防饿死" */
+private const val DELIVERY_TIMEOUT_MS = 10_000L
+
 /**
  * gRPC 双向流聊天服务 — 实现 Envelope 协议的分发、登录响应拦截和 Session 绑定（D-05）。
  *
@@ -135,14 +141,6 @@ class ChatService(
         /** 是否已进入正常投递模式（D-67） */
         @Volatile
         var deliveryActive = false
-
-        companion object {
-            /** 缓冲区上限（D-67）：超过此数量丢弃最旧消息，防止内存泄漏 */
-            private const val MAX_PENDING = 1000
-
-            /** 超时时间（D-67）：超过此时间强制激活投递，防止"防饿死" */
-            private const val DELIVERY_TIMEOUT_MS = 10_000L
-        }
 
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
