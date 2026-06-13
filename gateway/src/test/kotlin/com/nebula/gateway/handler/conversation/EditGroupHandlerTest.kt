@@ -131,6 +131,63 @@ class EditGroupHandlerTest {
     }
 
     @Test
+    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
+        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+
+        val req = EditGroupReq.newBuilder()
+            .setConversationId("conv-missing")
+            .setName("新群名")
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.CONV_NOT_FOUND, exception.bizCode)
+    }
+
+    @Test
+    fun `已解散群编辑抛GROUP_DISSOLVED`() = runTest {
+        val conv = ConversationEntity(type = 1).apply {
+            id = "conv-001"; status = 1
+        }
+
+        every { conversationRepository.findById("conv-001") } returns Optional.of(conv)
+
+        val req = EditGroupReq.newBuilder()
+            .setConversationId("conv-001")
+            .setName("新群名")
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.GROUP_DISSOLVED, exception.bizCode)
+    }
+
+    @Test
+    fun `非成员编辑抛NOT_MEMBER`() = runTest {
+        val conv = ConversationEntity(type = 1).apply {
+            id = "conv-001"
+        }
+
+        every { conversationRepository.findById("conv-001") } returns Optional.of(conv)
+        // 请求者不是该会话的成员
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
+        } returns null
+
+        val req = EditGroupReq.newBuilder()
+            .setConversationId("conv-001")
+            .setName("新群名")
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.NOT_MEMBER, exception.bizCode)
+    }
+
+    @Test
     fun `非群主编辑抛GROUP_PERM_DENIED`() = runTest {
         val conv = ConversationEntity(type = 1).apply {
             id = "conv-001"
