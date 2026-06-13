@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 08 contexted
-last_updated: "2026-06-13T04:00:00.000Z"
+status: Phase 09 complete
+last_updated: "2026-06-13T10:06:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 7
-  total_plans: 31
-  completed_plans: 31
-  percent: 64
+  completed_phases: 9
+  total_plans: 41
+  completed_plans: 41
+  percent: 82
 ---
 
 # State: Nebula Chat Server
@@ -19,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** Phase 07 — conversation
+**Current focus:** Phase 09 — Reconnection
 **Phase count:** 11
 **Requirements:** 70 v1 requirements mapped
 
@@ -34,18 +34,22 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 5 — User & Authentication | Complete | 2026-06-12 | 2026-06-12 |
 | 6 — Chat & Message | Complete | 2026-06-12 | 2026-06-12 |
 | 7 — Conversation | Complete | 2026-06-13 | 2026-06-13 |
-| 8 — Friend & Online Status | Discussed | — | — |
-| 9 — Reconnection | Pending | — | — |
+| 8 — Friend & Online Status | Complete | 2026-06-13 | 2026-06-13 |
+| 9 — Reconnection | Complete | 2026-06-13 | 2026-06-13 |
 | 10 — Message Reliability | Pending | — | — |
 | 11 — Performance & Monitoring | Pending | — | — |
 
 ## Next Actions
 
-1. `/nx-plan 8` — 为 Phase 8 生成执行计划
-2. Phase 7 PullMessagesHandler 成员检查已修复（D-07 安全修复）
-3. 全量构建验证：`./gradlew build`
+1. `/nx-discuss 10` — 开始阶段 10（Message Reliability）讨论
+2. `/nx-verify 9` — 执行阶段 9 的验证追补
 
 ## Quick Tasks Completed
+
+| Date | Task | Impact |
+|------|------|--------|
+| 2026-06-13 | Phase 8 安全审计 | 完成 08-SECURITY.md：识别 25 个威胁（STRIDE 六类全覆盖），mitigate 12 个，accept 9 个，threats_open=0 |
+| 2026-06-13 | Phase 9 Reconnection 执行 | 4 Plan 全部完成：Proto DISCONNECT=15、SessionRepository batchDelete pipeline、DISCONNECT 推送 eviction callback、缓存再投递缓冲区（pendingBuffer+deliver+activateDelivery）、防御性 cleanupConnection、3 个测试文件（ReconnectCleanupTest/DisconnectPushTest/ChatServiceReconnectTest 共 7 场景） |
 
 | Date | Task | Impact |
 |------|------|--------|
@@ -70,6 +74,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 5 | ✅ (15 threats, 0 open) | ✅ (100% coverage) | ✅ (22/22 tests pass) |
 | 6 | ✅ (18 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 42/42 tests) |
 | 7 | ✅ (19 threats, 0 open) | ✅ (100% coverage, 17 new tests) | ✅ (77 tests pass) |
+| 8 | ✅ (25 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 22/25 L1) |
 
 ## Quick Tasks Completed
 
