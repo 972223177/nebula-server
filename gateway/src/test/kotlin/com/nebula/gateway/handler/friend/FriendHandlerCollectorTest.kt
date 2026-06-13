@@ -16,7 +16,7 @@ import kotlin.test.assertNotNull
 class FriendHandlerCollectorTest {
 
     @Test
-    fun `registerAll registers all friend handlers`() = runTest {
+    fun registerAllShouldRegisterAllFriendHandlers() = runTest {
         val registry = HandlerRegistry()
         val collector = FriendHandlerCollector(
             friendRejectHandler = mockk { every { method } returns "friend/reject" },

@@ -1,12 +1,10 @@
 package com.nebula.gateway.handler.friend
 
+import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendRequestsReq
+import com.nebula.chat.friend.FriendRequestsResp
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
-import com.nebula.repository.entity.FriendRequestEntity
-import com.nebula.repository.entity.UserEntity
-import com.nebula.repository.repository.FriendRequestRepository
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -14,7 +12,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.LocalDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -30,8 +27,6 @@ import kotlin.test.assertTrue
 class FriendRequestsHandlerTest {
 
     private lateinit var friendService: FriendService
-    private lateinit var friendRequestRepository: FriendRequestRepository
-    private lateinit var userRepository: UserRepository
     private lateinit var handler: FriendRequestsHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -39,8 +34,6 @@ class FriendRequestsHandlerTest {
     @BeforeEach
     fun setUp() {
         friendService = mockk()
-        friendRequestRepository = mockk(relaxed = true)
-        userRepository = mockk(relaxed = true)
         handler = FriendRequestsHandler(friendService)
     }
 
@@ -49,29 +42,30 @@ class FriendRequestsHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `正常查询待处理申请 — 返回含完整字段的好友申请列表`() = runTest {
+    fun queryShouldReturnFullFriendRequestFields() = runTest {
         // Given: 当前用户有两条 pending 的好友申请
-        val now = LocalDateTime.now()
-        val request1 = FriendRequestEntity(fromUid = 2001L, toUid = 1001L, status = 0, message = "你好，加个好友")
-        request1.id = 10L
-        request1.createdAt = now
+        val expectedResp = FriendRequestsResp.newBuilder()
+            .addRequests(FriendRequestItem.newBuilder()
+                .setRequestId(10L)
+                .setFromUid(2001L)
+                .setFromUsername("user2")
+                .setFromAvatar("https://example.com/avatar2.jpg")
+                .setMessage("你好，加个好友")
+                .setStatus("pending")
+                .setCreatedAt(1700000000000L)
+                .build())
+            .addRequests(FriendRequestItem.newBuilder()
+                .setRequestId(11L)
+                .setFromUid(3001L)
+                .setFromUsername("user3")
+                .setFromAvatar("https://example.com/avatar3.jpg")
+                .setMessage("好久不见")
+                .setStatus("pending")
+                .setCreatedAt(1700000000000L)
+                .build())
+            .build()
 
-        val request2 = FriendRequestEntity(fromUid = 3001L, toUid = 1001L, status = 0, message = "好久不见")
-        request2.id = 11L
-        request2.createdAt = now.minusHours(1)
-
-        coEvery {
-            friendRequestRepository.findByToUidAndStatusOrderByCreatedAtDesc(1001L, 0)
-        } returns listOf(request1, request2)
-
-        // 批量获取申请人信息
-        val user2001 = UserEntity(username = "user2", passwordHash = "hash2", nickname = "User Two").apply {
-            id = 2001L; avatar = "https://example.com/avatar2.jpg"
-        }
-        val user3001 = UserEntity(username = "user3", passwordHash = "hash3", nickname = "User Three").apply {
-            id = 3001L; avatar = "https://example.com/avatar3.jpg"
-        }
-        coEvery { userRepository.findAllById(listOf(2001L, 3001L)) } returns listOf(user2001, user3001)
+        coEvery { friendService.getFriendRequests(any<FriendRequestsReq>(), any()) } returns expectedResp
 
         val req = FriendRequestsReq.getDefaultInstance()
 
@@ -108,11 +102,11 @@ class FriendRequestsHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun `空列表 — 无待处理申请时返回空 FriendRequestsResp`() = runTest {
+    fun requestsEmptyShouldReturnEmptyResp() = runTest {
         // Given: 当前用户没有 pending 的好友申请
-        coEvery {
-            friendRequestRepository.findByToUidAndStatusOrderByCreatedAtDesc(1001L, 0)
-        } returns emptyList()
+        val expectedResp = FriendRequestsResp.getDefaultInstance()
+
+        coEvery { friendService.getFriendRequests(any<FriendRequestsReq>(), any()) } returns expectedResp
 
         val req = FriendRequestsReq.getDefaultInstance()
 

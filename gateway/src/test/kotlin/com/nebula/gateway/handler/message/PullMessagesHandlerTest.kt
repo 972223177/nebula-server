@@ -1,26 +1,20 @@
 package com.nebula.gateway.handler.message
 
 import com.nebula.chat.ChatContentType
+import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.PullMessagesReq
 import com.nebula.chat.message.PullMessagesResp
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.entity.MessageEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.MessageRepository
 import com.nebula.service.chat.MessageService
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.Pageable
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -42,9 +36,6 @@ import kotlin.test.assertTrue
 class PullMessagesHandlerTest {
 
     private lateinit var messageService: MessageService
-    private lateinit var messageRepository: MessageRepository
-    private lateinit var conversationRepository: ConversationRepository
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var handler: PullMessagesHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -52,19 +43,13 @@ class PullMessagesHandlerTest {
     @BeforeEach
     fun setUp() {
         messageService = mockk()
-        messageRepository = mockk()
-        conversationRepository = mockk()
-        conversationMemberRepository = mockk()
         handler = PullMessagesHandler(messageService)
     }
 
     @Test
-    fun `cursor为0时使用LongMAX_VALUE查询最新消息`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
-        } returns listOf(createMessageEntity(50001L))
+    fun cursorZeroShouldUseMaxValue() = runTest {
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addMessages(createChatMessage(50001L)).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -77,12 +62,9 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `cursor大于0时传递cursor值查询历史消息`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", 50000L, any())
-        } returns listOf(createMessageEntity(49999L))
+    fun cursorGreaterThanZeroShouldPassCursor() = runTest {
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addMessages(createChatMessage(49999L)).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -95,12 +77,9 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `limit为0时coerceIn到1`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
-        } returns listOf(createMessageEntity(50001L))
+    fun limitZeroShouldCoerceToOne() = runTest {
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addMessages(createChatMessage(50001L)).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -112,14 +91,10 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `limit为200时coerceIn到100`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        // 模拟返回 100 条数据
-        val mockMessages = (1L..100L).map { createMessageEntity(it) }
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
-        } returns mockMessages
+    fun limitExceededShouldCoerceToMax() = runTest {
+        val mockMessages = (1L..100L).map { createChatMessage(it) }
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addAllMessages(mockMessages).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -131,13 +106,10 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `返回数据达到limit时hasMore为true`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        val mockMessages = (1L..20L).map { createMessageEntity(it) }
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
-        } returns mockMessages
+    fun reachingLimitShouldSetHasMoreTrue() = runTest {
+        val mockMessages = (1L..20L).map { createChatMessage(it) }
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addAllMessages(mockMessages).setHasMore(true).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -149,13 +121,10 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `返回数据未达到limit时hasMore为false`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        val mockMessages = (1L..5L).map { createMessageEntity(it) }
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
-        } returns mockMessages
+    fun belowLimitShouldSetHasMoreFalse() = runTest {
+        val mockMessages = (1L..5L).map { createChatMessage(it) }
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addAllMessages(mockMessages).setHasMore(false).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -167,22 +136,19 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `toChatMessage映射所有字段正确`() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns ConversationMemberEntity("conv-001", 1001L)
-        every { conversationRepository.existsById("conv-001") } returns true
-        val entity = MessageEntity(
-            conversationId = "conv-001",
-            senderUid = 2001L,
-            messageType = ChatContentType.TEXT_VALUE,
-            content = "Hello World",
-            payload = byteArrayOf(1, 2, 3),
-            clientTs = 1000L,
-            serverTs = 2000L
-        ).apply { id = 50001L }
-
-        coEvery {
-            messageRepository.findMessagesBackward("conv-001", Long.MAX_VALUE, any())
-        } returns listOf(entity)
+    fun toChatMessageShouldMapAllFields() = runTest {
+        val chatMsg = ChatMessage.newBuilder()
+            .setMsgId(50001L)
+            .setConversationId("conv-001")
+            .setSenderUid(2001L)
+            .setReceiverUid(0L)
+            .setMessageType(ChatContentType.TEXT)
+            .setContent("Hello World")
+            .setClientTs(1000L)
+            .setServerTs(2000L)
+            .build()
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } returns
+                PullMessagesResp.newBuilder().addMessages(chatMsg).build()
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -201,9 +167,9 @@ class PullMessagesHandlerTest {
     }
 
     @Test
-    fun `非成员拉取消息抛出NOT_MEMBER`() = runTest {
-        // 查找成员返回 null，表示当前用户不是该会话的成员
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns null
+    fun nonMemberPullShouldThrowNotMember() = runTest {
+        coEvery { messageService.pullMessages(any<PullMessagesReq>(), any()) } throws
+                ConversationException(BizCode.NOT_MEMBER)
 
         val req = PullMessagesReq.newBuilder()
             .setConversationId("conv-001")
@@ -215,14 +181,14 @@ class PullMessagesHandlerTest {
         assertEquals(BizCode.NOT_MEMBER, ex.bizCode)
     }
 
-    /** 创建模拟的 MessageEntity 用于测试。 */
-    private fun createMessageEntity(id: Long): MessageEntity = MessageEntity(
-        conversationId = "conv-001",
-        senderUid = 1001L,
-        messageType = 0,
-        content = "test",
-        payload = null,
-        clientTs = 1000L,
-        serverTs = 2000L
-    ).apply { this.id = id }
+    /** 创建模拟的 ChatMessage 用于测试。 */
+    private fun createChatMessage(id: Long): ChatMessage = ChatMessage.newBuilder()
+        .setMsgId(id)
+        .setConversationId("conv-001")
+        .setSenderUid(1001L)
+        .setMessageType(com.nebula.chat.ChatContentType.TEXT)
+        .setContent("test")
+        .setClientTs(1000L)
+        .setServerTs(2000L)
+        .build()
 }

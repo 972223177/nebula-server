@@ -69,7 +69,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `正常邀请返回Responsecode为0`() = runTest {
+    fun inviteShouldReturnOkCode() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } returns listOf(2001L, 3001L)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -98,7 +100,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `群满当前195人加邀请10人超200抛GROUP_FULL`() = runTest {
+    fun groupFullShouldThrowGroupFull() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.GROUP_FULL)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 195
         }
@@ -127,7 +131,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `被邀请者已在群中抛ALREADY_IN_GROUP`() = runTest {
+    fun alreadyInGroupShouldThrowAlreadyInGroup() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.ALREADY_IN_GROUP)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -155,7 +161,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `inviter非成员抛NOT_MEMBER`() = runTest {
+    fun inviterNonMemberShouldThrowNotMember() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -178,8 +186,8 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
-        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+    fun inviteConvNotFoundShouldThrowConvNotFound() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.CONV_NOT_FOUND)
 
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-missing")
@@ -193,7 +201,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `邀请列表为空抛INVALID_PARAM`() = runTest {
+    fun emptyInviteListShouldThrowInvalidParam() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
+
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
             .build()
@@ -205,7 +215,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `部分被邀请者已在群中仅添加新成员`() = runTest {
+    fun partialExistingMembersShouldAddNewOnly() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } returns listOf(2001L, 4001L, 5001L)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -248,7 +260,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `会话已解散抛GROUP_DISSOLVED`() = runTest {
+    fun inviteDissolvedGroupShouldThrowGroupDissolved() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.GROUP_DISSOLVED)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 1; memberCount = 5
         }
@@ -267,7 +281,9 @@ class InviteMemberHandlerTest {
     }
 
     @Test
-    fun `MEMBER_JOINED推送现有成员`() = runTest {
+    fun memberJoinedShouldPushToExistingMembers() = runTest {
+        coEvery { conversationService.inviteMember(any(), any()) } returns listOf(2001L, 3001L)
+
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }

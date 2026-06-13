@@ -26,7 +26,7 @@ import kotlin.test.assertEquals
 class DispatcherTest {
 
     @Test
-    fun `dispatch with valid handler returns response`() = runTest {
+    fun dispatchWithValidHandlerReturnsResponse() = runTest {
         val handler = mockk<Handler<Any, Any>>()
         every { handler.method } returns "test.method"
         coEvery { handler.handle(any()) } returns Response.newBuilder().setCode(200).build()
@@ -55,7 +55,7 @@ class DispatcherTest {
     }
 
     @Test
-    fun `dispatch with unknown method returns NOT_FOUND`() = runTest {
+    fun dispatchWithUnknownMethodReturnsNotFound() = runTest {
         val handlerRegistry = mockk<HandlerRegistry>()
         every { handlerRegistry.get("unknown.method") } returns null
 
@@ -68,7 +68,7 @@ class DispatcherTest {
     }
 
     @Test
-    fun `dispatch with empty interceptors still works`() = runTest {
+    fun dispatchWithEmptyInterceptorsStillWorks() = runTest {
         val handler = mockk<Handler<Any, Any>>()
         every { handler.method } returns "test.method"
         coEvery { handler.handle(any()) } returns Response.newBuilder().setCode(200).build()
@@ -96,7 +96,7 @@ class DispatcherTest {
     }
 
     @Test
-    fun `dispatch with interceptors invokes pipeline`() = runTest {
+    fun dispatchWithInterceptorsInvokesPipeline() = runTest {
         val handler = mockk<Handler<Any, Any>>()
         every { handler.method } returns "test.method"
         coEvery { handler.handle(any()) } returns Request.getDefaultInstance()

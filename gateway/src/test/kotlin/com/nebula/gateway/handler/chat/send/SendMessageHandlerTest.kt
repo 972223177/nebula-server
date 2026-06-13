@@ -74,7 +74,7 @@ class SendMessageHandlerTest {
     }
 
     @Test
-    fun `正常发送返回 SendMessageResp`() = runTest {
+    fun sendShouldReturnSendMessageResp() = runTest {
         injectMockRedis()
         // 去重检查通过
         coEvery { redis.setnx(any(), any()) } returns true
@@ -110,7 +110,7 @@ class SendMessageHandlerTest {
     }
 
     @Test
-    fun `重复消息抛出 SendMessageException`() = runTest {
+    fun duplicateMessageShouldThrowSendMessageException() = runTest {
         injectMockRedis()
         // 去重检查失败（SETNX 返回 false）
         coEvery { redis.setnx(any(), any()) } returns false
@@ -132,7 +132,7 @@ class SendMessageHandlerTest {
     }
 
     @Test
-    fun `MessageService 异常时清理去重 key`() = runTest {
+    fun messageServiceExceptionShouldCleanDedupKey() = runTest {
         injectMockRedis()
         // 去重检查通过
         coEvery { redis.setnx(any(), any()) } returns true

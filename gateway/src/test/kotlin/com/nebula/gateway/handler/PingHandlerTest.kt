@@ -19,7 +19,7 @@ class PingHandlerTest {
     private val handler = PingHandler()
 
     @Test
-    fun `ping returns pong response`() = runTest {
+    fun pingShouldReturnPongResponse() = runTest {
         val request = Request.getDefaultInstance()
         val response = handler.handle(request)
 
@@ -29,7 +29,7 @@ class PingHandlerTest {
     }
 
     @Test
-    fun `method is system-ping`() {
+    fun methodShouldBeSystemPing() {
         assertEquals("system/ping", handler.method)
     }
 }

@@ -16,7 +16,7 @@ import kotlin.test.assertNotNull
 class UserHandlerCollectorTest {
 
     @Test
-    fun `registerAll registers all user handlers`() = runTest {
+    fun registerAllShouldRegisterAllUserHandlers() = runTest {
         val registry = HandlerRegistry()
         val collector = UserHandlerCollector(
             loginHandler = mockk { every { method } returns "user/login" },

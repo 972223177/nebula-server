@@ -1,9 +1,8 @@
 package com.nebula.gateway.handler.user
 
-import com.nebula.chat.user.BatchIdRequest
 import com.nebula.chat.user.BatchGetUserResp
-import com.nebula.repository.entity.UserEntity
-import com.nebula.repository.repository.UserRepository
+import com.nebula.chat.user.BatchIdRequest
+import com.nebula.chat.user.UserBrief
 import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -23,28 +22,32 @@ import kotlin.test.assertEquals
 class BatchGetUserHandlerTest {
 
     private lateinit var userService: UserService
-    private lateinit var userRepository: UserRepository
     private lateinit var handler: BatchGetUserHandler
 
     @BeforeEach
     fun setup() {
         userService = mockk()
-        userRepository = mockk()
         handler = BatchGetUserHandler(userService)
     }
 
     @Test
-    fun `批量获取用户`() = runTest {
-        val user1 = UserEntity(username = "user1", passwordHash = "hash1", nickname = "User One").apply {
-            id = 1L
-            avatar = "https://example.com/avatar1.jpg"
-        }
-        val user2 = UserEntity(username = "user2", passwordHash = "hash2", nickname = "User Two").apply {
-            id = 2L
-            avatar = "https://example.com/avatar2.jpg"
-        }
+    fun batchGetUsersShouldReturnUsers() = runTest {
+        val userBrief1 = UserBrief.newBuilder()
+            .setUid(1L)
+            .setUsername("user1")
+            .setDisplayName("User One")
+            .setAvatarUrl("https://example.com/avatar1.jpg")
+            .build()
+        val userBrief2 = UserBrief.newBuilder()
+            .setUid(2L)
+            .setUsername("user2")
+            .setDisplayName("User Two")
+            .setAvatarUrl("https://example.com/avatar2.jpg")
+            .build()
 
-        coEvery { userRepository.findAllById(listOf(1L, 2L)) } returns listOf(user1, user2)
+        coEvery { userService.batchGetUsers(any<BatchIdRequest>()) } returns BatchGetUserResp.newBuilder()
+            .addAllUsers(listOf(userBrief1, userBrief2))
+            .build()
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L, 2L)).build()
         val resp = handler.handle(req)
@@ -59,8 +62,8 @@ class BatchGetUserHandlerTest {
     }
 
     @Test
-    fun `空列表`() = runTest {
-        coEvery { userRepository.findAllById(emptyList<Long>()) } returns emptyList()
+    fun batchGetEmptyListShouldReturnEmpty() = runTest {
+        coEvery { userService.batchGetUsers(any<BatchIdRequest>()) } returns BatchGetUserResp.getDefaultInstance()
 
         val req = BatchIdRequest.getDefaultInstance()
         val resp = handler.handle(req)
@@ -69,12 +72,16 @@ class BatchGetUserHandlerTest {
     }
 
     @Test
-    fun `部分ID不存在`() = runTest {
-        val user1 = UserEntity(username = "user1", passwordHash = "hash1", nickname = "User One").apply {
-            id = 1L
-        }
+    fun partialIdsShouldReturnOnlyExisting() = runTest {
+        val userBrief1 = UserBrief.newBuilder()
+            .setUid(1L)
+            .setUsername("user1")
+            .setDisplayName("User One")
+            .build()
 
-        coEvery { userRepository.findAllById(listOf(1L, 999L)) } returns listOf(user1)
+        coEvery { userService.batchGetUsers(any<BatchIdRequest>()) } returns BatchGetUserResp.newBuilder()
+            .addUsers(userBrief1)
+            .build()
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L, 999L)).build()
         val resp = handler.handle(req)

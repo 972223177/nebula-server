@@ -1,8 +1,8 @@
 package com.nebula.gateway.handler.user
 
 import com.nebula.chat.user.SearchUserReq
-import com.nebula.repository.entity.UserEntity
-import com.nebula.repository.repository.UserRepository
+import com.nebula.chat.user.SearchUserResp
+import com.nebula.chat.user.UserBrief
 import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -10,7 +10,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import java.time.LocalDateTime
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -27,38 +26,32 @@ import kotlin.test.assertTrue
 class SearchUserHandlerTest {
 
     private lateinit var userService: UserService
-    private lateinit var userRepository: UserRepository
     private lateinit var handler: SearchUserHandler
 
     @BeforeEach
     fun setUp() {
         userService = mockk()
-        userRepository = mockk<UserRepository>()
         handler = SearchUserHandler(userService)
     }
 
-    /** 创建测试用户实体 */
-    private fun createUser(id: Long, username: String, createdAt: LocalDateTime): UserEntity {
-        return UserEntity(
-            username = username,
-            passwordHash = "hash",
-            nickname = "用户$id",
-            avatar = ""
-        ).apply {
-            this.id = id
-            this.createdAt = createdAt
-        }
-    }
+    /** 创建测试用户摘要 */
+    private fun createUserBrief(id: Long, username: String): UserBrief = UserBrief.newBuilder()
+        .setUid(id)
+        .setUsername(username)
+        .setDisplayName("用户$id")
+        .build()
 
     @Test
-    fun `搜索成功`() = runTest {
+    fun searchShouldReturnResults() = runTest {
         val users = listOf(
-            createUser(1001L, "testuser1", LocalDateTime.of(2026, 6, 1, 10, 0)),
-            createUser(1002L, "testuser2", LocalDateTime.of(2026, 6, 1, 9, 0))
+            createUserBrief(1001L, "testuser1"),
+            createUserBrief(1002L, "testuser2")
         )
-        coEvery {
-            userRepository.findByUsernameContaining("test", null, 21)
-        } returns users
+        coEvery { userService.searchUsers(any(), any(), any()) } returns SearchUserResp.newBuilder()
+            .addAllUsers(users)
+            .setHasMore(false)
+            .setNextCursor(0L)
+            .build()
 
         val req = SearchUserReq.newBuilder()
             .setKeyword("test")
@@ -74,10 +67,11 @@ class SearchUserHandlerTest {
     }
 
     @Test
-    fun `搜索无结果`() = runTest {
-        coEvery {
-            userRepository.findByUsernameContaining("nonexistent", null, 21)
-        } returns emptyList()
+    fun searchNoResultsShouldReturnEmpty() = runTest {
+        coEvery { userService.searchUsers(any(), any(), any()) } returns SearchUserResp.newBuilder()
+            .setHasMore(false)
+            .setNextCursor(0L)
+            .build()
 
         val req = SearchUserReq.newBuilder()
             .setKeyword("nonexistent")
@@ -92,18 +86,16 @@ class SearchUserHandlerTest {
     }
 
     @Test
-    fun `分页测试`() = runTest {
+    fun paginationShouldLimitResults() = runTest {
         // 生成 21 条数据（limit=20，limit+1=21）
         val users = (1..21).map { i ->
-            createUser(
-                1000L + i,
-                "user$i",
-                LocalDateTime.of(2026, 6, 1, 12, 0).minusHours(i.toLong())
-            )
+            createUserBrief(1000L + i, "user$i")
         }
-        coEvery {
-            userRepository.findByUsernameContaining("user", null, 21)
-        } returns users
+        coEvery { userService.searchUsers(any(), any(), any()) } returns SearchUserResp.newBuilder()
+            .addAllUsers(users.take(20))
+            .setHasMore(true)
+            .setNextCursor(users.last().uid)
+            .build()
 
         val req = SearchUserReq.newBuilder()
             .setKeyword("user")
@@ -118,15 +110,16 @@ class SearchUserHandlerTest {
     }
 
     @Test
-    fun `游标正确性`() = runTest {
-        val baseTime = LocalDateTime.of(2026, 6, 1, 12, 0)
+    fun cursorCorrectnessShouldReturnNextCursor() = runTest {
         val users = listOf(
-            createUser(1001L, "alpha", baseTime.minusHours(2)),
-            createUser(1002L, "beta", baseTime.minusHours(3))
+            createUserBrief(1001L, "alpha"),
+            createUserBrief(1002L, "beta")
         )
-        coEvery {
-            userRepository.findByUsernameContaining("user", null, 21)
-        } returns users
+        coEvery { userService.searchUsers(any(), any(), any()) } returns SearchUserResp.newBuilder()
+            .addAllUsers(users)
+            .setHasMore(false)
+            .setNextCursor(1002L)
+            .build()
 
         val req = SearchUserReq.newBuilder()
             .setKeyword("user")
@@ -137,14 +130,12 @@ class SearchUserHandlerTest {
 
         assertNotNull(resp)
         assertEquals(2, resp.usersCount)
-        // next_cursor 应为最后一条的 createdAt 毫秒时间戳
-        val expectedCursor = users.last().createdAt!!.toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
-        assertEquals(expectedCursor, resp.nextCursor)
+        assertEquals(1002L, resp.nextCursor)
         assertEquals(false, resp.hasMore)
     }
 
     @Test
-    fun `空关键词返回空结果`() = runTest {
+    fun emptyKeywordShouldReturnEmpty() = runTest {
         val req = SearchUserReq.newBuilder()
             .setKeyword("  ")
             .setCursor(0)

@@ -3,16 +3,9 @@ package com.nebula.gateway.handler.user
 import com.nebula.chat.user.RegisterReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
-import com.nebula.common.idgen.SnowflakeIdGenerator
-import com.nebula.repository.entity.UserEntity
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.user.UserService
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
-import jakarta.persistence.EntityManager
-import jakarta.persistence.EntityManagerFactory
-import jakarta.persistence.EntityTransaction
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -31,32 +24,16 @@ import kotlin.test.assertNotNull
 class RegisterHandlerTest {
 
     private lateinit var userService: UserService
-    private lateinit var userRepository: UserRepository
-    private lateinit var idGenerator: SnowflakeIdGenerator
     private lateinit var handler: RegisterHandler
 
     @BeforeEach
     fun setUp() {
         userService = mockk()
-        userRepository = mockk<UserRepository>()
-        idGenerator = mockk<SnowflakeIdGenerator>()
-
-        // Mock JPA EntityManager chain for manual transaction management
-        val tx = mockk<EntityTransaction>(relaxed = true)
-        every { tx.begin() } returns Unit
-        every { tx.commit() } returns Unit
-
-        val em = mockk<EntityManager>(relaxed = true)
-        every { em.transaction } returns tx
-
-        val emf = mockk<EntityManagerFactory>()
-        every { emf.createEntityManager() } returns em
-
         handler = RegisterHandler(userService)
     }
 
     @Test
-    fun `注册成功`() = runTest {
+    fun registerShouldReturnSuccess() = runTest {
         coEvery { userService.register(any()) } returns 10001L
 
         val req = RegisterReq.newBuilder()
@@ -71,7 +48,7 @@ class RegisterHandlerTest {
     }
 
     @Test
-    fun `用户名已存在`() = runTest {
+    fun registerUsernameExistsShouldThrowUsernameExists() = runTest {
         coEvery { userService.register(any()) } throws UserException(BizCode.USERNAME_EXISTS)
 
         val req = RegisterReq.newBuilder()
@@ -89,7 +66,7 @@ class RegisterHandlerTest {
     }
 
     @Test
-    fun `密码太短`() = runTest {
+    fun registerPasswordTooShortShouldThrowInvalidParam() = runTest {
         coEvery { userService.register(any()) } throws UserException(BizCode.INVALID_PARAM)
 
         val req = RegisterReq.newBuilder()
@@ -107,7 +84,7 @@ class RegisterHandlerTest {
     }
 
     @Test
-    fun `用户名为空`() = runTest {
+    fun registerEmptyUsernameShouldThrowInvalidParam() = runTest {
         coEvery { userService.register(any()) } throws UserException(BizCode.INVALID_PARAM)
 
         val req = RegisterReq.newBuilder()

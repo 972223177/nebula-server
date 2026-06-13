@@ -197,6 +197,29 @@ fun buildTestDispatcher(
 }
 
 /**
+ * 构建只注册一个 Handler 的 Dispatcher，用于冒烟测试。
+ *
+ * 自动完成 HandlerEntry 创建和注册，简化单个 Handler 的冒烟测试。
+ *
+ * @param handler Handler 实例
+ * @param reqClass 请求类型
+ * @param respClass 响应类型
+ * @param session 测试 Session，默认 [DEFAULT_SESSION]
+ * @param sessionRegistry Mock 的 SessionRegistry，默认自动创建
+ * @return 配置好的 Dispatcher
+ */
+fun <Req : Any, Resp : Any> singleHandlerDispatcher(
+    handler: Handler<Req, Resp>,
+    reqClass: kotlin.reflect.KClass<Req>,
+    respClass: kotlin.reflect.KClass<Resp>,
+    session: Session = DEFAULT_SESSION,
+    sessionRegistry: SessionRegistry = mockk()
+): Dispatcher = buildTestDispatcher(
+    HandlerRegistry().apply { register(handlerEntry(handler, reqClass, respClass)) },
+    session = session, sessionRegistry = sessionRegistry
+)
+
+/**
  * 一键创建带认证和 Handler 注册的 Dispatcher。
  *
  * 等价于手动调用 [handlerEntry] 注册 Handler 后调用 [buildTestDispatcher]。

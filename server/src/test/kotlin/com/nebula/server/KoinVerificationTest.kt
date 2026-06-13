@@ -8,7 +8,7 @@ import com.nebula.gateway.di.chatHandlerModule
 import com.nebula.gateway.di.conversationHandlerModule
 import com.nebula.gateway.di.friendHandlerModule
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
-import com.nebula.gateway.handler.chat.send.SendMessageStep
+
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
@@ -64,7 +64,6 @@ class KoinVerificationTest {
         single<OnlineStatusRepository> { OnlineStatusRepository(get()) }
         single<PrivacyRepository> { PrivacyRepository(get(), get()) }
         single<TransactionTemplate> { mockk() }
-        single<List<SendMessageStep>> { listOf(mockk(), mockk()) }
     }
 
     @AfterEach
@@ -73,7 +72,7 @@ class KoinVerificationTest {
     }
 
     @Test
-    fun `all phase components are resolvable`() {
+    fun allPhaseComponentsAreResolvable() {
         startKoin {
             modules(frameworkModule, serviceModule, userHandlerModule, chatHandlerModule, conversationHandlerModule, friendHandlerModule, buildMockModule())
         }
@@ -89,10 +88,6 @@ class KoinVerificationTest {
 
         // SendMessageHandler 的 named scope 可解析
         assertNotNull(GlobalContext.get().get<CoroutineScope>(named("sendHandlerScope")))
-
-        // Step 链可解析
-        val steps = GlobalContext.get().get<List<SendMessageStep>>()
-        assertTrue(steps.isNotEmpty(), "SendMessageStep 列表不应为空")
 
         // Phase 7 基础设施
         assertNotNull(GlobalContext.get().get<ConversationLockManager>())

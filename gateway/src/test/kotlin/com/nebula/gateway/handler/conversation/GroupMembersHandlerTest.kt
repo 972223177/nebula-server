@@ -1,16 +1,14 @@
 package com.nebula.gateway.handler.conversation
 
 import com.nebula.chat.conversation.GroupMembersReq
+import com.nebula.chat.conversation.GroupMembersResp
+import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.entity.UserEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.conversation.ConversationService
-import io.mockk.every
+import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -34,8 +32,6 @@ import kotlin.test.assertNotNull
 class GroupMembersHandlerTest {
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
-    private lateinit var userRepository: UserRepository
     private lateinit var handler: GroupMembersHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -43,37 +39,35 @@ class GroupMembersHandlerTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationMemberRepository = mockk()
-        userRepository = mockk()
         handler = GroupMembersHandler(conversationService)
     }
 
     @Test
-    fun `正常返回成员列表含用户名显示名头像角色加入时间`() = runTest {
+    fun getGroupMembersShouldReturnFullMemberInfo() = runTest {
         val now = LocalDateTime.now()
 
-        // 请求者是会话成员
-        val selfMember = ConversationMemberEntity("conv-001", 1001L).apply {
-            role = "owner"
-            joinedAt = now.minusDays(7)
-        }
-        val otherMember = ConversationMemberEntity("conv-001", 1002L).apply {
-            role = "member"
-            joinedAt = now.minusDays(3)
-        }
+        val member0 = GroupMember.newBuilder()
+            .setUid(1001L)
+            .setUsername("alice")
+            .setDisplayName("爱丽丝")
+            .setAvatarUrl("http://a.com/1.png")
+            .setRole("owner")
+            .setJoinedAt(now.minusDays(7).atZone(ZoneOffset.UTC).toInstant().toEpochMilli())
+            .build()
+        val member1 = GroupMember.newBuilder()
+            .setUid(1002L)
+            .setUsername("bob")
+            .setDisplayName("鲍勃")
+            .setAvatarUrl("http://a.com/2.png")
+            .setRole("member")
+            .setJoinedAt(now.minusDays(3).atZone(ZoneOffset.UTC).toInstant().toEpochMilli())
+            .build()
+        val mockResp = GroupMembersResp.newBuilder()
+            .addMembers(member0)
+            .addMembers(member1)
+            .build()
 
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns selfMember
-        every {
-            conversationMemberRepository.findByConversationId("conv-001")
-        } returns listOf(selfMember, otherMember)
-        every {
-            userRepository.findAllById(listOf(1001L, 1002L))
-        } returns listOf(
-            UserEntity("alice", "hash1", "爱丽丝").apply { id = 1001L; avatar = "http://a.com/1.png" },
-            UserEntity("bob", "hash2", "鲍勃").apply { id = 1002L; avatar = "http://a.com/2.png" }
-        )
+        coEvery { conversationService.getGroupMembers(any(), any()) } returns mockResp
 
         val req = GroupMembersReq.newBuilder()
             .setConversationId("conv-001")
@@ -83,36 +77,24 @@ class GroupMembersHandlerTest {
         assertNotNull(resp)
         assertEquals(2, resp.membersCount)
 
-        // 第一个成员（selfMember, role=owner）
-        val member0 = resp.membersList[0]
-        assertEquals(1001L, member0.uid)
-        assertEquals("alice", member0.username)
-        assertEquals("爱丽丝", member0.displayName)
-        assertEquals("http://a.com/1.png", member0.avatarUrl)
-        assertEquals("owner", member0.role)
-        assertEquals(
-            now.minusDays(7).atZone(ZoneOffset.UTC).toInstant().toEpochMilli(),
-            member0.joinedAt
-        )
+        val firstMember = resp.membersList[0]
+        assertEquals(1001L, firstMember.uid)
+        assertEquals("alice", firstMember.username)
+        assertEquals("爱丽丝", firstMember.displayName)
+        assertEquals("http://a.com/1.png", firstMember.avatarUrl)
+        assertEquals("owner", firstMember.role)
 
-        // 第二个成员（otherMember, role=member）
-        val member1 = resp.membersList[1]
-        assertEquals(1002L, member1.uid)
-        assertEquals("bob", member1.username)
-        assertEquals("鲍勃", member1.displayName)
-        assertEquals("http://a.com/2.png", member1.avatarUrl)
-        assertEquals("member", member1.role)
-        assertEquals(
-            now.minusDays(3).atZone(ZoneOffset.UTC).toInstant().toEpochMilli(),
-            member1.joinedAt
-        )
+        val secondMember = resp.membersList[1]
+        assertEquals(1002L, secondMember.uid)
+        assertEquals("bob", secondMember.username)
+        assertEquals("鲍勃", secondMember.displayName)
+        assertEquals("http://a.com/2.png", secondMember.avatarUrl)
+        assertEquals("member", secondMember.role)
     }
 
     @Test
-    fun `非成员访问抛NOT_MEMBER`() = runTest {
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns null
+    fun nonMemberAccessShouldThrowNotMember() = runTest {
+        coEvery { conversationService.getGroupMembers(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
 
         val req = GroupMembersReq.newBuilder()
             .setConversationId("conv-001")
@@ -125,15 +107,9 @@ class GroupMembersHandlerTest {
     }
 
     @Test
-    fun `空会话0成员返回空列表`() = runTest {
-        val selfMember = ConversationMemberEntity("conv-empty", 1001L)
-
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-empty", 1001L)
-        } returns selfMember
-        every {
-            conversationMemberRepository.findByConversationId("conv-empty")
-        } returns emptyList()
+    fun emptyConversationShouldReturnEmptyList() = runTest {
+        val emptyResp = GroupMembersResp.getDefaultInstance()
+        coEvery { conversationService.getGroupMembers(any(), any()) } returns emptyResp
 
         val req = GroupMembersReq.newBuilder()
             .setConversationId("conv-empty")
@@ -145,26 +121,20 @@ class GroupMembersHandlerTest {
     }
 
     @Test
-    fun `返回字段映射验证LocalDateTime转epochMillis`() = runTest {
+    fun localDateTimeMappingShouldReturnEpochMillis() = runTest {
         val joinedTime = LocalDateTime.of(2024, 1, 15, 10, 30, 0)
         val expectedMillis = joinedTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
 
-        val member = ConversationMemberEntity("conv-001", 1001L).apply {
-            role = "owner"
-            joinedAt = joinedTime
-        }
-
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns member
-        every {
-            conversationMemberRepository.findByConversationId("conv-001")
-        } returns listOf(member)
-        every {
-            userRepository.findAllById(listOf(1001L))
-        } returns listOf(
-            UserEntity("testuser", "hash", "测试用户").apply { id = 1001L; avatar = "http://a.com/3.png" }
-        )
+        val member = GroupMember.newBuilder()
+            .setUid(1001L)
+            .setUsername("testuser")
+            .setDisplayName("测试用户")
+            .setAvatarUrl("http://a.com/3.png")
+            .setRole("owner")
+            .setJoinedAt(expectedMillis)
+            .build()
+        val mockResp = GroupMembersResp.newBuilder().addMembers(member).build()
+        coEvery { conversationService.getGroupMembers(any(), any()) } returns mockResp
 
         val req = GroupMembersReq.newBuilder()
             .setConversationId("conv-001")

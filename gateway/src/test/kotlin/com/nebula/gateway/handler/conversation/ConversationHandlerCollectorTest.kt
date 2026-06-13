@@ -16,7 +16,7 @@ import kotlin.test.assertNotNull
 class ConversationHandlerCollectorTest {
 
     @Test
-    fun `registerAll registers all conversation handlers`() = runTest {
+    fun registerAllShouldRegisterConversationHandlers() = runTest {
         val registry = HandlerRegistry()
         val collector = ConversationHandlerCollector(
             listConversationsHandler = mockk { every { method } returns "conversation/list" },
