@@ -22,4 +22,5 @@ message SendMessageReq {
 message SendMessageResp {
   int64 msg_id = 1;                   // 服务端分配的消息 ID
   int64 server_ts = 2;                // 服务端接收时间戳（毫秒）
+  int64 seq = 3;                      // 服务端分配的会话序列号（D-74），per-(conv,uid) 自增
 }

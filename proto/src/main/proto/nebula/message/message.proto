@@ -50,3 +50,22 @@ message ReadReceiptPayload {
   int64 reader_uid = 2;              // 已读用户 UID
   int64 msg_id = 3;                  // 最后已读消息 ID
 }
+
+// ---- message/delivery-ack ----
+// 交付回执推送 payload（PUSH EventType=DELIVERY_ACK）
+// 推送给发送者，告知消息已投递到接收方设备。
+message DeliveryAckPayload {
+  int64 msg_id = 1;                   // 消息 ID
+  string conversation_id = 2;         // 会话ID
+}
+
+// ---- message/seq ----
+// 查询会话最新序列号请求：客户端用来检测序列号间隙
+message MessageSeqReq {
+  string conversation_id = 1;         // 会话ID
+}
+
+// 查询会话最新序列号响应
+message MessageSeqResp {
+  int64 seq = 1;                      // 当前会话最新序列号
+}
