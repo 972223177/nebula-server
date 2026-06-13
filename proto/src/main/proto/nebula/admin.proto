@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package com.nebula.chat.admin;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.admin";
+
+// ---- admin/dead-letters 死信查询 ----
+// 死信查询请求：分页查询死信记录，可选按状态过滤
+message DeadLetterQueryReq {
+  int32 page = 1;                     // 页码，从 1 开始
+  int32 page_size = 2;                // 每页条数
+  string status = 3;                  // 过滤状态（pending / retrying / permanent_failed / retry_success），空表示查全部
+}
+
+// 死信查询响应
+message DeadLetterQueryResp {
+  repeated DeadLetterItem items = 1;  // 死信记录列表
+  int32 total = 2;                    // 总记录数
+}
+
+// 死信记录项
+message DeadLetterItem {
+  int64 id = 1;                       // 死信 ID
+  int64 msg_id = 2;                   // 原始消息 ID
+  string conversation_id = 3;         // 会话ID
+  int64 sender_uid = 4;               // 发送者 UID
+  string fail_reason = 5;             // 失败原因
+  int32 fail_count = 6;               // 失败次数
+  string status = 7;                  // 状态: pending / retrying / permanent_failed / retry_success
+  int64 created_at = 8;               // 创建时间戳（毫秒）
+}
+
+// ---- admin/retry-dead-letter 手动重试 ----
+// 手动重试死信请求
+message RetryDeadLetterReq {
+  int64 dead_letter_id = 1;           // 死信 ID
+}
+
+// 手动重试死信响应
+message RetryDeadLetterResp {
+  bool success = 1;                   // 是否重试成功
+}
