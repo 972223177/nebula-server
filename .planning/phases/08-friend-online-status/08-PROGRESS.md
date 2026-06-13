@@ -100,6 +100,8 @@
 
 审核已通过（PLAN-CHECK.md → APPROVED），可以执行 `/nx-exec 8` 开始实现。
 
+**Git 提交记录**: 所有未提交文件已分 7 个 commit 提交完毕（commit 7de6563 ~ 2942ee7），工作目录干净。
+
 ---
 
 ## PROGRESS REVIEW COMPLETE
