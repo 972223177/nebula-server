@@ -1,0 +1,10 @@
+{
+  "name": "nebula-workflow",
+  "description": "GSD 风格的结构化 AI 驱动开发工作流 —— 状态外置 + 验证闭环 + 专家 Agent 调度 + 多 Agent 协同 + 文档驱动。nx-executor 根据任务类型自动派发领域专家 agent 并行执行。",
+  "version": "0.4.0",
+  "homepage": {
+    "url": null,
+    "type": "none"
+  },
+  "license": "MIT"
+}
