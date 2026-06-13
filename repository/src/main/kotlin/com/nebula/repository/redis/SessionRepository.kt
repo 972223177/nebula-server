@@ -4,6 +4,7 @@ import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
+import io.lettuce.core.api.async.RedisAsyncCommandsImpl
 
 /**
  * Session Token 缓存操作封装（DB-02, D-13）。
@@ -60,5 +61,28 @@ class SessionRepository(
     /** 删除 Redis key */
     suspend fun deleteKey(key: String) {
         redis.del(key)
+    }
+
+    // ==================== Pipeline 批量操作 ====================
+
+    /**
+     * 使用 Redis pipeline 批量删除多个 key（D-65）。
+     *
+     * 使用 Lettuce setAutoFlush(false) + flushCommands() 实现 pipeline 模式，
+     * 将多个 DEL 命令合并为一次网络往返，适用于连接清理等需要批量删除的场景。
+     *
+     * @param keys 待删除的 key 列表
+     */
+    suspend fun batchDelete(keys: List<String>) {
+        if (keys.isEmpty()) return
+        connection.setAutoFlush(false)
+        try {
+            val async = RedisAsyncCommandsImpl(connection.reactive())
+            keys.forEach { async.del(it) }
+            connection.flushCommands()
+        } finally {
+            // 异常时也要恢复 autoFlush，防止后续操作被缓冲
+            connection.setAutoFlush(true)
+        }
     }
 }
