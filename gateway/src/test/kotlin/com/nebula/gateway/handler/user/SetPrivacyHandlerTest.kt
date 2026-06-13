@@ -9,6 +9,7 @@ import com.nebula.gateway.session.Session
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -29,6 +30,7 @@ import kotlin.test.assertEquals
  */
 class SetPrivacyHandlerTest {
 
+    private lateinit var userPrivacyService: UserPrivacyService
     private lateinit var privacyRepository: PrivacyRepository
     private lateinit var onlineStatusRepository: OnlineStatusRepository
     private lateinit var pushService: PushService
@@ -39,11 +41,12 @@ class SetPrivacyHandlerTest {
 
     @BeforeEach
     fun setup() {
+        userPrivacyService = mockk()
         privacyRepository = mockk()
         onlineStatusRepository = mockk()
         pushService = mockk()
         friendshipRepository = mockk(relaxed = true)
-        handler = SetPrivacyHandler(privacyRepository, onlineStatusRepository, pushService, friendshipRepository)
+        handler = SetPrivacyHandler(userPrivacyService, onlineStatusRepository, pushService, friendshipRepository)
     }
 
     @Test

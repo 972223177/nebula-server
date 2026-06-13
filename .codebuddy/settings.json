@@ -1,5 +1,9 @@
 {
   "enabledPlugins": {
     "nebula-workflow": true
-  }
+  },
+  "hooks": {},
+  "trustedDirectories": [
+    "/Users/linyu/project/personal/Nebula/nebula_server"
+  ]
 }

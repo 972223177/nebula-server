@@ -13,15 +13,15 @@ import org.koin.dsl.module
 /**
  * 好友 Handler Koin 模块 — 注册 Friend 相关的 Handler 和组件。
  *
- * Phase 8: Friend（6 个 Handler）
+ * Handler 依赖 Service 层 + gateway 组件（锁、事务、推送）。
  */
 val friendHandlerModule = module {
-    single { FriendRejectHandler(get()) }                                               // FriendRequestRepository
-    single { FriendRequestsHandler(get(), get()) }                                      // FriendRequestRepository + UserRepository
-    single { FriendListHandler(get(), get(), get(), get()) }                            // FriendshipRepo + UserRepo + OnlineStatusRepo + PrivacyRepo
-    single { FriendDeleteHandler(get()) }                                               // FriendshipRepository
-    single { FriendAddHandler(get(), get(), get(), get(), get(), get(), get()) }        // FriendRequestRepo + FriendshipRepo + ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
-    single { FriendAcceptHandler(get(), get(), get(), get(), get(), get(), get()) }     // FriendRequestRepo + FriendshipRepo + ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+    single { FriendRejectHandler(get()) }                                               // FriendService
+    single { FriendRequestsHandler(get()) }                                             // FriendService
+    single { FriendListHandler(get()) }                                                 // FriendService
+    single { FriendDeleteHandler(get()) }                                               // FriendService
+    single { FriendAddHandler(get(), get(), get()) }                                    // FriendService + PushService + LockManager
+    single { FriendAcceptHandler(get(), get(), get()) }                                 // FriendService + PushService + LockManager
 
     // HandlerCollector 注册
     single<HandlerCollector> { FriendHandlerCollector(

@@ -3,12 +3,8 @@ package com.nebula.gateway.di
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
-import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
-import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
-import com.nebula.gateway.handler.chat.send.SendMessageStep
-import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
@@ -20,13 +16,11 @@ import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
 import com.nebula.gateway.handler.friend.FriendDeleteHandler
-import com.nebula.gateway.handler.friend.FriendHandlerCollector
 import com.nebula.gateway.handler.friend.FriendListHandler
 import com.nebula.gateway.handler.friend.FriendRejectHandler
 import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
-import com.nebula.gateway.handler.system.SystemHandlerCollector
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -35,7 +29,6 @@ import com.nebula.gateway.handler.user.LoginHandler
 import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
-import com.nebula.gateway.handler.user.UserHandlerCollector
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.MessageQueueRepository
@@ -48,6 +41,11 @@ import com.nebula.repository.repository.FriendRequestRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.chat.MessageService
+import com.nebula.service.conversation.ConversationService
+import com.nebula.service.friend.FriendService
+import com.nebula.service.user.UserPrivacyService
+import com.nebula.service.user.UserService
 import io.lettuce.core.api.StatefulRedisConnection
 import jakarta.persistence.EntityManagerFactory
 import io.mockk.every
@@ -57,7 +55,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.koin.core.context.GlobalContext
@@ -70,9 +67,6 @@ import kotlin.test.assertNotNull
 
 /**
  * GatewayModule Koin 模块装配测试（D-23, D-24）。
- *
- * Review 修复：使用 @AfterEach + stopKoin() 显式清理 Koin 容器，
- * 防止测试间 Koin 状态污染。每个测试方法独立启动自己的 Koin 实例。
  */
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
 class GatewayModuleTest {
@@ -94,10 +88,15 @@ class GatewayModuleTest {
     private val transactionTemplate = mockk<TransactionTemplate>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** Service 层 mock */
+    private val userService = mockk<UserService>()
+    private val userPrivacyService = mockk<UserPrivacyService>()
+    private val messageService = mockk<MessageService>()
+    private val conversationService = mockk<ConversationService>()
+    private val friendService = mockk<FriendService>()
+
     /**
-     * 构建供测试使用的外部 Repository Koin 模块。
-     * 模拟 NebulaServer 中 externalModule 的所有外部依赖。
-     * PrivacyRepository 直接 mock 以避免依赖 StatefulRedisConnection 的泛型类型擦除问题。
+     * 构建外部 Repository Koin 模块。
      */
     private fun buildExternalModule() = module {
         single { sessionRepo }
@@ -113,61 +112,62 @@ class GatewayModuleTest {
         single { friendshipRepo }
         single { friendRequestRepo }
         single { privacyRepo }
-        single { transactionTemplate }  // Phase 7: D-19 TransactionTemplate
+        single { transactionTemplate }
     }
 
     /**
-     * 构建测试专用的 handlerModule，代替生产 handlerModule。
-     * PrivacyRepository 直接使用 mock 实例，避免 Koin 解析 StatefulRedisConnection 泛型参数。
-     * Phase 6 组件使用 mock 外部依赖，避免真实 Redis/Lettuce 连接。
+     * 构建测试专用的 handlerModule，匹配重构后的构造函数。
      */
     private fun buildHandlerModule() = module {
-        single { PingHandler() }
-        single { LoginHandler(get(), get()) }
-        single { RegisterHandler(get(), get(), get()) }
-        single { SearchUserHandler(get()) }
-        single { GetProfileHandler(get()) }
-        single { BatchGetUserHandler(get()) }
-        single { privacyRepo }         // 使用 mock PrivacyRepository
-        single { BatchGetStatusHandler(get(), get()) }
-        single { SetPrivacyHandler(get(), get(), get(), get()) }
-        single { GetPrivacyHandler(get()) }
+        // Service 层
+        single { userService }
+        single { userPrivacyService }
+        single { messageService }
+        single { conversationService }
+        single { friendService }
 
-        // Phase 6: Chat & Message — 使用 mock 外部依赖
+        // Phase 5: User Handler
+        single { PingHandler() }
+        single { LoginHandler(userService, get()) }
+        single { RegisterHandler(userService) }
+        single { SearchUserHandler(userService) }
+        single { GetProfileHandler(userService) }
+        single { BatchGetUserHandler(userService) }
+        single { BatchGetStatusHandler(get(), get()) }
+        single { SetPrivacyHandler(userPrivacyService, get(), get(), get()) }
+        single { GetPrivacyHandler(userPrivacyService) }
+
+        // Phase 6: Chat & Message
         single { scope }
         single { UserStreamRegistry() }
         single { PushService(get(), get()) }
-        single { listOf<SendMessageStep>(mockk(), mockk(), mockk()) }
-        single { SendMessageHandler(get(), get(), get(), get(), get()) }
-        single { PullMessagesHandler(get(), get(), get()) }  // Phase 7: 新增第3参数 ConvMemberRepo
-        single { ReadReportHandler(get(), get(), get(), get()) }
+        single { SendMessageHandler(messageService, get(), get(), get(), get()) }
+        single { PullMessagesHandler(messageService) }
+        single { ReadReportHandler(messageService, get(), get(), get(), get()) }
 
-        // Phase 7: Conversation — 使用 mock 外部依赖
+        // Phase 7: Conversation
         single { ConversationLockManager() }
-        single { ListConversationsHandler(get(), get()) }
-        single { GroupMembersHandler(get(), get()) }
-        single { EditGroupHandler(get(), get(), get()) }
-        single { CreateGroupHandler(get(), get(), get(), get(), get()) }
-        single { InviteMemberHandler(get(), get(), get(), get(), get()) }
-        single { LeaveGroupHandler(get(), get(), get(), get(), get()) }
-        single { KickMemberHandler(get(), get(), get(), get(), get()) }
+        single { ListConversationsHandler(conversationService) }
+        single { GroupMembersHandler(conversationService) }
+        single { EditGroupHandler(conversationService, get()) }
+        single { CreateGroupHandler(conversationService, get(), get()) }
+        single { InviteMemberHandler(conversationService, get(), get(), get(), get()) }
+        single { LeaveGroupHandler(conversationService, get(), get(), get(), get()) }
+        single { KickMemberHandler(conversationService, get(), get(), get(), get()) }
 
-        // Phase 8: Friend — 使用 mock 外部依赖
-        single { FriendRejectHandler(get()) }
-        single { FriendRequestsHandler(get(), get()) }
-        single { FriendListHandler(get(), get(), get(), get()) }
-        single { FriendDeleteHandler(get()) }
-        single { FriendAddHandler(get(), get(), get(), get(), get(), get(), get()) }
-        single { FriendAcceptHandler(get(), get(), get(), get(), get(), get(), get()) }
+        // Phase 8: Friend
+        single { FriendRejectHandler(friendService) }
+        single { FriendRequestsHandler(friendService) }
+        single { FriendListHandler(friendService) }
+        single { FriendDeleteHandler(friendService) }
+        single { FriendAddHandler(friendService, get(), get()) }
+        single { FriendAcceptHandler(friendService, get(), get()) }
     }
 
     @AfterEach
     fun tearDown() {
-        // Review 修复：显式清理 Koin，防止测试间 Koin 状态污染
         stopKoin()
     }
-
-    // ========== 框架组件解析测试 ==========
 
     @Test
     fun `frameworkModule resolves HandlerRegistry`() {
@@ -189,143 +189,6 @@ class GatewayModuleTest {
         assertNotNull(protoCodec)
     }
 
-    // ========== Phase 4 Handler 解析 ==========
-
-    @Test
-    fun `handlerModule resolves PingHandler`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        val pingHandler = GlobalContext.get().get<PingHandler>()
-        assertNotNull(pingHandler)
-    }
-
-    // ========== Phase 5 Handler 解析 ==========
-
-    @Test
-    fun `LoginHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<LoginHandler>() }
-    }
-
-    @Test
-    fun `RegisterHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<RegisterHandler>() }
-    }
-
-    @Test
-    fun `SearchUserHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<SearchUserHandler>() }
-    }
-
-    @Test
-    fun `GetProfileHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<GetProfileHandler>() }
-    }
-
-    @Test
-    fun `BatchGetUserHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<BatchGetUserHandler>() }
-    }
-
-    @Test
-    fun `BatchGetStatusHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<BatchGetStatusHandler>() }
-    }
-
-    @Test
-    fun `SetPrivacyHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<SetPrivacyHandler>() }
-    }
-
-    @Test
-    fun `GetPrivacyHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<GetPrivacyHandler>() }
-    }
-
-    // ========== Phase 7 Handler 解析 ==========
-
-    @Test
-    fun `ListConversationsHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<ListConversationsHandler>() }
-    }
-
-    @Test
-    fun `GroupMembersHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<GroupMembersHandler>() }
-    }
-
-    @Test
-    fun `EditGroupHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<EditGroupHandler>() }
-    }
-
-    @Test
-    fun `CreateGroupHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<CreateGroupHandler>() }
-    }
-
-    @Test
-    fun `InviteMemberHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<InviteMemberHandler>() }
-    }
-
-    @Test
-    fun `LeaveGroupHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<LeaveGroupHandler>() }
-    }
-
-    @Test
-    fun `KickMemberHandler can be resolved from Koin`() {
-        startKoin {
-            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
-        }
-        assertDoesNotThrow { GlobalContext.get().get<KickMemberHandler>() }
-    }
-
-    // ========== HandlerCollector 注册验证 ==========
-
     @Test
     fun `all HandlerCollectors register all methods via getAll`() = runTest {
         startKoin {
@@ -333,7 +196,7 @@ class GatewayModuleTest {
         }
         val registry = GlobalContext.get().get<HandlerRegistry>()
 
-        // 手动解析每个 Collector 并注册（规避 getAll 可能的行为差异）
+        // 手动解析每个 Collector 并注册
         val pingHandler = GlobalContext.get().get<PingHandler>()
         val systemCollector = com.nebula.gateway.handler.system.SystemHandlerCollector(pingHandler)
         systemCollector.registerAll(registry)

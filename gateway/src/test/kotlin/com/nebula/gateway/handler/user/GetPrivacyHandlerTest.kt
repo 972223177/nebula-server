@@ -5,6 +5,7 @@ import com.nebula.chat.user.GetPrivacyResp
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
 import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -24,6 +25,7 @@ import kotlin.test.assertEquals
  */
 class GetPrivacyHandlerTest {
 
+    private lateinit var userPrivacyService: UserPrivacyService
     private lateinit var privacyRepository: PrivacyRepository
     private lateinit var handler: GetPrivacyHandler
 
@@ -31,8 +33,9 @@ class GetPrivacyHandlerTest {
 
     @BeforeEach
     fun setup() {
+        userPrivacyService = mockk()
         privacyRepository = mockk()
-        handler = GetPrivacyHandler(privacyRepository)
+        handler = GetPrivacyHandler(userPrivacyService)
     }
 
     @Test
