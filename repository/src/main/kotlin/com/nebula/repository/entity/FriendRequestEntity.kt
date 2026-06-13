@@ -17,7 +17,11 @@ class FriendRequestEntity(
     @Column(nullable = false)
     var toUid: Long,
 
-    var status: Int = 0
+    var status: Int = 0,
+
+    /** 好友申请附言，D-42 */
+    @Column(length = 255)
+    var message: String = ""
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
