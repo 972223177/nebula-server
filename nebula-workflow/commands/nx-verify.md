@@ -1,5 +1,5 @@
 ---
-description: 目标反向验证 —— 四层验证（存在性→内容实在性→连接性→数据流通）+ 行为抽查 + 人体验证清单。L1-L4 通过 nx-verifier 内部并行子 agent 执行。
+description: 目标反向验证 —— 四层验证（存在性→内容实在性→连接性→数据流通）+ 编译测试 + 集成冒烟验证 + 行为抽查 + 人体验证清单。自动探测项目类型，适配后端和前端。L1-L4 通过 nx-verifier 内部并行子 agent 执行。
 argument-hint: "<N> [阶段编号]"
 ---
 
@@ -33,7 +33,7 @@ argument-hint: "<N> [阶段编号]"
 - 计划产出物列表（文件、API、数据库变更）
 - 成功标准（可衡量的完成条件）
 
-### 步骤 2：派发 nx-verifier（并行 L1-L4）
+### 步骤 2：派发 nx-verifier（并行 L1-L4 + 编译测试 + 集成冒烟）
 
 使用 `Agent` 工具启动 `nx-verifier` agent。nx-verifier 内部执行流程：
 
@@ -41,11 +41,19 @@ argument-hint: "<N> [阶段编号]"
 2. **并行 L1-L4**：同时派发 4 个子 agent（`subagent_type: general-purpose`，加入当前团队）：
    - `verifier-L1`：存在性验证 — 对每个预期文件执行 `test -f`
    - `verifier-L2`：内容实在性验证 — grep 扫描存根/TODO/空函数体
-   - `verifier-L3`：连接性验证 — 检查 Handler→Service→Repository→DI 连线
-   - `verifier-L4`：数据流通验证 — 追踪完整的 API→DB→Response 数据链路
-3. **行为抽查**：对关键 API/构建产出执行运行时验证（bash 命令，< 10 秒/项）
-4. **人体验证清单**：汇总无法自动验证的项目，供开发者手动确认
-5. **生成 VERIFICATION.md**：聚合 L1-L4 结果 → 行为抽查结果 → 人体验证清单 → 最终裁决
+   - `verifier-L3`：连接性验证 — 检查组件连线（后端: Handler→Service→Repository→DI / 前端: Component→Hook→API→Store）
+   - `verifier-L4`：数据流通验证 — 追踪完整数据链路（后端: API→DB→Response / 前端: UI→State→API→Render）
+3. **编译与单元测试**：自动探测项目类型（gradle/maven/node/go/rust）→ 执行对应编译和测试命令，失败则直接标记 FAILED
+4. **集成冒烟验证**（仅当产生可运行服务代码时执行，需用户确认）：
+   - 5a: 探测项目类型和运行方式（后端: gradle run/spring-boot / 前端: npm dev/next/vite）
+   - 5b: 启动基础设施（如 docker-compose.yml 存在，自动启动依赖服务）
+   - 5c: 启动应用服务（后台运行，自动检测端口）
+   - 5d: 健康检查（后端: grpcurl/curl / 前端: curl HTTP 状态码）
+   - 5e: 发送测试请求（后端: gRPC/REST API / 前端: 关键页面可访问性）
+   - 5f: 关闭服务（kill 进程，基础设施不自动关闭）
+5. **行为抽查**：对关键 API/构建产出执行运行时验证（bash 命令，< 10 秒/项）。如果已执行集成冒烟验证则跳过
+6. **人体验证清单**：汇总无法自动验证的项目，供开发者手动确认
+7. **生成 VERIFICATION.md**：聚合 L1-L4 结果 → 编译测试结果 → 集成冒烟结果 → 行为抽查结果 → 人体验证清单 → 最终裁决
 
 ```
 Agent:
@@ -94,9 +102,19 @@ status: passed|failed|partial|human_needed
 | 数据路径 | 状态 |
 |-----------|------|
 
-## 测试结果
-| 测试类 | 通过/总数 | 状态 |
-|--------|----------|------|
+## 编译与单元测试
+| 步骤 | 项目类型 | 命令 | 结果 | 状态 |
+|------|---------|------|------|------|
+
+## 集成冒烟验证
+| 步骤 | 内容 | 状态 |
+|------|------|------|
+| 5a | 项目类型探测 | ✓ DETECTED / ✗ UNKNOWN |
+| 5b | 基础设施启动 | ✓ PASS / ✗ FAIL / ? SKIP |
+| 5c | 应用启动 | ✓ PASS / ✗ FAIL |
+| 5d | 健康检查 | ✓ PASS / ✗ FAIL |
+| 5e | 请求验证 | ✓ PASS / ✗ FAIL / ? SKIP |
+| 5f | 服务关闭 | ✓ DONE / ✗ FAIL |
 
 ## 行为抽查结果
 | 行为 | 命令 | 结果 | 状态 |
@@ -118,6 +136,8 @@ status: passed|failed|partial|human_needed
 ## 成功标准
 - 四层验证全部执行（L1-L4 通过并行子 agent 完成）
 - 每层有具体检测结果（非主观判断）
+- 编译通过且单元测试全部通过
+- 集成冒烟验证执行完成（或跳过并注明原因）
 - 行为抽查完成（或注明跳过原因）
 - 人体验证清单已汇总
 - VERIFICATION.md 已写入阶段目录

@@ -1,6 +1,6 @@
 ---
 name: nx-verifier
-description: 目标反向验证 —— 四层模型（存在性→内容实在性→连接性→数据流通）+ 行为抽查 + 人体验证清单。L1-L4 通过子 agent 并行执行。
+description: 目标反向验证 —— 四层模型（存在性→内容实在性→连接性→数据流通）+ 编译测试 + 集成冒烟验证 + 行为抽查 + 人体验证清单。自动探测项目类型（gradle/maven/node/go/rust），适配后端和前端。L1-L4 通过子 agent 并行执行。
 tools: Read, Grep, Glob, Bash, Agent, SendMessage, Task
 ---
 
@@ -171,9 +171,320 @@ Agent:
 
 等待 4 个子 agent 通过 SendMessage 返回各自层的验证结果。提取每个层级的表格。
 
-### 阶段四：行为抽查
+### 阶段四：编译与单元测试
 
-行为抽查验证关键行为在运行时是否产生预期输出。
+在启动服务之前，确保代码可以编译通过且单元测试全部通过。如果编译或测试失败，直接标记 FAILED 并跳过后续集成验证。
+
+#### 步骤 4a：探测项目类型
+
+通过根目录文件特征自动判断项目类型：
+
+```bash
+# 检测规则（优先级从高到低）
+if [ -f "build.gradle.kts" ] || [ -f "build.gradle" ]; then
+  PROJECT_TYPE="gradle"
+  BUILD_CMD="./gradlew compileKotlin 2>&1 || ./gradlew compileJava 2>&1"
+  TEST_CMD="./gradlew test"
+elif [ -f "pom.xml" ]; then
+  PROJECT_TYPE="maven"
+  BUILD_CMD="./mvnw compile 2>&1 || mvn compile 2>&1"
+  TEST_CMD="./mvnw test 2>&1 || mvn test 2>&1"
+elif [ -f "package.json" ]; then
+  PROJECT_TYPE="node"
+  # 探测包管理器
+  if [ -f "pnpm-lock.yaml" ]; then PKG_MGR="pnpm"; elif [ -f "yarn.lock" ]; then PKG_MGR="yarn"; else PKG_MGR="npm"; fi
+  BUILD_CMD="$PKG_MGR run build 2>&1 || echo 'BUILD_WARNING: 无 build script'"
+  TEST_CMD="$PKG_MGR test 2>&1 || $PKG_MGR run test 2>&1 || echo 'TEST_WARNING: 无 test script'"
+elif [ -f "go.mod" ]; then
+  PROJECT_TYPE="go"
+  BUILD_CMD="go build ./... 2>&1"
+  TEST_CMD="go test ./... 2>&1"
+elif [ -f "Cargo.toml" ]; then
+  PROJECT_TYPE="rust"
+  BUILD_CMD="cargo build 2>&1"
+  TEST_CMD="cargo test 2>&1"
+else
+  PROJECT_TYPE="unknown"
+fi
+```
+
+#### 步骤 4b：执行编译和测试
+
+```bash
+echo "项目类型: $PROJECT_TYPE"
+echo "编译命令: $BUILD_CMD"
+echo "测试命令: $TEST_CMD"
+
+# 编译
+BUILD_OUTPUT=$(eval "$BUILD_CMD")
+BUILD_EXIT=$?
+
+# 测试
+TEST_OUTPUT=$(eval "$TEST_CMD")
+TEST_EXIT=$?
+```
+
+**结果记录**：
+
+| 步骤 | 项目类型 | 命令 | 结果 | 状态 |
+|------|---------|------|------|------|
+| 编译 | {gradle/maven/node/go/rust} | {实际命令} | {输出摘要} | ✓ PASS / ✗ FAIL |
+| 单元测试 | {gradle/maven/node/go/rust} | {实际命令} | {M/N passed} | ✓ PASS / ✗ FAIL |
+
+**失败处理**：编译或单元测试失败 → 不进入集成验证，直接标记 FAILED。
+
+**特殊处理**：
+- 如果项目无 build/test script（如纯文档项目）→ 记录 WARNING，不标记 FAILED
+- 如果 `PROJECT_TYPE=unknown` → 跳过编译测试，记录原因，不标记 FAILED
+
+### 阶段五：集成冒烟验证
+
+**适用范围**：本阶段产生了可运行服务代码的 → 执行冒烟验证。仅文档/配置阶段 → 跳过本步骤并注明原因。
+
+集成冒烟验证覆盖从基础设施到服务端到端的完整链路：启动依赖服务 → 启动应用 → 健康检查 → 发送测试请求 → 验证响应 → 关闭服务。
+
+**重要**：执行此步骤前，通过 `AskUserQuestion` 询问用户是否同意执行（涉及启动/停止服务、连接外部依赖）。用户可选择跳过。
+
+---
+
+#### 步骤 5a：探测项目的运行方式
+
+根据 `PROJECT_TYPE`（阶段四已探测）确定启动命令和健康检查方式：
+
+**后端项目（gradle/maven）**：
+```bash
+# 自动检测启动方式
+if [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
+  HAS_INFRA=true
+  INFRA_START="docker compose up -d"
+else
+  HAS_INFRA=false
+fi
+
+# 检测应用启动命令
+if grep -q "application" build.gradle.kts 2>/dev/null; then
+  # Gradle application plugin
+  APP_START="./gradlew run"
+elif grep -q "spring-boot" build.gradle.kts 2>/dev/null || grep -q "spring-boot" pom.xml 2>/dev/null; then
+  APP_START="./gradlew bootRun 2>&1 || ./mvnw spring-boot:run"
+elif [ -f "Dockerfile" ]; then
+  APP_START="docker build -t app . && docker run -d --rm -p PORT:PORT app"
+else
+  APP_START="java -jar build/libs/*.jar"
+fi
+
+# 自动检测服务端口
+PORT=$(grep -r "port.*=.*[0-9]\\{4\\}" src/main/resources/ 2>/dev/null | head -1 | grep -o '[0-9]\{4\}' || echo "8080")
+```
+
+**前端项目（node）**：
+```bash
+# 前端不需要基础设施（数据库等）
+HAS_INFRA=false
+
+# 检测 dev server 命令
+if grep -q '"dev"' package.json; then
+  APP_START="$PKG_MGR run dev"
+elif grep -q '"start"' package.json; then
+  APP_START="$PKG_MGR start"
+else
+  APP_START=""
+fi
+
+# 检测框架和端口
+if grep -q '"next"' package.json 2>/dev/null; then
+  FRAMEWORK="next"
+  PORT=3000
+elif grep -q '"vite"' package.json 2>/dev/null; then
+  FRAMEWORK="vite"
+  PORT=5173
+elif grep -q '"react-scripts"' package.json 2>/dev/null; then
+  FRAMEWORK="cra"
+  PORT=3000
+elif grep -q '"@angular/cli"' package.json 2>/dev/null; then
+  FRAMEWORK="angular"
+  PORT=4200
+elif grep -q '"nuxt"' package.json 2>/dev/null; then
+  FRAMEWORK="nuxt"
+  PORT=3000
+else
+  FRAMEWORK="unknown"
+  PORT=3000
+fi
+```
+
+**如果无法确定启动命令** → 跳过集成验证，在人体验证清单中添加此项。
+
+---
+
+#### 步骤 5b：启动基础设施（如适用）
+
+仅当 `HAS_INFRA=true` 时执行：
+
+```bash
+# 启动基础设施
+$INFRA_START
+
+# 等待基础设施就绪（通用方式：检查 docker compose 服务状态）
+echo "等待基础设施就绪..."
+docker compose ps --services --filter "status=running" | while read svc; do
+  echo "  $svc 已运行"
+done
+```
+
+**约束**：
+- 如果 docker compose 不可用或用户拒绝 → 跳过集成验证，在人体验证清单中添加此项
+- 如果基础设施已在运行 → 跳过启动步骤，直接进行下一步
+- 超时时间：每项 30 秒
+- 不硬编码 MySQL/Redis 等待逻辑，依赖 docker compose 自身健康检查
+
+---
+
+#### 步骤 5c：启动应用服务
+
+在后台启动服务，记录 PID 用于后续关闭：
+
+```bash
+# 后台启动服务
+LOG_FILE="/tmp/nebula-verify-server.log"
+$APP_START > "$LOG_FILE" 2>&1 &
+SERVER_PID=$!
+echo "服务已启动 (PID: $SERVER_PID, 项目类型: $PROJECT_TYPE)"
+
+# 等待服务就绪（通用端口检测）
+echo "等待服务端口 $PORT 就绪..."
+for i in $(seq 1 30); do
+  if lsof -i :$PORT > /dev/null 2>&1; then
+    echo "服务端口 $PORT 已就绪"
+    break
+  fi
+  sleep 1
+done
+
+# 检查进程是否仍在运行
+if ! kill -0 $SERVER_PID 2>/dev/null; then
+  echo "服务启动失败，日志尾部："
+  tail -30 "$LOG_FILE"
+  SERVER_FAILED=true
+fi
+```
+
+**约束**：
+- 端口：从阶段 5a 自动检测，默认 8080
+- 等待超时：30 秒
+- 如果启动失败 → 记录日志尾部内容，标记 FAILED
+
+---
+
+#### 步骤 5d：健康检查
+
+根据项目类型执行不同的健康检查：
+
+**后端项目**：
+```bash
+# 尝试 gRPC 健康检查
+if command -v grpcurl &> /dev/null; then
+  grpcurl -plaintext localhost:$PORT list 2>&1
+  HEALTH_STATUS=$?
+else
+  # 回退到端口检查
+  lsof -i :$PORT > /dev/null 2>&1
+  HEALTH_STATUS=$?
+fi
+```
+
+**前端项目**：
+```bash
+# HTTP 健康检查（检查 dev server 是否返回页面）
+curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT 2>&1
+HEALTH_STATUS=$?
+```
+
+**结果记录**：
+
+| 检查项 | 项目类型 | 命令 | 结果 | 状态 |
+|--------|---------|------|------|------|
+| 服务端口 | {类型} | `lsof -i :PORT` | {端口状态} | ✓ PASS / ✗ FAIL |
+| 服务响应 | {类型} | {grpcurl/curl 命令} | {响应摘要} | ✓ PASS / ✗ FAIL |
+
+**失败处理**：
+- 如果健康检查工具不可用（如 grpcurl）→ 回退到端口检测，记为 PARTIAL（工具缺失）
+- 如果服务无响应 → 记录日志尾部内容，标记 FAILED
+
+---
+
+#### 步骤 5e：发送测试请求并验证响应
+
+对本阶段新增/修改的关键 API/页面发送测试请求。从 PLAN.md 的 must_haves 或 API 变更列表中提取需要验证的端点：
+
+**后端项目**：
+```bash
+# 发送 gRPC 或 REST 测试请求
+# 具体请求内容从 PLAN.md 的 API 变更列表中提取
+# 示例（gRPC）：
+grpcurl -plaintext -d '{...}' localhost:$PORT package.Service/Method 2>&1
+
+# 示例（REST）：
+curl -s -X POST http://localhost:$PORT/api/endpoint -H "Content-Type: application/json" -d '{...}' 2>&1
+```
+
+**前端项目**：
+```bash
+# 验证关键页面可访问
+curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:$PORT/ 2>&1
+
+# 验证 API 路由（如适用）
+curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:$PORT/api/health 2>&1
+```
+
+**结果记录**：
+
+| API/页面 | 项目类型 | 请求内容 | 响应状态 | 状态 |
+|----------|---------|---------|---------|------|
+| {端点路径} | {类型} | {请求摘要} | {响应摘要/错误} | ✓ PASS / ✗ FAIL / ? SKIP |
+
+**约束**：
+- 后端项目：只对 Unary 类型的 gRPC 方法发送请求（BIDI_STREAMING 跳过，记录 SKIP）
+- 前端项目：验证关键页面返回 2xx/3xx 即视为通过
+- 不依赖特定测试数据（使用独立测试用户/独立请求）
+- 验证目标：服务不 crash + 返回非错误响应（不要求特定业务逻辑正确性）
+
+---
+
+#### 步骤 5f：关闭服务并清理
+
+```bash
+# 关闭服务
+if [ -n "$SERVER_PID" ]; then
+  kill $SERVER_PID 2>/dev/null || true
+  wait $SERVER_PID 2>/dev/null || true
+  echo "服务已关闭 (PID: $SERVER_PID)"
+fi
+
+# 注意：基础设施（docker compose）不自动关闭，避免影响其他开发工作
+# 如需关闭，用户可手动执行 docker compose down
+```
+
+**约束**：
+- 不自动关闭基础设施，避免影响其他开发工作
+- 即使前面步骤失败，也必须执行关闭步骤（防止僵尸进程）
+
+---
+
+#### 集成冒烟验证结果汇总
+
+| 步骤 | 内容 | 状态 |
+|------|------|------|
+| 5a | 项目类型探测 ({类型}) | ✓ DETECTED / ✗ UNKNOWN |
+| 5b | 基础设施启动 | ✓ PASS / ✗ FAIL / ? SKIP |
+| 5c | 应用启动 | ✓ PASS / ✗ FAIL |
+| 5d | 健康检查 | ✓ PASS / ✗ FAIL |
+| 5e | 请求验证 | ✓ PASS / ✗ FAIL / ? SKIP |
+| 5f | 服务关闭 | ✓ DONE / ✗ FAIL |
+
+### 阶段六：行为抽查
+
+行为抽查验证关键行为在运行时是否产生预期输出。**如果已执行阶段五（集成冒烟验证），行为抽查可以跳过**（冒烟验证已覆盖运行时行为），仅在没有集成验证时执行。
 
 **适用范围**：本阶段产生了可运行代码的（API、CLI、构建脚本）→ 执行抽查。仅文档/配置阶段 → 跳过本步骤并注明原因。
 
@@ -206,8 +517,9 @@ Agent:
 - 每项检查在 10 秒内完成
 - 不修改状态（不写、不删、不变更数据库）
 - 不启动服务器或外部服务（只测已运行的）
+- 如果已执行阶段五集成冒烟验证 → 跳过本阶段
 
-### 阶段五：人体验证清单
+### 阶段七：人体验证清单
 
 某些验证项无法通过 grep 或命令行自动完成，必须由开发者实际操作确认。
 
@@ -285,8 +597,29 @@ status: passed|failed|partial|human_needed
 | 数据路径 | 状态 |
 |-----------|------|
 
-## 测试结果
-./gradlew :module:test → M/N passed
+## 编译与单元测试
+| 步骤 | 项目类型 | 命令 | 结果 | 状态 |
+|------|---------|------|------|------|
+| 编译 | {类型} | {实际命令} | {输出} | ✓ PASS / ✗ FAIL |
+| 单元测试 | {类型} | {实际命令} | {M/N passed} | ✓ PASS / ✗ FAIL |
+
+## 集成冒烟验证
+| 步骤 | 内容 | 状态 |
+|------|------|------|
+| 5a | 项目类型探测 ({类型}) | ✓ DETECTED / ✗ UNKNOWN |
+| 5b | 基础设施启动 | ✓ PASS / ✗ FAIL / ? SKIP |
+| 5c | 应用启动 | ✓ PASS / ✗ FAIL |
+| 5d | 健康检查 | ✓ PASS / ✗ FAIL |
+| 5e | 请求验证 | ✓ PASS / ✗ FAIL / ? SKIP |
+| 5f | 服务关闭 | ✓ DONE / ✗ FAIL |
+
+### 健康检查详情
+| 检查项 | 项目类型 | 命令 | 结果 | 状态 |
+|--------|---------|------|------|------|
+
+### 请求验证详情
+| API/页面 | 项目类型 | 请求内容 | 响应状态 | 状态 |
+|----------|---------|---------|---------|------|
 
 ## 行为抽查结果
 | 行为 | 命令 | 结果 | 状态 |
@@ -300,10 +633,12 @@ status: passed|failed|partial|human_needed
 
 ## 最终裁决
 **状态优先级（从高到低）**：
-1. 任何 L1-L4 有 FAILED → **FAILED**
-2. 人体验证清单非空 → **HUMAN_NEEDED**
-3. 行为抽查有 FAIL → **PARTIAL**（记录 gap）
-4. 全部通过 → **PASSED**
+1. 编译或单元测试失败 → **FAILED**（代码不可构建）
+2. 任何 L1-L4 有 FAILED → **FAILED**
+3. 集成冒烟验证有 FAILED → **FAILED**（服务无法启动或请求失败）
+4. 人体验证清单非空 → **HUMAN_NEEDED**
+5. 行为抽查有 FAIL → **PARTIAL**（记录 gap）
+6. 全部通过 → **PASSED**
 ```
 
 ## 完成标记
@@ -321,5 +656,10 @@ status: passed|failed|partial|human_needed
 - 每层有具体检测命令输出，不做主观判断
 - 发现存根时给出具体文件名和行号
 - 内存文件（memory/）不作为验证目标
+- 编译 + 单元测试在集成验证之前执行，失败则直接标记 FAILED
+- 集成冒烟验证：启动前需用户确认（AskUserQuestion），不可跳过确认自动执行
+- 集成冒烟验证涉及 docker compose up、gradle run 等耗时操作，不设 < 10 秒限制
+- 集成冒烟验证失败不影响行为抽查（行为抽查有独立判断）
+- 服务关闭必须执行（即使前面步骤失败），防止僵尸进程
 - 行为抽查不启动服务器，只测已运行的入口点
 - 人体验证清单应具体可操作，避免模糊描述（如"测试一下功能"）
