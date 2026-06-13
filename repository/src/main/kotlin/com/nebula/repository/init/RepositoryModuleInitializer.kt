@@ -11,6 +11,7 @@ import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
+import com.nebula.repository.repository.DeadLetterRepository
 import com.nebula.repository.repository.FriendRequestRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
@@ -55,6 +56,7 @@ class RepositoryModuleInitializer : ModuleInitializer, KoinComponent {
         val messageRepo = jpaConfig.getRepository(MessageRepository::class.java)
         val friendshipRepo = jpaConfig.getRepository(FriendshipRepository::class.java)
         val friendRequestRepo = jpaConfig.getRepository(FriendRequestRepository::class.java)
+        val deadLetterRepo = jpaConfig.getRepository(DeadLetterRepository::class.java)
 
         // 初始化 Redis Repository
         val sessionRepo = SessionRepository(redisConfig.connection)
@@ -85,6 +87,7 @@ class RepositoryModuleInitializer : ModuleInitializer, KoinComponent {
         koin.declare<MessageQueueRepository>(messageQueueRepo)
         koin.declare<FriendshipRepository>(friendshipRepo)
         koin.declare<FriendRequestRepository>(friendRequestRepo)
+        koin.declare<DeadLetterRepository>(deadLetterRepo)
         koin.declare<PrivacyRepository>(PrivacyRepository(redisConfig.connection, userRepo))
         koin.declare<StatefulRedisConnection<String, String>>(redisConfig.connection)
     }
