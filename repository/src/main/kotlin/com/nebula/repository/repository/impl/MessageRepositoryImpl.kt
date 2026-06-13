@@ -30,6 +30,7 @@ class MessageRepositoryImpl(
 ) : MessageWriteRepository {
 
     private val logger = KotlinLogging.logger {}
+    @Volatile
     private var stopped = false
 
     override suspend fun enqueueMessage(entity: MessageEntity): String {

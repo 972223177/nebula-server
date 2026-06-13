@@ -5,6 +5,8 @@ import com.nebula.chat.Response
 import com.nebula.gateway.handler.SessionKey
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -98,25 +100,30 @@ class RateLimitInterceptor(
         private val maxRequests = 5
         private val windowMs = 60 * 60 * 1000L  // 1 小时
 
+        /** 协程互斥锁，替代 synchronized 以避免协程线程阻塞 */
+        private val mutex = Mutex()
+
         /**
          * 尝试获取注册许可。
          *
          * @param ip 客户端 IP
          * @return true=允许注册，false=超出限流
          */
-        fun tryAcquire(ip: String): Boolean {
+        suspend fun tryAcquire(ip: String): Boolean {
             val now = System.currentTimeMillis()
             val times = ipRequestTimes.getOrPut(ip) { mutableListOf() }
-            synchronized(times) {
+            val acquired = mutex.withLock {
                 times.removeAll { now - it > windowMs }
-                if (times.size >= maxRequests) return false
-                times.add(now)
+                if (times.size >= maxRequests) false else {
+                    times.add(now)
+                    true
+                }
             }
             // 内存泄漏修复：清除已过期空的 IP 条目（Review 反馈#5）
             if (times.isEmpty()) {
                 ipRequestTimes.remove(ip, times)
             }
-            return true
+            return acquired
         }
     }
 

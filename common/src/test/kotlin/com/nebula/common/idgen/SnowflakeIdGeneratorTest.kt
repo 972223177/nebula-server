@@ -1,6 +1,7 @@
 package com.nebula.common.idgen
 
 import com.nebula.common.exception.ClockBackwardsException
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
@@ -55,14 +56,14 @@ class SnowflakeIdGeneratorTest {
     // ─── 2. nextId() 基本功能 ────────────────────────────────────────────────────
 
     @Test
-    fun nextIdShouldReturnAPositiveId() {
+    fun nextIdShouldReturnAPositiveId() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
         val id = generator.nextId()
         assertTrue(id > 0, "Generated ID should be positive, got $id")
     }
 
     @Test
-    fun nextIdShouldEncodeWorkerIdAndSequenceCorrectly() {
+    fun nextIdShouldEncodeWorkerIdAndSequenceCorrectly() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
         val id = generator.nextId()
 
@@ -77,7 +78,7 @@ class SnowflakeIdGeneratorTest {
     // ─── 3. 序列号递增 ──────────────────────────────────────────────────────────
 
     @Test
-    fun sequenceShouldIncrementWithinTheSameMillisecond() {
+    fun sequenceShouldIncrementWithinTheSameMillisecond() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
 
         // 连续快速调用，期望在同一毫秒内序列号递增
@@ -94,7 +95,7 @@ class SnowflakeIdGeneratorTest {
     }
 
     @Test
-    fun sequenceShouldResetTo0InANewMillisecond() {
+    fun sequenceShouldResetTo0InANewMillisecond() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
 
         // 生成一个 ID 建立上下文，然后等待下一毫秒再生成下一个
@@ -116,7 +117,7 @@ class SnowflakeIdGeneratorTest {
     // ─── 4. 时钟回拨 ─────────────────────────────────────────────────────────────
 
     @Test
-    fun clockMovingBackwardsShouldThrowClockBackwardsException() {
+    fun clockMovingBackwardsShouldThrowClockBackwardsException() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
 
         // 通过反射将内部 lastTimestamp 设为未来值，使 nextId 检测到"时钟回拨"
@@ -137,7 +138,7 @@ class SnowflakeIdGeneratorTest {
     // ─── 5. ID 唯一性 ────────────────────────────────────────────────────────────
 
     @Test
-    fun multipleCallsShouldProduceUniqueIds() {
+    fun multipleCallsShouldProduceUniqueIds() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
         val ids = mutableSetOf<Long>()
 
@@ -149,7 +150,7 @@ class SnowflakeIdGeneratorTest {
     }
 
     @Test
-    fun differentWorkerIdsShouldProduceDifferentIds() {
+    fun differentWorkerIdsShouldProduceDifferentIds() = runTest {
         val generator1 = SnowflakeIdGenerator(workerId = 1)
         val generator2 = SnowflakeIdGenerator(workerId = 2)
 

@@ -1,6 +1,8 @@
 package com.nebula.common.idgen
 
 import com.nebula.common.exception.ClockBackwardsException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 雪花算法（Snowflake）ID 生成器，用于在分布式环境下生成全局唯一的 64 位长整型 ID。
@@ -50,8 +52,17 @@ class SnowflakeIdGenerator(
     /** 当前毫秒内的序列号，溢出后自旋等待下一毫秒 */
     private var sequence = 0L
 
-    @Synchronized
-    fun nextId(): Long {
+    /** 协程互斥锁，替代 @Synchronized 以避免协程线程阻塞 */
+    private val mutex = Mutex()
+
+    /**
+     * 生成下一个全局唯一 ID。
+     *
+     * 使用 [Mutex] 替代 @Synchronized 保证线程安全，避免在协程上下文中阻塞线程。
+     *
+     * @return 64 位长整型 ID
+     */
+    suspend fun nextId(): Long = mutex.withLock {
         var timestamp = currentTimeMillis()
 
         // 检测时钟回拨 —— 若系统时间倒退则抛异常，防止 ID 重复
@@ -75,7 +86,7 @@ class SnowflakeIdGenerator(
         lastTimestamp = timestamp
         // 拼装最终 64 位 ID：
         //   (相对时间戳) << 22  |  (workerId) << 12  |  序列号
-        return ((timestamp - epoch) shl TIMESTAMP_SHIFT.toInt()) or
+        ((timestamp - epoch) shl TIMESTAMP_SHIFT.toInt()) or
                 (workerId shl WORKER_ID_SHIFT.toInt()) or
                 sequence
     }
