@@ -6,6 +6,14 @@ import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.chat.send.SendMessageStep
+import com.nebula.gateway.handler.conversation.ConversationLockManager
+import com.nebula.gateway.handler.conversation.CreateGroupHandler
+import com.nebula.gateway.handler.conversation.EditGroupHandler
+import com.nebula.gateway.handler.conversation.GroupMembersHandler
+import com.nebula.gateway.handler.conversation.InviteMemberHandler
+import com.nebula.gateway.handler.conversation.KickMemberHandler
+import com.nebula.gateway.handler.conversation.LeaveGroupHandler
+import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
@@ -28,6 +36,7 @@ import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.UserRepository
 import io.lettuce.core.api.StatefulRedisConnection
 import jakarta.persistence.EntityManagerFactory
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +51,7 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.get
+import org.springframework.transaction.support.TransactionTemplate
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 
@@ -66,6 +76,7 @@ class GatewayModuleTest {
     private val messageRepo = mockk<MessageRepository>()
     private val messageQueueRepo = mockk<MessageQueueRepository>()
     private val emf = mockk<EntityManagerFactory>()
+    private val transactionTemplate = mockk<TransactionTemplate>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /**
@@ -84,6 +95,7 @@ class GatewayModuleTest {
         single { conversationMemberRepo }
         single { conversationRepo }
         single { messageRepo }
+        single { transactionTemplate }  // Phase 7: D-19 TransactionTemplate
     }
 
     /**
@@ -109,8 +121,18 @@ class GatewayModuleTest {
         single { PushService(get(), get()) }
         single { listOf<SendMessageStep>(mockk(), mockk(), mockk()) }
         single { SendMessageHandler(get(), get(), get(), get(), get()) }
-        single { PullMessagesHandler(get(), get()) }
+        single { PullMessagesHandler(get(), get(), get()) }  // Phase 7: 新增第3参数 ConvMemberRepo
         single { ReadReportHandler(get(), get(), get(), get()) }
+
+        // Phase 7: Conversation — 使用 mock 外部依赖
+        single { ConversationLockManager() }
+        single { ListConversationsHandler(get(), get()) }
+        single { GroupMembersHandler(get(), get()) }
+        single { EditGroupHandler(get(), get(), get()) }
+        single { CreateGroupHandler(get(), get(), get(), get(), get()) }
+        single { InviteMemberHandler(get(), get(), get(), get(), get()) }
+        single { LeaveGroupHandler(get(), get(), get(), get(), get()) }
+        single { KickMemberHandler(get(), get(), get(), get(), get()) }
     }
 
     @AfterEach
@@ -218,6 +240,64 @@ class GatewayModuleTest {
         assertDoesNotThrow { GlobalContext.get().get<GetPrivacyHandler>() }
     }
 
+    // ========== Phase 7 Handler 解析 ==========
+
+    @Test
+    fun `ListConversationsHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<ListConversationsHandler>() }
+    }
+
+    @Test
+    fun `GroupMembersHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<GroupMembersHandler>() }
+    }
+
+    @Test
+    fun `EditGroupHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<EditGroupHandler>() }
+    }
+
+    @Test
+    fun `CreateGroupHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<CreateGroupHandler>() }
+    }
+
+    @Test
+    fun `InviteMemberHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<InviteMemberHandler>() }
+    }
+
+    @Test
+    fun `LeaveGroupHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<LeaveGroupHandler>() }
+    }
+
+    @Test
+    fun `KickMemberHandler can be resolved from Koin`() {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        assertDoesNotThrow { GlobalContext.get().get<KickMemberHandler>() }
+    }
+
     // ========== registerHandlers 功能验证 ==========
 
     @Test
@@ -239,13 +319,22 @@ class GatewayModuleTest {
         val sendMessageHandler = GlobalContext.get().get<SendMessageHandler>()
         val pullMessagesHandler = GlobalContext.get().get<PullMessagesHandler>()
         val readReportHandler = GlobalContext.get().get<ReadReportHandler>()
+        val listConversationsHandler = GlobalContext.get().get<ListConversationsHandler>()
+        val groupMembersHandler = GlobalContext.get().get<GroupMembersHandler>()
+        val editGroupHandler = GlobalContext.get().get<EditGroupHandler>()
+        val createGroupHandler = GlobalContext.get().get<CreateGroupHandler>()
+        val inviteMemberHandler = GlobalContext.get().get<InviteMemberHandler>()
+        val leaveGroupHandler = GlobalContext.get().get<LeaveGroupHandler>()
+        val kickMemberHandler = GlobalContext.get().get<KickMemberHandler>()
 
         registerHandlers(
             registry, codec,
             pingHandler, loginHandler, registerHandler, searchUserHandler,
             getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
             setPrivacyHandler, getPrivacyHandler,
-            sendMessageHandler, pullMessagesHandler, readReportHandler
+            sendMessageHandler, pullMessagesHandler, readReportHandler,
+            listConversationsHandler, groupMembersHandler, editGroupHandler,
+            createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler
         )
 
         // 验证所有 Phase 5~6 方法已注册
@@ -270,5 +359,16 @@ class GatewayModuleTest {
         assertSame(pullMessagesHandler, registry.get("message/pull")?.handler)
         assertNotNull(registry.get("message/read"))
         assertSame(readReportHandler, registry.get("message/read")?.handler)
+
+        // Phase 7: Conversation Handler 注册验证
+        assertNotNull(registry.get("conversation/list"))
+        assertSame(listConversationsHandler, registry.get("conversation/list")?.handler)
+        assertNotNull(registry.get("conversation/group_members"))
+        assertSame(groupMembersHandler, registry.get("conversation/group_members")?.handler)
+        assertNotNull(registry.get("conversation/edit_group_info"))
+        assertNotNull(registry.get("conversation/create_group"))
+        assertNotNull(registry.get("conversation/invite_member"))
+        assertNotNull(registry.get("conversation/leave_group"))
+        assertNotNull(registry.get("conversation/kick_member"))
     }
 }

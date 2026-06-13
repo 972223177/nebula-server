@@ -20,6 +20,10 @@ class ConversationMemberEntity(
     @Column(nullable = false)
     var userId: Long,
 
+    /** 成员角色：owner=群主, member=普通成员（D-17） */
+    @Column(length = 16)
+    var role: String = "member",
+
     var lastReadMessageId: Long = 0,
 
     var unreadCount: Int = 0,

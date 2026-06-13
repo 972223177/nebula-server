@@ -6,6 +6,14 @@ import com.nebula.gateway.dispatcher.HandlerEntry
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.handler.conversation.ConversationLockManager
+import com.nebula.gateway.handler.conversation.CreateGroupHandler
+import com.nebula.gateway.handler.conversation.EditGroupHandler
+import com.nebula.gateway.handler.conversation.GroupMembersHandler
+import com.nebula.gateway.handler.conversation.InviteMemberHandler
+import com.nebula.gateway.handler.conversation.KickMemberHandler
+import com.nebula.gateway.handler.conversation.LeaveGroupHandler
+import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -68,6 +76,7 @@ val frameworkModule = module {
  *
  * Phase 5: 包含 9 个 Handler（PingHandler + 8 个用户业务 Handler）
  * Phase 6: 新增 UserStreamRegistry/PushService/3 个 Handler/3 个 SendMessageStep/SendMessageHandler scope
+ * Phase 7: 新增 ConversationLockManager + 7 个 Conversation Handler + TransactionTemplate 注入
  * 新增 Handler 只需在此模块中添加 single { } 声明即可被 Koin 自动管理。
  */
 val handlerModule = module {
@@ -95,8 +104,18 @@ val handlerModule = module {
         )
     }
     single { SendMessageHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) } // SendMessageHandler(steps, pushSvc, convMemberRepo, redisConn, scope)
-    single { PullMessagesHandler(get(), get()) }                                         // PullMessagesHandler(MessageRepository, ConversationRepository)
+    single { PullMessagesHandler(get(), get(), get()) }                                     // PullMessagesHandler(MessageRepo, ConvRepo, ConvMemberRepo) — Phase 7 新增第3参数
     single { ReadReportHandler(get(), get(), get(), get()) }                             // ReadReportHandler(ConvRepo, ConvMemberRepo, PushSvc, RedisConn)
+
+    // Phase 7: Conversation（D-19 事务 + 锁 + 7 个 Handler）
+    single { ConversationLockManager() }
+    single { ListConversationsHandler(get(), get()) }      // ConvRepo + ConvMemberRepo
+    single { GroupMembersHandler(get(), get()) }           // ConvMemberRepo + UserRepo
+    single { EditGroupHandler(get(), get(), get()) }       // ConvRepo + ConvMemberRepo + PushService
+    single { CreateGroupHandler(get(), get(), get(), get(), get()) } // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+    single { InviteMemberHandler(get(), get(), get(), get(), get()) } // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+    single { LeaveGroupHandler(get(), get(), get(), get(), get()) }  // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+    single { KickMemberHandler(get(), get(), get(), get(), get()) }  // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
 }
 
 /**
@@ -151,6 +170,13 @@ private inline fun <reified ReqT : Any, reified RespT : Any> HandlerRegistry.reg
  * @param sendMessageHandler SendMessageHandler 实例
  * @param pullMessagesHandler PullMessagesHandler 实例
  * @param readReportHandler ReadReportHandler 实例
+ * @param listConversationsHandler ListConversationsHandler 实例
+ * @param groupMembersHandler GroupMembersHandler 实例
+ * @param editGroupHandler EditGroupHandler 实例
+ * @param createGroupHandler CreateGroupHandler 实例
+ * @param inviteMemberHandler InviteMemberHandler 实例
+ * @param leaveGroupHandler LeaveGroupHandler 实例
+ * @param kickMemberHandler KickMemberHandler 实例
  */
 fun registerHandlers(
     registry: HandlerRegistry,
@@ -166,7 +192,14 @@ fun registerHandlers(
     getPrivacyHandler: GetPrivacyHandler,
     sendMessageHandler: SendMessageHandler,
     pullMessagesHandler: PullMessagesHandler,
-    readReportHandler: ReadReportHandler
+    readReportHandler: ReadReportHandler,
+    listConversationsHandler: ListConversationsHandler,
+    groupMembersHandler: GroupMembersHandler,
+    editGroupHandler: EditGroupHandler,
+    createGroupHandler: CreateGroupHandler,
+    inviteMemberHandler: InviteMemberHandler,
+    leaveGroupHandler: LeaveGroupHandler,
+    kickMemberHandler: KickMemberHandler
 ) {
     // 使用 inline 扩展函数逐个注册，消除重复的 HandlerEntry 构建代码（Review 修复）
     registry.register(pingHandler)               // system/ping: Request → Response
@@ -181,4 +214,11 @@ fun registerHandlers(
     registry.register(sendMessageHandler)        // chat/send: SendMessageReq → SendMessageResp
     registry.register(pullMessagesHandler)       // message/pull: PullMessagesReq → PullMessagesResp
     registry.register(readReportHandler)         // message/read: ReadReportReq → Response
+    registry.register(listConversationsHandler)  // conversation/list: ConvListReq → ConvListResp
+    registry.register(groupMembersHandler)       // conversation/group_members: GroupMembersReq → GroupMembersResp
+    registry.register(editGroupHandler)          // conversation/edit_group_info: EditGroupReq → Response
+    registry.register(createGroupHandler)        // conversation/create_group: CreateGroupReq → CreateGroupResp
+    registry.register(inviteMemberHandler)       // conversation/invite_member: InviteMemberReq → Response
+    registry.register(leaveGroupHandler)         // conversation/leave_group: LeaveGroupReq → Response
+    registry.register(kickMemberHandler)         // conversation/kick_member: KickMemberReq → Response
 }

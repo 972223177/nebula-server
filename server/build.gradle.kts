@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.lettuce.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.hibernate.core)
+    implementation(libs.spring.tx)
 
     // Phase 4: Handler Framework — Koin 启动
     implementation(libs.koin.core)
