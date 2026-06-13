@@ -18,6 +18,10 @@ import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.lettuce.core.ExperimentalLettuceCoroutinesApi
+import io.lettuce.core.api.StatefulRedisConnection
+import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
+import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.data.domain.Pageable
@@ -32,14 +36,17 @@ import java.time.ZoneOffset
  * 消息发送流程：参数校验 → 成员身份验证 → 好友关系检查（私聊） → 去重 → 写入 Redis Stream。
  * 不依赖网关层组件（PushService、SessionRegistry 等），推送由调用方（Handler）负责。
  */
+@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class MessageService(
     private val messageRepository: MessageRepository,
     private val messageQueueRepository: MessageQueueRepository,
     private val conversationMemberRepository: ConversationMemberRepository,
     private val conversationRepository: ConversationRepository,
     private val friendshipRepository: FriendshipRepository,
-    private val idGenerator: SnowflakeIdGenerator
+    private val idGenerator: SnowflakeIdGenerator,
+    private val connection: StatefulRedisConnection<String, String>
 ) {
+    private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 
     companion object {
         private val logger = KotlinLogging.logger {}
@@ -139,13 +146,17 @@ class MessageService(
             conversationRepository.save(conversation)
         }
 
+        // Step 8: 生成会话序列号（D-74 per-(conv,uid) 自增）
+        val seq = redis.incr("conv:${conversationId}:next_seq:${senderUid}") ?: 1L
+
         return SendMessageResult(
             msgId = msgId,
             serverTs = now,
             conversationId = conversationId,
             senderUid = senderUid,
             chatMessage = chatMessage,
-            conversation = conversation
+            conversation = conversation,
+            seq = seq
         )
     }
 
@@ -263,6 +274,7 @@ class MessageService(
  * @param senderUid 发送者 UID
  * @param chatMessage 完整的 ChatMessage（用于推送）
  * @param conversation 会话实体（用于判断群聊/私聊等）
+ * @param seq 会话序列号（D-74 per-(conv,uid) 自增）
  */
 data class SendMessageResult(
     val msgId: Long,
@@ -270,5 +282,6 @@ data class SendMessageResult(
     val conversationId: String,
     val senderUid: Long,
     val chatMessage: ChatMessage,
-    val conversation: ConversationEntity
+    val conversation: ConversationEntity,
+    val seq: Long = 0
 )

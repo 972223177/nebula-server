@@ -16,7 +16,7 @@ import org.koin.dsl.module
 val serviceModule = module {
     single { UserService(get(), get(), get()) }
     single { UserPrivacyService(get(), get(), get()) }
-    single { MessageService(get(), get(), get(), get(), get(), get()) }
+    single { MessageService(get(), get(), get(), get(), get(), get(), get()) }
     single { ConversationService(get(), get(), get()) }
     single { FriendService(get(), get(), get(), get(), get(), get(), get()) }
 }
