@@ -22,4 +22,7 @@ dependencies {
     implementation(libs.hikaricp)
     implementation(libs.mysql.connector)
     implementation(libs.grpc.netty.shaded)
+
+    // Koin DI — 模块初始化器需要 KoinComponent 和 Koin API
+    implementation(libs.koin.core)
 }
