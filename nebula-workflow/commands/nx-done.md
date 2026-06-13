@@ -1,79 +1,135 @@
 ---
-description: 完成里程碑，归档阶段，更新项目文档
-argument-hint: [阶段号]
-allowed-tools: Read, Write, Edit, Grep, Glob, Bash, AskUserQuestion
+description: 阶段归档 —— 更新 STATE.md，标记阶段完成
+argument-hint: "<N> [阶段编号]"
 ---
 
-# /nx-done — 完成里程碑
+# 阶段归档
 
-## 目的
+## 目标
+将阶段 N 标记为完成，更新 STATE.md 中的状态，确保所有产出物齐全。
 
-标记一个阶段为完成状态：归档阶段文件、更新 PROJECT.md 的需求状态、记录决策、更新 STATE.md。
-是工作流循环中"收尾"的一步。
+## 参数
+- `$ARGUMENTS`：阶段编号 N（必需）
 
-## 前置条件
+## 门禁检查
 
-- 该阶段必须通过 `/nx-verify` 验证
+### Pre-flight Gate
+```bash
+# 检查阶段存在
+if [ ! -d ".planning/phases/0${N}-*" ]; then
+  报错: "阶段 N 目录不存在"
+fi
+```
+
+### Completion Gate（完整性检查）
+
+按阶段类型区分必需文件：
+
+```bash
+# 1. 通用必需文件（所有阶段）
+BASE_FILES=("NN-*-PLAN.md" "NN-*-SUMMARY.md")
+
+# 2. 根据 ROADMAP.md 中该阶段的 phase_type 确定增量文件
+PHASE_TYPE=$(从 ROADMAP.md 读取阶段类型: implementation|infrastructure|config|documentation)
+
+case "$PHASE_TYPE" in
+  "implementation")
+    REQUIRED_FILES=("${BASE_FILES[@]}" "NN-CONTEXT.md" "NN-RESEARCH.md" "NN-PATTERNS.md" "NN-VERIFICATION.md" "NN-VALIDATION.md" "NN-SECURITY.md")
+    ;;
+  "infrastructure")
+    REQUIRED_FILES=("${BASE_FILES[@]}" "NN-CONTEXT.md" "NN-RESEARCH.md" "NN-VERIFICATION.md")
+    # 豁免：SECURITY（无安全问题）、VALIDATION（测试审计不适用）、PATTERNS（基础设施无模式参考）
+    ;;
+  "config")
+    REQUIRED_FILES=("${BASE_FILES[@]}" "NN-VERIFICATION.md")
+    # 豁免：RESEARCH、PATTERNS、CONTEXT、SECURITY、VALIDATION（纯配置阶段）
+    ;;
+  "documentation")
+    REQUIRED_FILES=("${BASE_FILES[@]}" "NN-CONTEXT.md" "NN-VERIFICATION.md")
+    # 豁免：RESEARCH、PATTERNS、SECURITY、VALIDATION（文档阶段不需要代码验证）
+    ;;
+  *)
+    # 未知类型，使用最严格标准
+    REQUIRED_FILES=("${BASE_FILES[@]}" "NN-CONTEXT.md" "NN-RESEARCH.md" "NN-PATTERNS.md" "NN-VERIFICATION.md" "NN-VALIDATION.md" "NN-SECURITY.md")
+    ;;
+esac
+
+for FILE in "${REQUIRED_FILES[@]}"; do
+  if [ ! -f "${PHASE_DIR}/${FILE}" ]; then
+    列出缺失文件
+    MISSING_FILES+=("$FILE")
+  fi
+done
+
+if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+  报错: "阶段 N 缺少必要文件: ${MISSING_FILES[*]}"
+  提示: "使用 --skip-validation 跳过验证，但建议先补全缺失文件"
+  exit 1
+fi
+```
+
+### Verification Gate
+
+```bash
+# 检查 VERIFICATION.md 状态
+VERIFY_STATUS=$(提取 VERIFICATION.md frontmatter 的 status)
+if [ "$VERIFY_STATUS" != "passed" ]; then
+  警告: "验证状态为 $VERIFY_STATUS，归档可能不完整"
+  询问: "是否强制归档？[y/N]"
+fi
+```
 
 ## 流程
 
-### 第一步：检查前置条件
-
-1. 读取 `.planning/phases/<N>/PLAN.md` 检查是否全部完成
-2. 读取 STATE.md 检查该阶段验证状态
-3. **如果阶段未通过验证** → 阻止并提示先执行 `/nx-verify <N>`
-
-### 第二步：更新 PROJECT.md
-
-1. 读取 `.planning/PROJECT.md`
-2. 将阶段中已验证的需求从"Active"移动到"Validated"（如果有明确映射）
-3. 更新 "Key Decisions" 记录本阶段的关键决策
-4. 更新 "Last updated" 时间戳
-
-### 第三步：归档阶段文件
-
-在 `.planning/phases/<N>/` 目录中：
-1. 在 PLAN.md 中标记阶段状态为"已完成"
-2. 添加完成日期和总结
-
-### 第四步：更新 STATE.md
+### 步骤 1：更新 STATE.md
 
 ```markdown
-# 项目状态
-
-## 当前阶段
-阶段：<N+1>：[下一阶段名称]
-状态：待开始
-
-## 已完成阶段
-- 阶段 <N>：[名称] ✅ [完成日期]
-  - 交付：...（简短描述）
-  - 决策记录：...
-
-## 项目引用
-见：.planning/PROJECT.md（更新于 [日期]）
+| N — <阶段名称> | Complete | <开始日期> | <完成日期> |
 ```
 
-### 第五步：审计检查
+更新 frontmatter：
+```yaml
+progress:
+  completed_phases: N+1
+  percent: <新百分比>
+```
 
-在完成前做一个快速审计：
-1. 是否有未提交的代码改动？→ 建议先提交
-2. 是否需要更新 README 或文档？→ 建议
-3. 是否有技术债务需要记录？→ 建议记入 PROJECT.md 的 Context 部分
-4. `.planning/PAUSE.md` 是否存在？→ 自动清理（阶段已完成）
+### 步骤 2：Git 提交
 
-### 第六步：输出完成总结
+```bash
+# 步骤 A：自动提交所有未提交变更（源码 + 规划文件）
+UNCOMMITTED=$(git status --porcelain)
+if [ -n "$UNCOMMITTED" ]; then
+  git add -A
+  git commit -m "chore(phase-${N}): 阶段归档 —— 自动提交未归档变更"
+  echo "未归档变更已自动提交"
+else
+  echo "无未归档变更"
+fi
+
+# 步骤 B：归档提交（仅规划文件）
+git add .planning/STATE.md .planning/phases/0${N}-*/
+git commit -m "done: 阶段 ${N} 归档 —— 所有产出物已交付"
+```
+
+### 步骤 3：展示完成摘要
 
 ```markdown
-## ✅ 阶段 <N> 完成
+# 阶段 N 完成 ✅
 
-已完成任务：X
-关键决策：X 条已记录
-新增已验证需求：X 条
+## 交付摘要
+- PLAN 数：M
+- 代码提交数：K
+- 测试文件：T
+- 验证状态：PASSED
 
-### 下一阶段：阶段 <N+1>：[名称]
-待办：
-1. `/nx-discuss <N+1>` — 讨论下一阶段（如果需要）
-2. `/nx-plan <N+1>` — 规划下一阶段
-3. 或 `/nx-status` 查看全局状态
+## 下一步
+- /nx-discuss N+1 —— 开始下一阶段
+- /nx-status —— 查看最新状态
 ```
+
+## 成功标准
+- STATE.md 中阶段状态已更新为 Complete
+- 所有必需文件已验证存在
+- 变更已提交到 git
+- 用户知道下一步操作

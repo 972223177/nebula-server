@@ -12,6 +12,7 @@ import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.MessageRepository
+import com.nebula.service.chat.MessageService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -40,6 +41,7 @@ import kotlin.test.assertTrue
  */
 class PullMessagesHandlerTest {
 
+    private lateinit var messageService: MessageService
     private lateinit var messageRepository: MessageRepository
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var conversationMemberRepository: ConversationMemberRepository
@@ -49,10 +51,11 @@ class PullMessagesHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        messageService = mockk()
         messageRepository = mockk()
         conversationRepository = mockk()
         conversationMemberRepository = mockk()
-        handler = PullMessagesHandler(messageRepository, conversationRepository, conversationMemberRepository)
+        handler = PullMessagesHandler(messageService)
     }
 
     @Test

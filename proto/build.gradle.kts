@@ -6,8 +6,8 @@ plugins {
 }
 
 dependencies {
-    implementation(libs.protobuf.java)
-    implementation(libs.protobuf.kotlin)
+    api(libs.protobuf.java)
+    api(libs.protobuf.kotlin)
     implementation(libs.javax.annotation.api)
 }
 

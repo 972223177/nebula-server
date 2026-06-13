@@ -6,6 +6,7 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -25,13 +26,15 @@ import kotlin.test.assertFailsWith
  */
 class GetProfileHandlerTest {
 
+    private lateinit var userService: UserService
     private lateinit var userRepository: UserRepository
     private lateinit var handler: GetProfileHandler
 
     @BeforeEach
     fun setup() {
+        userService = mockk()
         userRepository = mockk()
-        handler = GetProfileHandler(userRepository)
+        handler = GetProfileHandler(userService)
     }
 
     @Test

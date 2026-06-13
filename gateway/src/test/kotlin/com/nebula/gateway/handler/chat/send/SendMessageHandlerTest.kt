@@ -2,17 +2,24 @@ package com.nebula.gateway.handler.chat.send
 
 import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.chat.SendMessageResp
+import com.nebula.chat.message.ChatMessage
 import com.nebula.common.BizCode
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
+import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.service.chat.MessageService
+import com.nebula.service.chat.SendMessageResult
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,16 +35,14 @@ import kotlin.test.assertTrue
  * SendMessageHandler 单元测试（D-04, D-13）。
  *
  * 覆盖场景：
- * - Step 链全部成功 → 返回 SendMessageResp（含 msgId + serverTs）
- * - Step 链中 SendMessageException → 直接传播
- * - 非预期异常（如模拟 RuntimeException）→ 包装为 SendMessageException(BizCode.INTERNAL_ERROR)
+ * - 正常发送 → MessageService 返回 SendMessageResult，返回 SendMessageResp
+ * - 重复消息（Redis SETNX 返回 false）→ 抛出 SendMessageException(INVALID_PARAM)
+ * - MessageService 抛异常 → 清理去重 key 后传播异常
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandlerTest {
 
-    private lateinit var step1: SendMessageStep
-    private lateinit var step2: SendMessageStep
-    private lateinit var step3: SendMessageStep
+    private lateinit var messageService: MessageService
     private lateinit var pushService: PushService
     private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var redis: RedisCoroutinesCommands<String, String>
@@ -49,17 +54,14 @@ class SendMessageHandlerTest {
 
     @BeforeEach
     fun setUp() {
-        step1 = mockk<SendMessageStep>(relaxed = true)
-        step2 = mockk<SendMessageStep>(relaxed = true)
-        step3 = mockk<SendMessageStep>(relaxed = true)
+        messageService = mockk()
         pushService = mockk<PushService>(relaxed = true)
         conversationMemberRepository = mockk<ConversationMemberRepository>(relaxed = true)
         redis = mockk<RedisCoroutinesCommands<String, String>>(relaxed = true)
         connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-        val steps = listOf(step1, step2, step3)
-        handler = SendMessageHandler(steps, pushService, conversationMemberRepository, connection, scope)
+        handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, connection, scope)
     }
 
     /**
@@ -72,51 +74,46 @@ class SendMessageHandlerTest {
     }
 
     @Test
-    fun `Step 链全部成功返回 SendMessageResp`() = runTest {
+    fun `正常发送返回 SendMessageResp`() = runTest {
         injectMockRedis()
-        // 所有 Step 返回 true（继续链）
-        coEvery { step1.execute(any()) } returns true
-        coEvery { step2.execute(any()) } returns true
-        coEvery { step3.execute(any()) } returns true
+        // 去重检查通过
+        coEvery { redis.setnx(any(), any()) } returns true
+        // MessageService 返回成功结果
+        val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
+        val chatMsg = ChatMessage.newBuilder()
+            .setMsgId(50001L)
+            .setConversationId("conv-001")
+            .setSenderUid(1001L)
+            .build()
+        coEvery { messageService.sendMessage(any(), any()) } returns SendMessageResult(
+            msgId = 50001L,
+            serverTs = 1700000000000L,
+            conversationId = "conv-001",
+            senderUid = 1001L,
+            chatMessage = chatMsg,
+            conversation = convEntity
+        )
 
         val req = SendMessageReq.newBuilder()
             .setConversationId("conv-001")
             .setContent("Hello")
             .setClientMessageId("msg-001")
             .build()
-
-        // 注意：由于我们 mock 了 step3，它实际上不会设置 context.msgId。
-        // handler.handle() 中 requireNotNull(context.msgId) 会检查 msgId 是否非空。
-        // 我们必须让 WriteStep（step3）设置 msgId。
-        // 换个方式：不 mock step3，而是让其中某个 step 设置正确的 msgId。
-        // 由于 test 中使用了 relaxed mock，step.execute 返回 false，不会设值。
-        // 更好的方式：mock step1 返回 true，step2 返回 true，然后让 step3 真实设置 msgId 或者绕过 msgId 检查。
-        // 这里我们直接在测试中构造 handler 并注入 redis，但使用真实的 WriteStep 替代 step3。
-
-        // 实际上最简单：创建一个模拟的 step3 调用链，让 handler 能执行完毕
-        // 我们重新设置 step3 的 execute 来手动设置 msgId
-        coEvery { step3.execute(any()) } answers {
-            val ctx = arg<SendContext>(0)
-            val field = SendContext::class.java.getDeclaredField("msgId")
-            field.isAccessible = true
-            field.set(ctx, 50001L)
-            true
-        }
 
         val resp = withContext(SessionKey(session)) {
             handler.handle(req)
         }
 
         assertNotNull(resp)
-        assertEquals(50001L, resp.msgId, "应返回 WriteStep 设置的 msgId")
+        assertEquals(50001L, resp.msgId, "应返回 MessageService 设置的 msgId")
         assertTrue(resp.serverTs > 0, "应返回服务端时间戳")
     }
 
     @Test
-    fun `Step 链中 SendMessageException 直接传播`() = runTest {
+    fun `重复消息抛出 SendMessageException`() = runTest {
         injectMockRedis()
-        coEvery { step1.execute(any()) } returns true
-        coEvery { step2.execute(any()) } throws SendMessageException(BizCode.SEND_FAILED, "重复消息")
+        // 去重检查失败（SETNX 返回 false）
+        coEvery { redis.setnx(any(), any()) } returns false
 
         val req = SendMessageReq.newBuilder()
             .setConversationId("conv-001")
@@ -128,19 +125,19 @@ class SendMessageHandlerTest {
             withContext(SessionKey(session)) {
                 handler.handle(req)
             }
-            kotlin.test.fail("应抛出 SendMessageException(SEND_FAILED)")
+            kotlin.test.fail("应抛出 SendMessageException(INVALID_PARAM)")
         } catch (e: SendMessageException) {
-            assertEquals(BizCode.SEND_FAILED, e.bizCode)
+            assertEquals(BizCode.INVALID_PARAM, e.bizCode)
         }
-
-        // step3 不应执行（链在 step2 终止）
-        coEvery { step3.execute(any()) } returns true // 重置 mock 避免 relaxed 影响
     }
 
     @Test
-    fun `非预期异常包装为 SendMessageException INTERNAL_ERROR`() = runTest {
+    fun `MessageService 异常时清理去重 key`() = runTest {
         injectMockRedis()
-        coEvery { step1.execute(any()) } throws RuntimeException("Redis 连接超时")
+        // 去重检查通过
+        coEvery { redis.setnx(any(), any()) } returns true
+        // MessageService 抛异常
+        coEvery { messageService.sendMessage(any(), any()) } throws RuntimeException("DB 连接失败")
 
         val req = SendMessageReq.newBuilder()
             .setConversationId("conv-001")
@@ -152,11 +149,10 @@ class SendMessageHandlerTest {
             withContext(SessionKey(session)) {
                 handler.handle(req)
             }
-            kotlin.test.fail("应抛出 SendMessageException(INTERNAL_ERROR)")
-        } catch (e: SendMessageException) {
-            assertEquals(BizCode.INTERNAL_ERROR, e.bizCode)
-            // 异常消息应包含原始异常信息
-            assertTrue(e.message!!.contains("Redis 连接超时"), "异常消息应包含原始异常信息")
+            kotlin.test.fail("应抛出 RuntimeException")
+        } catch (e: Exception) {
+            // 验证去重 key 被清理（允许重试）
+            coVerify { redis.del(any()) }
         }
     }
 }

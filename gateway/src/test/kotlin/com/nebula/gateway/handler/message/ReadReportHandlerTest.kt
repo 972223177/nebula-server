@@ -12,6 +12,7 @@ import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
+import com.nebula.service.chat.MessageService
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
@@ -44,6 +45,7 @@ import kotlin.test.assertNotNull
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class ReadReportHandlerTest {
 
+    private lateinit var messageService: MessageService
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
@@ -55,6 +57,7 @@ class ReadReportHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        messageService = mockk()
         conversationRepository = mockk()
         conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
@@ -62,6 +65,7 @@ class ReadReportHandlerTest {
         redis = mockk(relaxed = true)
 
         handler = ReadReportHandler(
+            messageService,
             conversationRepository,
             conversationMemberRepository,
             pushService,

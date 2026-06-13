@@ -106,10 +106,23 @@ WAVES = {
 
 ### 步骤 4：Git 提交
 
-每个执行计划完成后：
+每个执行计划完成后自动执行 Git 提交：
+
 ```bash
-git add <modified_files>
-git commit -m "feat(phase-${N}): plan ${N}-${M} — <简短描述>"
+# 步骤 A：检测未提交变更
+UNCOMMITTED=$(git status --porcelain)
+if [ -n "$UNCOMMITTED" ]; then
+  # 步骤 B：自动暂存所有变更
+  git add -A
+  # 步骤 C：从 PLAN.md frontmatter 提取计划标题，若为空则使用默认格式
+  PLAN_DESC=$(grep -m1 '^title:' "${PHASE_DIR}/${PLAN_PADDED}-PLAN.md" 2>/dev/null | sed 's/^title:[[:space:]]*//' || echo "plan ${N}-${M}")
+  git commit -m "feat(phase-${N}): plan ${N}-${M} — ${PLAN_DESC}"
+  # 步骤 D：记录提交 hash 用于 SUMMARY.md
+  COMMIT_HASH=$(git rev-parse --short HEAD)
+  echo "已提交: ${COMMIT_HASH} — ${PLAN_DESC}"
+else
+  echo "无变更，跳过提交"
+fi
 ```
 
 ### 步骤 5：偏差处理
@@ -136,7 +149,22 @@ Wave 1 (并行): [████████░░] 4/5 任务完成
 
 每完成一个任务或每 5 分钟（取较短者）输出一次进展摘要。这确保用户在长时间并行执行中不会处于信息黑洞。
 
-### 步骤 7：分析卡死保护
+### 步骤 7：未提交变更检查
+
+在所有计划执行完成后、生成 SUMMARY.md 之前，执行收尾提交：
+
+```bash
+UNCOMMITTED=$(git status --porcelain)
+if [ -n "$UNCOMMITTED" ]; then
+  git add -A
+  git commit -m "chore(phase-${N}): 执行阶段收尾 —— 自动提交未归档变更"
+  echo "收尾提交完成"
+else
+  echo "无未归档变更，跳过收尾提交"
+fi
+```
+
+### 步骤 8：分析卡死保护
 
 - 连续 5 次只读工具调用 → 停止，要求用户确认
 - 连续 3 次工具调用返回空/错误 → 停止（无意义搜索）

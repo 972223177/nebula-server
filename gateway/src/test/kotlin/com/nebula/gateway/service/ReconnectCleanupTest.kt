@@ -2,12 +2,13 @@ package com.nebula.gateway.service
 
 import com.nebula.repository.redis.SessionRepository
 import io.lettuce.core.api.StatefulRedisConnection
-import io.mockk.coEvery
-import io.mockk.coVerify
+import io.lettuce.core.api.async.RedisAsyncCommands
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 /**
@@ -35,11 +36,11 @@ class ReconnectCleanupTest {
         repo.batchDelete(keys)
 
         // 验证 pipeline 模式开启
-        verify(exactly = 1) { connection.setAutoFlush(false) }
+        verify(exactly = 1) { connection.setAutoFlushCommands(false) }
         // 验证 flushCommands 被调用
         verify(exactly = 1) { connection.flushCommands() }
         // 验证 pipeline 模式恢复
-        verify(exactly = 1) { connection.setAutoFlush(true) }
+        verify(exactly = 1) { connection.setAutoFlushCommands(true) }
     }
 
     @Test
@@ -50,23 +51,29 @@ class ReconnectCleanupTest {
         repo.batchDelete(emptyList())
 
         // 空列表不调用任何 pipeline 方法
-        verify(exactly = 0) { connection.setAutoFlush(any()) }
+        verify(exactly = 0) { connection.setAutoFlushCommands(any()) }
         verify(exactly = 0) { connection.flushCommands() }
     }
 
     @Test
     fun `batchDelete should restore autoFlush on exception`() = runTest {
         val connection = createMockConnection()
+        val async = mockk<RedisAsyncCommands<String, String>>(relaxed = true)
+        every { connection.async() } returns async
         // 模拟 flushCommands 抛异常
         every { connection.flushCommands() } throws RuntimeException("Redis connection lost")
         val repo = SessionRepository(connection)
         val keys = listOf("session:token:abc")
 
-        repo.batchDelete(keys)
+        assertThrows(RuntimeException::class.java) {
+            runBlocking {
+                repo.batchDelete(keys)
+            }
+        }
 
-        // 即使异常，autoFlush 也恢复为 true
-        verify(exactly = 1) { connection.setAutoFlush(false) }
+        // 即使异常，autoFlush 也恢复为 true（finally 块保证）
+        verify(exactly = 1) { connection.setAutoFlushCommands(false) }
         verify(exactly = 1) { connection.flushCommands() }
-        verify(exactly = 1) { connection.setAutoFlush(true) }
+        verify(exactly = 1) { connection.setAutoFlushCommands(true) }
     }
 }

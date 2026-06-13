@@ -8,6 +8,7 @@ import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
 import com.nebula.repository.entity.FriendRequestEntity
 import com.nebula.repository.repository.FriendRequestRepository
+import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -33,6 +34,7 @@ import kotlin.test.assertNotNull
  */
 class FriendRejectHandlerTest {
 
+    private lateinit var friendService: FriendService
     private lateinit var friendRequestRepository: FriendRequestRepository
     private lateinit var handler: FriendRejectHandler
 
@@ -40,8 +42,9 @@ class FriendRejectHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        friendService = mockk()
         friendRequestRepository = mockk(relaxed = true)
-        handler = FriendRejectHandler(friendRequestRepository)
+        handler = FriendRejectHandler(friendService)
     }
 
     // ═══════════════════════════════════════════════════════════

@@ -6,6 +6,7 @@ package com.nebula.gateway.di
  * 将分散在各个子模块中的 Koin 定义统一聚合，方便 NebulaServer 统一导入。
  * 各子模块按业务分类拆分，便于维护和查找：
  *
+ * - [serviceModule]: 业务服务层（UserService、MessageService 等）
  * - [frameworkModule]: 框架级基础设施（HandlerRegistry、ProtoCodec、SessionRegistry、拦截器）
  * - [userHandlerModule]: 用户业务 Handler（Login、Register、SearchUser 等）
  * - [chatHandlerModule]: 聊天和消息 Handler（SendMessage、PullMessages、ReadReport）
@@ -13,6 +14,7 @@ package com.nebula.gateway.di
  * - [friendHandlerModule]: 好友 Handler（FriendAdd、FriendAccept 等）
  */
 val gatewayModules = listOf(
+    serviceModule,
     frameworkModule,
     userHandlerModule,
     chatHandlerModule,

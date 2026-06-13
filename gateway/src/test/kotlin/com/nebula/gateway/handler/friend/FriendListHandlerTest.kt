@@ -10,6 +10,7 @@ import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,7 @@ import kotlin.test.assertEquals
  */
 class FriendListHandlerTest {
 
+    private lateinit var friendService: FriendService
     private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var userRepository: UserRepository
     private lateinit var onlineStatusRepository: OnlineStatusRepository
@@ -42,11 +44,12 @@ class FriendListHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        friendService = mockk()
         friendshipRepository = mockk(relaxed = true)
         userRepository = mockk(relaxed = true)
         onlineStatusRepository = mockk(relaxed = true)
         privacyRepository = mockk(relaxed = true)
-        handler = FriendListHandler(friendshipRepository, userRepository, onlineStatusRepository, privacyRepository)
+        handler = FriendListHandler(friendService)
     }
 
     // ═══════════════════════════════════════════════════════════

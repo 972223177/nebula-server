@@ -7,6 +7,7 @@ import com.nebula.repository.entity.FriendRequestEntity
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.FriendRequestRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -28,6 +29,7 @@ import kotlin.test.assertTrue
  */
 class FriendRequestsHandlerTest {
 
+    private lateinit var friendService: FriendService
     private lateinit var friendRequestRepository: FriendRequestRepository
     private lateinit var userRepository: UserRepository
     private lateinit var handler: FriendRequestsHandler
@@ -36,9 +38,10 @@ class FriendRequestsHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        friendService = mockk()
         friendRequestRepository = mockk(relaxed = true)
         userRepository = mockk(relaxed = true)
-        handler = FriendRequestsHandler(friendRequestRepository, userRepository)
+        handler = FriendRequestsHandler(friendService)
     }
 
     // ═══════════════════════════════════════════════════════════

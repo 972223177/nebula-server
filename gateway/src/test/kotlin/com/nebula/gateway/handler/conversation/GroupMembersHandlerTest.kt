@@ -9,6 +9,7 @@ import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.conversation.ConversationService
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,7 @@ import kotlin.test.assertNotNull
  */
 class GroupMembersHandlerTest {
 
+    private lateinit var conversationService: ConversationService
     private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var userRepository: UserRepository
     private lateinit var handler: GroupMembersHandler
@@ -40,9 +42,10 @@ class GroupMembersHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        conversationService = mockk()
         conversationMemberRepository = mockk()
         userRepository = mockk()
-        handler = GroupMembersHandler(conversationMemberRepository, userRepository)
+        handler = GroupMembersHandler(conversationService)
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.nebula.chat.user.BatchIdRequest
 import com.nebula.chat.user.BatchGetUserResp
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -21,13 +22,15 @@ import kotlin.test.assertEquals
  */
 class BatchGetUserHandlerTest {
 
+    private lateinit var userService: UserService
     private lateinit var userRepository: UserRepository
     private lateinit var handler: BatchGetUserHandler
 
     @BeforeEach
     fun setup() {
+        userService = mockk()
         userRepository = mockk()
-        handler = BatchGetUserHandler(userRepository)
+        handler = BatchGetUserHandler(userService)
     }
 
     @Test

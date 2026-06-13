@@ -13,6 +13,7 @@ import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
+import com.nebula.service.conversation.ConversationService
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -40,6 +41,7 @@ import kotlin.test.assertTrue
  */
 class EditGroupHandlerTest {
 
+    private lateinit var conversationService: ConversationService
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
@@ -49,10 +51,11 @@ class EditGroupHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        conversationService = mockk()
         conversationRepository = mockk()
         conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
-        handler = EditGroupHandler(conversationRepository, conversationMemberRepository, pushService)
+        handler = EditGroupHandler(conversationService, pushService)
     }
 
     @Test

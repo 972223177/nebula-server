@@ -11,6 +11,8 @@ import com.nebula.chat.user.RegisterResp
 import com.nebula.chat.user.SearchUserReq
 import com.nebula.chat.user.SearchUserResp
 import com.nebula.chat.user.UserBrief
+import com.nebula.common.BizCode
+import com.nebula.common.exception.UserException
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.handler.Handler
@@ -30,6 +32,7 @@ import com.nebula.gateway.session.SessionRegistry
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.SessionRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -197,13 +200,11 @@ class PipelineIntegrationTest : KoinTest {
     fun `login dispatch test - correct password returns token`() = runTest {
         // 准备 HandlerRegistry
         val registry = HandlerRegistry()
-        val userRepo = mockk<UserRepository>()
+        val userService = mockk<UserService>()
         val sessionRegistry = mockk<SessionRegistry>()
 
-        // 创建 LoginHandler，覆写 verifyPassword 绕过 BCrypt
-        val loginHandler = object : LoginHandler(userRepo, sessionRegistry) {
-            override fun verifyPassword(rawPassword: String, storedHash: String): Boolean = true
-        }
+        // 创建 LoginHandler
+        val loginHandler = LoginHandler(userService, sessionRegistry)
         val reqCodec = ProtoCodec.buildCodec(LoginReq::class)
         val respCodec = ProtoCodec.buildCodec(LoginResp::class)
         registry.register(
@@ -216,14 +217,8 @@ class PipelineIntegrationTest : KoinTest {
             )
         )
 
-        // Mock UserRepository — 返回存在的用户
-        val existingUser = UserEntity(
-            username = "testuser",
-            passwordHash = "hashed",
-            nickname = "测试用户",
-            avatar = ""
-        ).apply { id = 1001L }
-        coEvery { userRepo.findByUsername("testuser") } returns existingUser
+        // Mock UserService — 返回存在的用户
+        coEvery { userService.loginByPassword(any()) } returns 1001L
 
         // 构建 Interceptor Pipeline — user/login 在 skipMethods 中
         val interceptors = listOf(
@@ -258,12 +253,10 @@ class PipelineIntegrationTest : KoinTest {
     fun `login dispatch test - wrong password returns non 200`() = runTest {
         // 准备 HandlerRegistry
         val registry = HandlerRegistry()
-        val userRepo = mockk<UserRepository>()
+        val userService = mockk<UserService>()
         val sessionRegistry = mockk<SessionRegistry>()
 
-        val loginHandler = object : LoginHandler(userRepo, sessionRegistry) {
-            override fun verifyPassword(rawPassword: String, storedHash: String): Boolean = false
-        }
+        val loginHandler = LoginHandler(userService, sessionRegistry)
         val reqCodec = ProtoCodec.buildCodec(LoginReq::class)
         val respCodec = ProtoCodec.buildCodec(LoginResp::class)
         registry.register(
@@ -276,13 +269,7 @@ class PipelineIntegrationTest : KoinTest {
             )
         )
 
-        val existingUser = UserEntity(
-            username = "testuser",
-            passwordHash = "hashed",
-            nickname = "用户",
-            avatar = ""
-        ).apply { id = 1001L }
-        coEvery { userRepo.findByUsername("testuser") } returns existingUser
+        coEvery { userService.loginByPassword(any()) } throws UserException(BizCode.AUTH_FAILED)
 
         val interceptors = listOf(
             AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping", "user/login", "user/register")),
@@ -309,19 +296,9 @@ class PipelineIntegrationTest : KoinTest {
     @Test
     fun `register dispatch test - success returns uid`() = runTest {
         val registry = HandlerRegistry()
-        val userRepo = mockk<UserRepository>()
-        val idGenerator = mockk<SnowflakeIdGenerator>()
+        val userService = mockk<UserService>()
 
-        // Mock JPA EntityManager chain
-        val tx = mockk<EntityTransaction>(relaxed = true)
-        every { tx.begin() } returns Unit
-        every { tx.commit() } returns Unit
-        val em = mockk<EntityManager>(relaxed = true)
-        every { em.transaction } returns tx
-        val emf = mockk<EntityManagerFactory>()
-        every { emf.createEntityManager() } returns em
-
-        val registerHandler = RegisterHandler(userRepo, idGenerator, emf)
+        val registerHandler = RegisterHandler(userService)
         val reqCodec = ProtoCodec.buildCodec(RegisterReq::class)
         val respCodec = ProtoCodec.buildCodec(RegisterResp::class)
         registry.register(
@@ -334,13 +311,8 @@ class PipelineIntegrationTest : KoinTest {
             )
         )
 
-        // Mock：用户不存在，ID 生成器返回固定值
-        coEvery { userRepo.findByUsername("newuser") } returns null
-        every { idGenerator.nextId() } returns 2001L
-        coEvery { userRepo.save(any()) } answers {
-            val entity = firstArg<UserEntity>()
-            entity.apply { id = 2001L }
-        }
+        // Mock：注册成功返回 uid
+        coEvery { userService.register(any()) } returns 2001L
 
         val interceptors = listOf(
             AuthInterceptor(mockk(), skipMethods = setOf("system/ping", "user/login", "user/register")),
@@ -370,9 +342,9 @@ class PipelineIntegrationTest : KoinTest {
     @Test
     fun `search dispatch test - keyword returns user list`() = runTest {
         val registry = HandlerRegistry()
-        val userRepo = mockk<UserRepository>()
+        val userService = mockk<UserService>()
 
-        val searchHandler = SearchUserHandler(userRepo)
+        val searchHandler = SearchUserHandler(userService)
         val reqCodec = ProtoCodec.buildCodec(SearchUserReq::class)
         val respCodec = ProtoCodec.buildCodec(SearchUserResp::class)
         registry.register(
@@ -386,13 +358,16 @@ class PipelineIntegrationTest : KoinTest {
         )
 
         // Mock 搜索结果
-        val matchedUser = UserEntity(
-            username = "testuser",
-            passwordHash = "",
-            nickname = "测试用户",
-            avatar = "https://example.com/avatar.jpg"
-        ).apply { id = 1001L }
-        every { userRepo.findByUsernameContaining("test", null, 21) } returns listOf(matchedUser)
+        val matchedUser = UserBrief.newBuilder()
+            .setUid(1001L)
+            .setUsername("testuser")
+            .setDisplayName("测试用户")
+            .setAvatarUrl("https://example.com/avatar.jpg")
+            .build()
+        val searchResp = SearchUserResp.newBuilder()
+            .addUsers(matchedUser)
+            .build()
+        coEvery { userService.searchUsers(any(), any(), any()) } returns searchResp
 
         // Mock SessionRegistry — 提供认证 session
         val sessionRegistry = mockk<SessionRegistry>()
@@ -434,9 +409,9 @@ class PipelineIntegrationTest : KoinTest {
 
         assertEquals(200, response.code, "search response code should be 200")
 
-        val searchResp = SearchUserResp.parseFrom(response.result.toByteArray())
-        assertEquals(1, searchResp.usersCount, "should return 1 user")
-        val userBrief = searchResp.usersList[0]
+        val searchRespResult = SearchUserResp.parseFrom(response.result.toByteArray())
+        assertEquals(1, searchRespResult.usersCount, "should return 1 user")
+        val userBrief = searchRespResult.usersList[0]
         assertEquals("testuser", userBrief.username)
         assertEquals("测试用户", userBrief.displayName)
     }
@@ -444,9 +419,9 @@ class PipelineIntegrationTest : KoinTest {
     @Test
     fun `getProfile dispatch test - existing user returns profile`() = runTest {
         val registry = HandlerRegistry()
-        val userRepo = mockk<UserRepository>()
+        val userService = mockk<UserService>()
 
-        val profileHandler = GetProfileHandler(userRepo)
+        val profileHandler = GetProfileHandler(userService)
         val reqCodec = ProtoCodec.buildCodec(GetProfileReq::class)
         val respCodec = ProtoCodec.buildCodec(GetProfileResp::class)
         registry.register(
@@ -460,13 +435,13 @@ class PipelineIntegrationTest : KoinTest {
         )
 
         // Mock 用户资料
-        val user = UserEntity(
-            username = "testuser",
-            passwordHash = "",
-            nickname = "测试用户",
-            avatar = "https://example.com/avatar.jpg"
-        ).apply { id = 1001L }
-        every { userRepo.findById(1001L) } returns Optional.of(user)
+        val profileResp = GetProfileResp.newBuilder()
+            .setUid(1001L)
+            .setUsername("testuser")
+            .setDisplayName("测试用户")
+            .setAvatarUrl("https://example.com/avatar.jpg")
+            .build()
+        coEvery { userService.getProfile(1001L) } returns profileResp
 
         // Mock SessionRegistry — 提供认证 session
         val sessionRegistry = mockk<SessionRegistry>()
@@ -505,18 +480,18 @@ class PipelineIntegrationTest : KoinTest {
 
         assertEquals(200, response.code, "getProfile response code should be 200")
 
-        val profileResp = GetProfileResp.parseFrom(response.result.toByteArray())
-        assertEquals("testuser", profileResp.username)
-        assertEquals("测试用户", profileResp.displayName)
-        assertEquals("https://example.com/avatar.jpg", profileResp.avatarUrl)
+        val profileRespResult = GetProfileResp.parseFrom(response.result.toByteArray())
+        assertEquals("testuser", profileRespResult.username)
+        assertEquals("测试用户", profileRespResult.displayName)
+        assertEquals("https://example.com/avatar.jpg", profileRespResult.avatarUrl)
     }
 
     @Test
     fun `getProfile dispatch test - non existent user returns error`() = runTest {
         val registry = HandlerRegistry()
-        val userRepo = mockk<UserRepository>()
+        val userService = mockk<UserService>()
 
-        val profileHandler = GetProfileHandler(userRepo)
+        val profileHandler = GetProfileHandler(userService)
         val reqCodec = ProtoCodec.buildCodec(GetProfileReq::class)
         val respCodec = ProtoCodec.buildCodec(GetProfileResp::class)
         registry.register(
@@ -529,7 +504,7 @@ class PipelineIntegrationTest : KoinTest {
             )
         )
 
-        every { userRepo.findById(9999L) } returns Optional.empty()
+        coEvery { userService.getProfile(9999L) } throws UserException(BizCode.USER_NOT_FOUND)
 
         // Mock SessionRegistry — 提供认证 session
         val sessionRegistry = mockk<SessionRegistry>()

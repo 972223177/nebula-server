@@ -7,9 +7,10 @@ import com.nebula.chat.friend.FriendAcceptReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
 import com.nebula.gateway.handler.SessionKey
-import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
+import com.nebula.gateway.testutil.mockLockManager
+import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.FriendRequestEntity
@@ -18,6 +19,7 @@ import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendRequestRepository
 import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -25,7 +27,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.transaction.support.TransactionTemplate
 import java.util.Optional
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.assertEquals
@@ -43,12 +44,11 @@ import kotlin.test.assertNotNull
  */
 class FriendAcceptHandlerTest {
 
+    private lateinit var friendService: FriendService
     private lateinit var friendRequestRepo: FriendRequestRepository
     private lateinit var friendshipRepo: FriendshipRepository
     private lateinit var conversationRepo: ConversationRepository
     private lateinit var memberRepo: ConversationMemberRepository
-    private lateinit var lockManager: ConversationLockManager
-    private lateinit var transactionTemplate: TransactionTemplate
     private lateinit var pushService: PushService
     private lateinit var handler: FriendAcceptHandler
 
@@ -64,26 +64,14 @@ class FriendAcceptHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        friendService = mockk()
         friendRequestRepo = mockk(relaxed = true)
         friendshipRepo = mockk(relaxed = true)
         conversationRepo = mockk(relaxed = true)
         memberRepo = mockk(relaxed = true)
-        lockManager = mockk()
-        transactionTemplate = mockk()
         pushService = mockk(relaxed = true)
 
-        // Mock 锁管理器：直接执行代码块（参照 CreateGroupHandlerTest）
-        coEvery { lockManager.withLock(any(), any<suspend () -> kotlin.Any>()) } coAnswers {
-            @Suppress("UNCHECKED_CAST")
-            (args[1] as suspend () -> kotlin.Any).invoke()
-        }
-
-        // Mock 事务模板：在事务内执行回调
-        every { transactionTemplate.execute(any<org.springframework.transaction.support.TransactionCallback<Any?>>()) } answers {
-            @Suppress("UNCHECKED_CAST")
-            (it.invocation.args[0] as org.springframework.transaction.support.TransactionCallback<Any?>)
-                .doInTransaction(mockk(relaxed = true))
-        }
+        val lockManager = mockLockManager()
 
         // 确保 save 方法返回输入实体自身，避免 Spring Data JPA 的 ClassCastException
         every { friendRequestRepo.save(any<FriendRequestEntity>()) } answers { args[0] as FriendRequestEntity }
@@ -92,13 +80,9 @@ class FriendAcceptHandlerTest {
         every { memberRepo.save(any<ConversationMemberEntity>()) } answers { args[0] as ConversationMemberEntity }
 
         handler = FriendAcceptHandler(
-            friendRequestRepo,
-            friendshipRepo,
-            conversationRepo,
-            memberRepo,
-            lockManager,
-            transactionTemplate,
-            pushService
+            friendService,
+            pushService,
+            lockManager
         )
     }
 

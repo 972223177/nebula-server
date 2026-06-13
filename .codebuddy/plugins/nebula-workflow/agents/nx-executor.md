@@ -141,13 +141,35 @@ for task in tasks:
 
 ### 步骤 6：Git 提交
 
-每完成一个任务，由对应专家 agent 执行提交：
+每完成一个任务，由对应专家 agent 自动执行提交：
+
 ```bash
-git add <modified_files>
-git commit -m "feat(phase-${N}): plan ${N}-${M} task ${T} — <简短描述>"
+# 检测未提交变更
+UNCOMMITTED=$(git status --porcelain)
+if [ -n "$UNCOMMITTED" ]; then
+  # 自动暂存所有变更
+  git add -A
+  # 从任务描述提取简短说明（取前 50 字符）
+  TASK_DESC=$(echo "${TASK_ACTION}" | head -c 50)
+  git commit -m "feat(phase-${N}): plan ${N}-${M} task ${T} — ${TASK_DESC}"
+  # 记录提交 hash 用于 SUMMARY.md
+  COMMIT_HASH=$(git rev-parse --short HEAD)
+  echo "已提交: ${COMMIT_HASH} — task ${T} ${TASK_DESC}"
+else
+  echo "无变更，跳过提交"
+fi
 ```
 
-全部完成后，nx-executor 追加一个汇总提交（如有未提交的变更）。
+全部完成后，nx-executor 追加一个汇总提交（如有未提交的变更）：
+
+```bash
+UNCOMMITTED=$(git status --porcelain)
+if [ -n "$UNCOMMITTED" ]; then
+  git add -A
+  git commit -m "chore(phase-${N}): plan ${N}-${M} 汇总提交 —— 自动合并未归档变更"
+  echo "汇总提交完成"
+fi
+```
 
 ### 步骤 7：生成 SUMMARY.md
 

@@ -97,8 +97,19 @@ progress:
 ### 步骤 2：Git 提交
 
 ```bash
+# 步骤 A：自动提交所有未提交变更（源码 + 规划文件）
+UNCOMMITTED=$(git status --porcelain)
+if [ -n "$UNCOMMITTED" ]; then
+  git add -A
+  git commit -m "chore(phase-${N}): 阶段归档 —— 自动提交未归档变更"
+  echo "未归档变更已自动提交"
+else
+  echo "无未归档变更"
+fi
+
+# 步骤 B：归档提交（仅规划文件）
 git add .planning/STATE.md .planning/phases/0${N}-*/
-git commit -m "done: 阶段 N 归档 —— 所有产出物已交付"
+git commit -m "done: 阶段 ${N} 归档 —— 所有产出物已交付"
 ```
 
 ### 步骤 3：展示完成摘要

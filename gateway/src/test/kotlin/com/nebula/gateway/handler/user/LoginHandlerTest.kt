@@ -8,6 +8,7 @@ import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.repository.UserRepository
+import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -31,6 +32,7 @@ import kotlin.test.assertTrue
  */
 class LoginHandlerTest {
 
+    private lateinit var userService: UserService
     private lateinit var userRepository: UserRepository
     private lateinit var sessionRegistry: SessionRegistry
     private lateinit var handler: LoginHandler
@@ -44,18 +46,15 @@ class LoginHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        userService = mockk()
         userRepository = mockk<UserRepository>()
         sessionRegistry = mockk<SessionRegistry>()
-        handler = object : LoginHandler(userRepository, sessionRegistry) {
-            override fun verifyPassword(rawPassword: String, storedHash: String): Boolean {
-                return rawPassword == "correct-password"
-            }
-        }
+        handler = LoginHandler(userService, sessionRegistry)
     }
 
     @Test
     fun `密码登录成功`() = runTest {
-        coEvery { userRepository.findByUsername("testuser") } returns existingUser
+        coEvery { userService.loginByPassword(any()) } returns 1001L
 
         val req = LoginReq.newBuilder()
             .setUsername("testuser")
@@ -71,7 +70,7 @@ class LoginHandlerTest {
 
     @Test
     fun `密码错误`() = runTest {
-        coEvery { userRepository.findByUsername("testuser") } returns existingUser
+        coEvery { userService.loginByPassword(any()) } throws UserException(BizCode.AUTH_FAILED)
 
         val req = LoginReq.newBuilder()
             .setUsername("testuser")
@@ -88,7 +87,7 @@ class LoginHandlerTest {
 
     @Test
     fun `用户名不存在`() = runTest {
-        coEvery { userRepository.findByUsername("nonexistent") } returns null
+        coEvery { userService.loginByPassword(any()) } throws UserException(BizCode.USER_NOT_FOUND)
 
         val req = LoginReq.newBuilder()
             .setUsername("nonexistent")
@@ -129,7 +128,7 @@ class LoginHandlerTest {
     @Test
     fun `Token 过期回退到密码验证`() = runTest {
         coEvery { sessionRegistry.validate("expired-token") } returns null
-        coEvery { userRepository.findByUsername("testuser") } returns existingUser
+        coEvery { userService.loginByPassword(any()) } returns 1001L
 
         val req = LoginReq.newBuilder()
             .setToken("expired-token")
