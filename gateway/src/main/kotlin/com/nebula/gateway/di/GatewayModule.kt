@@ -28,6 +28,7 @@ import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
 import com.nebula.gateway.handler.chat.send.DedupStep
+import com.nebula.gateway.handler.chat.send.FriendCheckStep
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.chat.send.SendMessageStep
 import com.nebula.gateway.handler.chat.send.ValidateStep
@@ -87,7 +88,7 @@ val handlerModule = module {
     single { GetProfileHandler(get()) }          // UserRepository
     single { BatchGetUserHandler(get()) }        // UserRepository
     single { BatchGetStatusHandler(get(), get()) } // OnlineStatusRepository + PrivacyRepository
-    single { SetPrivacyHandler(get()) }          // PrivacyRepository
+    single { SetPrivacyHandler(get(), get(), get()) }          // PrivacyRepository + OnlineStatusRepository + PushService
     single { GetPrivacyHandler(get()) }          // PrivacyRepository
 
     // Phase 6: Chat & Message（D-13 Step 链 + PushService + 推送基础设施）
@@ -99,6 +100,7 @@ val handlerModule = module {
     single { 
         listOf<SendMessageStep>(
             ValidateStep(get()),                          // ValidateStep(ConversationMemberRepository)
+            FriendCheckStep(get(), get()),                // FriendCheckStep(FriendshipRepository, ConversationRepository)
             DedupStep(get()),                             // DedupStep(RedisConnection)
             WriteStep(get(), get(), get())                // WriteStep(SnowflakeIdGenerator, MessageQueueRepository, RedisConnection)
         )
