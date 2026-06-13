@@ -12,6 +12,7 @@ package com.nebula.gateway.di
  * - [chatHandlerModule]: 聊天和消息 Handler（SendMessage、PullMessages、ReadReport）
  * - [conversationHandlerModule]: 会话 Handler（CreateGroup、InviteMember 等）
  * - [friendHandlerModule]: 好友 Handler（FriendAdd、FriendAccept 等）
+ * - [messageReliabilityModule]: 消息可靠性（Phase 10）：序列号、投递跟踪、死信及补偿
  */
 val gatewayModules = listOf(
     serviceModule,
@@ -19,5 +20,6 @@ val gatewayModules = listOf(
     userHandlerModule,
     chatHandlerModule,
     conversationHandlerModule,
-    friendHandlerModule
+    friendHandlerModule,
+    messageReliabilityModule
 )

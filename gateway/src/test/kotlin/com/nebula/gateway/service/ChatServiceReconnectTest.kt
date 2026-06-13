@@ -17,6 +17,7 @@ import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.admin.DeadLetterService
 import io.grpc.stub.StreamObserver
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -50,6 +51,7 @@ class ChatServiceReconnectTest {
     private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var pushService: PushService
     private lateinit var privacyRepository: PrivacyRepository
+    private lateinit var deadLetterService: DeadLetterService
     private lateinit var mockObserver: StreamObserver<Envelope>
     private lateinit var evictionCallback: (String) -> Unit
     private lateinit var chatService: ChatService
@@ -68,6 +70,7 @@ class ChatServiceReconnectTest {
         friendshipRepository = mockk<FriendshipRepository>(relaxed = true)
         pushService = mockk<PushService>(relaxed = true)
         privacyRepository = mockk<PrivacyRepository>(relaxed = true)
+        deadLetterService = mockk<DeadLetterService>(relaxed = true)
         mockObserver = mockk(relaxed = true)
 
         // 捕获 eviction callback：使用 mutable variable 避免 slot.captured 的时序问题
@@ -84,7 +87,8 @@ class ChatServiceReconnectTest {
             onlineStatusRepository = onlineStatusRepository,
             friendshipRepository = friendshipRepository,
             pushService = pushService,
-            privacyRepository = privacyRepository
+            privacyRepository = privacyRepository,
+            deadLetterService = deadLetterService
         )
 
         // 模拟 ChatService 第一次请求触发 ensureEvictionCallbackRegistered

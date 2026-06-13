@@ -14,6 +14,7 @@ import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.admin.DeadLetterService
 import io.grpc.stub.StreamObserver
 import io.mockk.coEvery
 import io.mockk.every
@@ -58,6 +59,7 @@ class ChatServiceReconnectIntegrationTest {
     private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var pushService: PushService
     private lateinit var privacyRepository: PrivacyRepository
+    private lateinit var deadLetterService: DeadLetterService
     private lateinit var mockResponseObserver: StreamObserver<Envelope>
     private lateinit var chatService: ChatService
 
@@ -208,6 +210,7 @@ class ChatServiceReconnectIntegrationTest {
         friendshipRepository = mockk<FriendshipRepository>(relaxed = true)
         pushService = mockk<PushService>(relaxed = true)
         privacyRepository = mockk<PrivacyRepository>(relaxed = true)
+        deadLetterService = mockk<DeadLetterService>(relaxed = true)
         mockResponseObserver = mockk(relaxed = true)
 
         // 捕获 eviction callback
@@ -224,7 +227,8 @@ class ChatServiceReconnectIntegrationTest {
             onlineStatusRepository = onlineStatusRepository,
             friendshipRepository = friendshipRepository,
             pushService = pushService,
-            privacyRepository = privacyRepository
+            privacyRepository = privacyRepository,
+            deadLetterService = deadLetterService
         )
 
         // 初始化反射

@@ -22,6 +22,7 @@ tasks.named<JavaExec>("run") {
 
 dependencies {
     implementation(project(":gateway"))
+    implementation(project(":service"))
     implementation(project(":proto"))
 
     // Phase 2 新增

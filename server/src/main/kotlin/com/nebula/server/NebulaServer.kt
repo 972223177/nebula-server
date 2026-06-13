@@ -20,6 +20,7 @@ import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
+import com.nebula.service.admin.DeadLetterService
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
@@ -86,9 +87,11 @@ fun main() {
     val privacyRepo = koin.get<PrivacyRepository>()
     val onlineStatusRepo = koin.get<OnlineStatusRepository>()
     val friendshipRepo = koin.get<FriendshipRepository>()
+    val deadLetterService = koin.get<DeadLetterService>()
     val chatService = ChatService(
         dispatcher, sessionRegistry, registry, userStreamRegistry,
-        onlineStatusRepo, friendshipRepo, pushSvc, privacyRepo
+        onlineStatusRepo, friendshipRepo, pushSvc, privacyRepo,
+        deadLetterService
     )
 
     // Step 7: 启动 gRPC 服务

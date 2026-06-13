@@ -10,6 +10,7 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.ChatException
 import com.nebula.common.exception.MessageException
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.service.sequence.SeqService
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.redis.MessageQueueRepository
@@ -18,10 +19,6 @@ import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.api.StatefulRedisConnection
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.data.domain.Pageable
@@ -30,13 +27,13 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 
 /**
- * 消息业务服务（D-04 ~ D-06, D-09, D-11, D-13, D-15）。
+ * 消息业务服务（D-04 ~ D-06, D-09, D-11, D-13, D-15, D-74, D-78）。
  *
  * 提供消息发送、拉取、已读报告等核心业务逻辑。
  * 消息发送流程：参数校验 → 成员身份验证 → 好友关系检查（私聊） → 去重 → 写入 Redis Stream。
+ * D-78：序列号生成统一委托 [SeqService.nextSeq]（Phase 10 W2），不再直接操作 Redis。
  * 不依赖网关层组件（PushService、SessionRegistry 等），推送由调用方（Handler）负责。
  */
-@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class MessageService(
     private val messageRepository: MessageRepository,
     private val messageQueueRepository: MessageQueueRepository,
@@ -44,9 +41,8 @@ class MessageService(
     private val conversationRepository: ConversationRepository,
     private val friendshipRepository: FriendshipRepository,
     private val idGenerator: SnowflakeIdGenerator,
-    private val connection: StatefulRedisConnection<String, String>
+    private val seqService: SeqService
 ) {
-    private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 
     companion object {
         private val logger = KotlinLogging.logger {}
@@ -146,8 +142,8 @@ class MessageService(
             conversationRepository.save(conversation)
         }
 
-        // Step 8: 生成会话序列号（D-74 per-(conv,uid) 自增）
-        val seq = redis.incr("conv:${conversationId}:next_seq:${senderUid}") ?: 1L
+        // Step 8: 生成会话序列号（D-74 per-(conv,uid) 自增，D-78 统一委托 SeqService）
+        val seq = seqService.nextSeq(conversationId, senderUid)
 
         return SendMessageResult(
             msgId = msgId,

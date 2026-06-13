@@ -27,6 +27,9 @@ dependencies {
     implementation(libs.spring.data.jpa)
     implementation(libs.spring.tx)
 
+    // Jakarta Persistence — OptimisticLockException 等异常类型
+    implementation(libs.jakarta.persistence.api)
+
     // Lettuce Redis — 访问 Redis Repository
     implementation(libs.lettuce.core)
     implementation(libs.kotlinx.coroutines.reactive)
