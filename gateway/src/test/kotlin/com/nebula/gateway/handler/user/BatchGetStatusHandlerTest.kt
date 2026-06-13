@@ -2,6 +2,7 @@ package com.nebula.gateway.handler.user
 
 import com.nebula.chat.user.BatchIdRequest
 import com.nebula.chat.user.BatchGetStatusResp
+import com.nebula.repository.redis.OnlineStatusData
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import io.mockk.coEvery
@@ -12,7 +13,9 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 /**
- * BatchGetStatusHandler 批量在线状态查询 Handler 单元测试（BIZ-USER-04, D-10）。
+ * BatchGetStatusHandler 批量在线状态查询 Handler 单元测试（BIZ-USER-04, D-10, D-57）。
+ *
+ * D-57 三值状态适配：使用 getStatus 替代旧的 isOnline。
  *
  * 覆盖场景：
  * - 查询在线状态 — 无隐藏用户：正常返回所有用户的在线状态
@@ -36,7 +39,8 @@ class BatchGetStatusHandlerTest {
     @Test
     fun `查询在线状态 — 无隐藏用户`() = runTest {
         coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L)) } returns emptySet()
-        coEvery { onlineStatusRepository.isOnline(1L) } returns true
+        // D-57: 使用 getStatus 替代 isOnline
+        coEvery { onlineStatusRepository.getStatus(1L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L)).build()
         val resp = handler.handle(req)
@@ -49,7 +53,7 @@ class BatchGetStatusHandlerTest {
     @Test
     fun `隐藏用户被过滤`() = runTest {
         coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L, 2L)) } returns setOf(1L)
-        coEvery { onlineStatusRepository.isOnline(2L) } returns true
+        coEvery { onlineStatusRepository.getStatus(2L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L, 2L)).build()
         val resp = handler.handle(req)
@@ -66,8 +70,8 @@ class BatchGetStatusHandlerTest {
         val offlineUid = 3L
 
         coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L, 2L, 3L)) } returns setOf(hiddenUid)
-        coEvery { onlineStatusRepository.isOnline(onlineUid) } returns true
-        coEvery { onlineStatusRepository.isOnline(offlineUid) } returns false
+        coEvery { onlineStatusRepository.getStatus(onlineUid) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
+        coEvery { onlineStatusRepository.getStatus(offlineUid) } returns null  // null = 离线
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L, 2L, 3L)).build()
         val resp = handler.handle(req)

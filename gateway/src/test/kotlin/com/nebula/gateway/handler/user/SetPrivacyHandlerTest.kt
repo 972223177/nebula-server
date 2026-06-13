@@ -4,7 +4,9 @@ import com.nebula.chat.Response
 import com.nebula.chat.user.SetPrivacyReq
 import com.nebula.common.BizCode
 import com.nebula.gateway.handler.SessionKey
+import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
+import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -16,17 +18,19 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 /**
- * SetPrivacyHandler 在线状态可见性设置 Handler 单元测试（BIZ-USER-05）。
+ * SetPrivacyHandler 在线状态可见性设置 Handler 单元测试（BIZ-USER-05, D-57）。
  *
  * 覆盖场景：
- * - 设置隐藏在线状态：验证 setHideOnlineStatus 被正确调用
- * - 设置可见：验证 setHideOnlineStatus(false) 被正确调用
+ * - 设置隐藏在线状态：验证 setHideOnlineStatus + setHidden 被正确调用
+ * - 设置可见：验证 setHideOnlineStatus(false) + setOnline 被正确调用
  *
  * Session 注入方式：使用 withContext(SessionKey(session)) 包裹 handle() 调用。
  */
 class SetPrivacyHandlerTest {
 
     private lateinit var privacyRepository: PrivacyRepository
+    private lateinit var onlineStatusRepository: OnlineStatusRepository
+    private lateinit var pushService: PushService
     private lateinit var handler: SetPrivacyHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -34,12 +38,15 @@ class SetPrivacyHandlerTest {
     @BeforeEach
     fun setup() {
         privacyRepository = mockk()
-        handler = SetPrivacyHandler(privacyRepository)
+        onlineStatusRepository = mockk()
+        pushService = mockk()
+        handler = SetPrivacyHandler(privacyRepository, onlineStatusRepository, pushService)
     }
 
     @Test
     fun `设置隐藏在线状态`() = runTest {
         coEvery { privacyRepository.setHideOnlineStatus(1001L, true) } returns Unit
+        coEvery { onlineStatusRepository.setHidden(1001L) } returns Unit
 
         val req = SetPrivacyReq.newBuilder().setHideOnlineStatus(true).build()
         val result = withContext(SessionKey(session)) {
@@ -47,6 +54,7 @@ class SetPrivacyHandlerTest {
         }
 
         coVerify(exactly = 1) { privacyRepository.setHideOnlineStatus(1001L, true) }
+        coVerify(exactly = 1) { onlineStatusRepository.setHidden(1001L) }
         assertEquals(BizCode.OK.code, result.code)
         assertEquals("user/setPrivacy", result.method)
     }
@@ -54,6 +62,7 @@ class SetPrivacyHandlerTest {
     @Test
     fun `设置可见`() = runTest {
         coEvery { privacyRepository.setHideOnlineStatus(1001L, false) } returns Unit
+        coEvery { onlineStatusRepository.setOnline(1001L) } returns Unit
 
         val req = SetPrivacyReq.newBuilder().setHideOnlineStatus(false).build()
         val result = withContext(SessionKey(session)) {
@@ -61,6 +70,7 @@ class SetPrivacyHandlerTest {
         }
 
         coVerify(exactly = 1) { privacyRepository.setHideOnlineStatus(1001L, false) }
+        coVerify(exactly = 1) { onlineStatusRepository.setOnline(1001L) }
         assertEquals(BizCode.OK.code, result.code)
     }
 }
