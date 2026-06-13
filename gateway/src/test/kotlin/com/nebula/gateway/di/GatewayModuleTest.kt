@@ -14,6 +14,12 @@ import com.nebula.gateway.handler.conversation.InviteMemberHandler
 import com.nebula.gateway.handler.conversation.KickMemberHandler
 import com.nebula.gateway.handler.conversation.LeaveGroupHandler
 import com.nebula.gateway.handler.conversation.ListConversationsHandler
+import com.nebula.gateway.handler.friend.FriendAcceptHandler
+import com.nebula.gateway.handler.friend.FriendAddHandler
+import com.nebula.gateway.handler.friend.FriendDeleteHandler
+import com.nebula.gateway.handler.friend.FriendListHandler
+import com.nebula.gateway.handler.friend.FriendRejectHandler
+import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
@@ -32,6 +38,8 @@ import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
+import com.nebula.repository.repository.FriendRequestRepository
+import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.UserRepository
 import io.lettuce.core.api.StatefulRedisConnection
@@ -75,6 +83,8 @@ class GatewayModuleTest {
     private val conversationRepo = mockk<ConversationRepository>()
     private val messageRepo = mockk<MessageRepository>()
     private val messageQueueRepo = mockk<MessageQueueRepository>()
+    private val friendshipRepo = mockk<FriendshipRepository>()
+    private val friendRequestRepo = mockk<FriendRequestRepository>()
     private val emf = mockk<EntityManagerFactory>()
     private val transactionTemplate = mockk<TransactionTemplate>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -95,6 +105,9 @@ class GatewayModuleTest {
         single { conversationMemberRepo }
         single { conversationRepo }
         single { messageRepo }
+        single { friendshipRepo }
+        single { friendRequestRepo }
+        single { privacyRepo }
         single { transactionTemplate }  // Phase 7: D-19 TransactionTemplate
     }
 
@@ -112,7 +125,7 @@ class GatewayModuleTest {
         single { BatchGetUserHandler(get()) }
         single { privacyRepo }         // 使用 mock PrivacyRepository
         single { BatchGetStatusHandler(get(), get()) }
-        single { SetPrivacyHandler(get()) }
+        single { SetPrivacyHandler(get(), get(), get()) }
         single { GetPrivacyHandler(get()) }
 
         // Phase 6: Chat & Message — 使用 mock 外部依赖
@@ -133,6 +146,14 @@ class GatewayModuleTest {
         single { InviteMemberHandler(get(), get(), get(), get(), get()) }
         single { LeaveGroupHandler(get(), get(), get(), get(), get()) }
         single { KickMemberHandler(get(), get(), get(), get(), get()) }
+
+        // Phase 8: Friend — 使用 mock 外部依赖
+        single { FriendRejectHandler(get()) }
+        single { FriendRequestsHandler(get(), get()) }
+        single { FriendListHandler(get(), get(), get(), get()) }
+        single { FriendDeleteHandler(get()) }
+        single { FriendAddHandler(get(), get(), get(), get(), get(), get(), get()) }
+        single { FriendAcceptHandler(get(), get(), get(), get(), get(), get(), get()) }
     }
 
     @AfterEach
@@ -326,6 +347,12 @@ class GatewayModuleTest {
         val inviteMemberHandler = GlobalContext.get().get<InviteMemberHandler>()
         val leaveGroupHandler = GlobalContext.get().get<LeaveGroupHandler>()
         val kickMemberHandler = GlobalContext.get().get<KickMemberHandler>()
+        val friendRejectHandler = GlobalContext.get().get<FriendRejectHandler>()
+        val friendRequestsHandler = GlobalContext.get().get<FriendRequestsHandler>()
+        val friendListHandler = GlobalContext.get().get<FriendListHandler>()
+        val friendDeleteHandler = GlobalContext.get().get<FriendDeleteHandler>()
+        val friendAddHandler = GlobalContext.get().get<FriendAddHandler>()
+        val friendAcceptHandler = GlobalContext.get().get<FriendAcceptHandler>()
 
         registerHandlers(
             registry, codec,
@@ -334,7 +361,9 @@ class GatewayModuleTest {
             setPrivacyHandler, getPrivacyHandler,
             sendMessageHandler, pullMessagesHandler, readReportHandler,
             listConversationsHandler, groupMembersHandler, editGroupHandler,
-            createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler
+            createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler,
+            friendRejectHandler, friendRequestsHandler, friendListHandler,
+            friendDeleteHandler, friendAddHandler, friendAcceptHandler
         )
 
         // 验证所有 Phase 5~6 方法已注册
@@ -370,5 +399,13 @@ class GatewayModuleTest {
         assertNotNull(registry.get("conversation/invite_member"))
         assertNotNull(registry.get("conversation/leave_group"))
         assertNotNull(registry.get("conversation/kick_member"))
+
+        // Phase 8: Friend Handler 注册验证
+        assertNotNull(registry.get("friend/reject"))
+        assertNotNull(registry.get("friend/requests"))
+        assertNotNull(registry.get("friend/list"))
+        assertNotNull(registry.get("friend/delete"))
+        assertNotNull(registry.get("friend/add"))
+        assertNotNull(registry.get("friend/accept"))
     }
 }
