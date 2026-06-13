@@ -14,6 +14,12 @@ import com.nebula.gateway.handler.conversation.InviteMemberHandler
 import com.nebula.gateway.handler.conversation.KickMemberHandler
 import com.nebula.gateway.handler.conversation.LeaveGroupHandler
 import com.nebula.gateway.handler.conversation.ListConversationsHandler
+import com.nebula.gateway.handler.friend.FriendAcceptHandler
+import com.nebula.gateway.handler.friend.FriendAddHandler
+import com.nebula.gateway.handler.friend.FriendDeleteHandler
+import com.nebula.gateway.handler.friend.FriendListHandler
+import com.nebula.gateway.handler.friend.FriendRejectHandler
+import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -118,6 +124,14 @@ val handlerModule = module {
     single { InviteMemberHandler(get(), get(), get(), get(), get()) } // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
     single { LeaveGroupHandler(get(), get(), get(), get(), get()) }  // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
     single { KickMemberHandler(get(), get(), get(), get(), get()) }  // ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+
+    // Phase 8: Friend（6 个 Handler）
+    single { FriendRejectHandler(get()) }                                              // FriendRequestRepository
+    single { FriendRequestsHandler(get(), get()) }                                     // FriendRequestRepository + UserRepository
+    single { FriendListHandler(get(), get(), get(), get()) }                           // FriendshipRepo + UserRepo + OnlineStatusRepo + PrivacyRepo
+    single { FriendDeleteHandler(get()) }                                              // FriendshipRepository
+    single { FriendAddHandler(get(), get(), get(), get(), get(), get(), get()) }       // FriendRequestRepo + FriendshipRepo + ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
+    single { FriendAcceptHandler(get(), get(), get(), get(), get(), get(), get()) }    // FriendRequestRepo + FriendshipRepo + ConvRepo + ConvMemberRepo + LockManager + TxTemplate + PushService
 }
 
 /**
@@ -179,6 +193,12 @@ private inline fun <reified ReqT : Any, reified RespT : Any> HandlerRegistry.reg
  * @param inviteMemberHandler InviteMemberHandler 实例
  * @param leaveGroupHandler LeaveGroupHandler 实例
  * @param kickMemberHandler KickMemberHandler 实例
+ * @param friendRejectHandler FriendRejectHandler 实例
+ * @param friendRequestsHandler FriendRequestsHandler 实例
+ * @param friendListHandler FriendListHandler 实例
+ * @param friendDeleteHandler FriendDeleteHandler 实例
+ * @param friendAddHandler FriendAddHandler 实例
+ * @param friendAcceptHandler FriendAcceptHandler 实例
  */
 fun registerHandlers(
     registry: HandlerRegistry,
@@ -201,7 +221,13 @@ fun registerHandlers(
     createGroupHandler: CreateGroupHandler,
     inviteMemberHandler: InviteMemberHandler,
     leaveGroupHandler: LeaveGroupHandler,
-    kickMemberHandler: KickMemberHandler
+    kickMemberHandler: KickMemberHandler,
+    friendRejectHandler: FriendRejectHandler,
+    friendRequestsHandler: FriendRequestsHandler,
+    friendListHandler: FriendListHandler,
+    friendDeleteHandler: FriendDeleteHandler,
+    friendAddHandler: FriendAddHandler,
+    friendAcceptHandler: FriendAcceptHandler
 ) {
     // 使用 inline 扩展函数逐个注册，消除重复的 HandlerEntry 构建代码（Review 修复）
     registry.register(pingHandler)               // system/ping: Request → Response
@@ -223,4 +249,10 @@ fun registerHandlers(
     registry.register(inviteMemberHandler)       // conversation/invite_member: InviteMemberReq → Response
     registry.register(leaveGroupHandler)         // conversation/leave_group: LeaveGroupReq → Response
     registry.register(kickMemberHandler)         // conversation/kick_member: KickMemberReq → Response
+    registry.register(friendRejectHandler)       // friend/reject: FriendRejectReq → Response
+    registry.register(friendRequestsHandler)     // friend/requests: FriendRequestsReq → FriendRequestsResp
+    registry.register(friendListHandler)         // friend/list: FriendListReq → FriendListResp
+    registry.register(friendDeleteHandler)       // friend/delete: FriendDeleteReq → Response
+    registry.register(friendAddHandler)          // friend/add: FriendAddReq → FriendAddResp
+    registry.register(friendAcceptHandler)       // friend/accept: FriendAcceptReq → Response
 }

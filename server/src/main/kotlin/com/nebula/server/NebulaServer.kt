@@ -18,6 +18,12 @@ import com.nebula.gateway.handler.conversation.InviteMemberHandler
 import com.nebula.gateway.handler.conversation.KickMemberHandler
 import com.nebula.gateway.handler.conversation.LeaveGroupHandler
 import com.nebula.gateway.handler.conversation.ListConversationsHandler
+import com.nebula.gateway.handler.friend.FriendAcceptHandler
+import com.nebula.gateway.handler.friend.FriendAddHandler
+import com.nebula.gateway.handler.friend.FriendDeleteHandler
+import com.nebula.gateway.handler.friend.FriendListHandler
+import com.nebula.gateway.handler.friend.FriendRejectHandler
+import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
@@ -29,6 +35,7 @@ import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
 import com.nebula.gateway.interceptor.Interceptor
+import com.nebula.gateway.push.PushService
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
@@ -170,6 +177,12 @@ fun main() {
     val inviteMemberHandler = GlobalContext.get().get<InviteMemberHandler>()
     val leaveGroupHandler = GlobalContext.get().get<LeaveGroupHandler>()
     val kickMemberHandler = GlobalContext.get().get<KickMemberHandler>()
+    val friendRejectHandler = GlobalContext.get().get<FriendRejectHandler>()
+    val friendRequestsHandler = GlobalContext.get().get<FriendRequestsHandler>()
+    val friendListHandler = GlobalContext.get().get<FriendListHandler>()
+    val friendDeleteHandler = GlobalContext.get().get<FriendDeleteHandler>()
+    val friendAddHandler = GlobalContext.get().get<FriendAddHandler>()
+    val friendAcceptHandler = GlobalContext.get().get<FriendAcceptHandler>()
     registerHandlers(
         registry, codec,
         pingHandler, loginHandler, registerHandler, searchUserHandler,
@@ -177,7 +190,9 @@ fun main() {
         setPrivacyHandler, getPrivacyHandler,
         sendMessageHandler, pullMessagesHandler, readReportHandler,
         listConversationsHandler, groupMembersHandler, editGroupHandler,
-        createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler
+        createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler,
+        friendRejectHandler, friendRequestsHandler, friendListHandler,
+        friendDeleteHandler, friendAddHandler, friendAcceptHandler
     )
 
     // Step 4.8: Phase 5 — 构造 ChatService 依赖
@@ -186,9 +201,12 @@ fun main() {
     val interceptors: List<Interceptor> = GlobalContext.get().getAll()
     val dispatcher = Dispatcher(registry, interceptors, codec)
 
-    // ChatService: gRPC 双向流服务，绑定 Envelope 协议分发 + LoginResp 拦截 + UserStreamRegistry 集成
+    // ChatService: gRPC 双向流服务（Phase 8: 新增在线状态生命周期依赖）
     val userStreamRegistry = UserStreamRegistry()
-    val chatService = ChatService(dispatcher, sessionRegistry, registry, userStreamRegistry)
+    val pushSvc = GlobalContext.get().get<PushService>()
+    val privacyRepo = GlobalContext.get().get<PrivacyRepository>()
+    val chatService = ChatService(dispatcher, sessionRegistry, registry, userStreamRegistry,
+        onlineStatusRepo, friendshipRepo, pushSvc, privacyRepo)
 
     // Step 5: 启动 gRPC 服务 — 包含 SSL/TLS、keepalive、流控配置
     val chatServer = ChatServer(config)
