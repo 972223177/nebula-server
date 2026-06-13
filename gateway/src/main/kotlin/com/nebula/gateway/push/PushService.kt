@@ -4,6 +4,12 @@ import com.nebula.chat.Direction
 import com.nebula.chat.Envelope
 import com.nebula.chat.Message
 import com.nebula.chat.PushEventType
+import com.nebula.chat.conversation.GroupCreatedPayload
+import com.nebula.chat.conversation.GroupDissolvedPayload
+import com.nebula.chat.conversation.GroupUpdatedPayload
+import com.nebula.chat.conversation.MemberJoinedPayload
+import com.nebula.chat.conversation.MemberKickedPayload
+import com.nebula.chat.conversation.MemberLeftPayload
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.gateway.session.UserStreamRegistry
@@ -104,5 +110,84 @@ class PushService(
 
     companion object {
         private val logger = KotlinLogging.logger {}
+    }
+
+    /**
+     * 向会话所有成员推送会话事件（D-11, D-18）。
+     *
+     * 遍历会话成员列表（排除 excludeUids），为每个成员的所有在线设备构建 PUSH Envelope。
+     * 单个 observer 推送异常时 try-catch 保护，不影响其他 observer（D-05 容错）。
+     *
+     * @param convId 会话 ID
+     * @param eventType PushEventType 事件类型（如 GROUP_CREATED、MEMBER_JOINED 等）
+     * @param payloadBytes 序列化后的 Payload 字节
+     * @param excludeUids 排除的用户 ID 列表（如事件发起者），默认空
+     */
+    suspend fun pushConversationEvent(
+        convId: String,
+        eventType: PushEventType,
+        payloadBytes: com.google.protobuf.ByteString,
+        excludeUids: Set<Long> = emptySet()
+    ) {
+        val members = conversationMemberRepository.findByConversationId(convId)
+        val targets = members.filter { it.userId !in excludeUids }
+
+        for (member in targets) {
+            val observers = userStreamRegistry.getStreams(member.userId)
+            for (observer in observers) {
+                try {
+                    val envelope = Envelope.newBuilder()
+                        .setDirection(Direction.PUSH)
+                        .setRequestId("")
+                        .setMessage(Message.newBuilder()
+                            .setEventType(eventType)
+                            .setContent("")
+                            .setPayload(payloadBytes)
+                            .build())
+                        .build()
+                    observer.onNext(envelope)
+                } catch (e: Exception) {
+                    // D-05 容错：单个 observer 推送异常不影响其他 observer
+                    logger.error(e) { "Failed to push $eventType to userId=${member.userId}" }
+                    userStreamRegistry.removeStream(member.userId, observer)
+                }
+            }
+        }
+    }
+
+    /**
+     * 向指定用户推送单独事件（D-14 踢人时推送给被踢者本人）。
+     *
+     * 与 pushConversationEvent 不同，此方法精确推送到指定 userId 的所有在线设备，
+     * 用于需要区分推送目标的场景（如 MEMBER_KICKED 仅推送给被踢者）。
+     *
+     * @param targetUid 目标用户 ID
+     * @param eventType PushEventType 事件类型
+     * @param payloadBytes 序列化后的 Payload 字节
+     */
+    fun pushEventToUser(
+        targetUid: Long,
+        eventType: PushEventType,
+        payloadBytes: com.google.protobuf.ByteString
+    ) {
+        val observers = userStreamRegistry.getStreams(targetUid)
+        for (observer in observers) {
+            try {
+                val envelope = Envelope.newBuilder()
+                    .setDirection(Direction.PUSH)
+                    .setRequestId("")
+                    .setMessage(Message.newBuilder()
+                        .setEventType(eventType)
+                        .setContent("")
+                        .setPayload(payloadBytes)
+                        .build())
+                    .build()
+                observer.onNext(envelope)
+            } catch (e: Exception) {
+                // D-05 容错：单个 observer 推送异常不影响其他 observer
+                logger.error(e) { "Failed to push $eventType to userId=$targetUid" }
+                userStreamRegistry.removeStream(targetUid, observer)
+            }
+        }
     }
 }

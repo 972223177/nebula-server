@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 06 complete
-last_updated: "2026-06-12T12:11:06.359Z"
+status: Phase 07 complete
+last_updated: "2026-06-13T02:47:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 26
-  percent: 55
+  completed_phases: 7
+  total_plans: 31
+  completed_plans: 31
+  percent: 64
 ---
 
 # State: Nebula Chat Server
@@ -19,7 +19,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** Phase 06 — chat-message
+**Current focus:** Phase 07 — conversation
 **Phase count:** 11
 **Requirements:** 70 v1 requirements mapped
 
@@ -33,7 +33,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 4 — Handler Framework | Complete | 2026-06-12 | 2026-06-12 |
 | 5 — User & Authentication | Complete | 2026-06-12 | 2026-06-12 |
 | 6 — Chat & Message | Complete | 2026-06-12 | 2026-06-12 |
-| 7 — Conversation | Pending | — | — |
+| 7 — Conversation | Complete | 2026-06-13 | 2026-06-13 |
 | 8 — Friend & Online Status | Pending | — | — |
 | 9 — Reconnection | Pending | — | — |
 | 10 — Message Reliability | Pending | — | — |
@@ -41,11 +41,15 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 ## Next Actions
 
-1. 执行 Phase 5 gap closure — `./gradlew :gateway:compileKotlin` 验证 JPA 阻塞修复
-2. 执行 Phase 6 gap closure — `./gradlew :gateway:compileKotlin` 验证 JPA 阻塞修复
-3. 全量测试验证
+1. `/nx-discuss 8` — 开始 Phase 8（Friend & Online Status）讨论
+2. Phase 7 PullMessagesHandler 成员检查已修复（D-07 安全修复）
+3. 全量构建验证：`./gradlew build`
 
 ## Quick Tasks Completed
+
+| Date | Task | Impact |
+|------|------|--------|
+| 2026-06-13 | Phase 7 Conversation 执行 | 5 Plan 全部完成：Flyway V2 迁移、Entity 扩展（+5 字段）、Repository 扩展（+7 方法）、TransactionTemplate/ConversationLockManager、6 个 Proto Payload、PushService 扩展、7 个 Handler（conversation/list, group_members, edit_group_info, create_group, invite_member, leave_group, kick_member）、PullMessagesHandler 安全修复、DI 注册、41 个单元测试 |
 
 | Date | Task | Impact |
 |------|------|--------|
@@ -64,7 +68,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 3 | ✅ (15 threats, 0 open) | ✅ (100% coverage) | ✅ (11/11 tests pass) |
 | 4 | ✅ (20 threats, 0 open) | ✅ (已存在) | ✅ (已存在) |
 | 5 | ✅ (15 threats, 0 open) | ✅ (100% coverage) | ✅ (22/22 tests pass) |
-| 6 | ⏳ 待追溯 | ⏳ 待追溯 | ⏳ 待追溯 |
+| 6 | ✅ (18 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 42/42 tests) |
 
 ## Quick Tasks Completed
 
@@ -73,4 +77,4 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-12 after creating Phase 5/6 JPA blocking fix plans*
+*Last updated: 2026-06-12 after Phase 6 security audit (nx-secure)*

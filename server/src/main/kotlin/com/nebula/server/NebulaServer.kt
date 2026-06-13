@@ -11,6 +11,13 @@ import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.conversation.CreateGroupHandler
+import com.nebula.gateway.handler.conversation.EditGroupHandler
+import com.nebula.gateway.handler.conversation.GroupMembersHandler
+import com.nebula.gateway.handler.conversation.InviteMemberHandler
+import com.nebula.gateway.handler.conversation.KickMemberHandler
+import com.nebula.gateway.handler.conversation.LeaveGroupHandler
+import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
@@ -120,6 +127,7 @@ fun main() {
     // 将 main() 中创建的 Repository 实例注入 Koin 容器，供 Handler 通过 get() 获取
     val externalModule = module {
         single { jpaConfig.entityManagerFactory as EntityManagerFactory }
+        single { jpaConfig.transactionTemplate() }  // Phase 7: D-19 编程式事务模板
         single { userRepo as UserRepository }
         single { sessionRepo as SessionRepository }
         single { onlineStatusRepo as OnlineStatusRepository }
@@ -155,12 +163,21 @@ fun main() {
     val sendMessageHandler = GlobalContext.get().get<SendMessageHandler>()
     val pullMessagesHandler = GlobalContext.get().get<PullMessagesHandler>()
     val readReportHandler = GlobalContext.get().get<ReadReportHandler>()
+    val listConversationsHandler = GlobalContext.get().get<ListConversationsHandler>()
+    val groupMembersHandler = GlobalContext.get().get<GroupMembersHandler>()
+    val editGroupHandler = GlobalContext.get().get<EditGroupHandler>()
+    val createGroupHandler = GlobalContext.get().get<CreateGroupHandler>()
+    val inviteMemberHandler = GlobalContext.get().get<InviteMemberHandler>()
+    val leaveGroupHandler = GlobalContext.get().get<LeaveGroupHandler>()
+    val kickMemberHandler = GlobalContext.get().get<KickMemberHandler>()
     registerHandlers(
         registry, codec,
         pingHandler, loginHandler, registerHandler, searchUserHandler,
         getProfileHandler, batchGetUserHandler, batchGetStatusHandler,
         setPrivacyHandler, getPrivacyHandler,
-        sendMessageHandler, pullMessagesHandler, readReportHandler
+        sendMessageHandler, pullMessagesHandler, readReportHandler,
+        listConversationsHandler, groupMembersHandler, editGroupHandler,
+        createGroupHandler, inviteMemberHandler, leaveGroupHandler, kickMemberHandler
     )
 
     // Step 4.8: Phase 5 — 构造 ChatService 依赖

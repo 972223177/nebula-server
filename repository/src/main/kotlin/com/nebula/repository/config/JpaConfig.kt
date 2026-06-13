@@ -5,8 +5,10 @@ import jakarta.persistence.EntityManagerFactory
 import org.flywaydb.core.Flyway
 import org.hibernate.cfg.AvailableSettings
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory
+import org.springframework.orm.jpa.JpaTransactionManager
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter
+import org.springframework.transaction.support.TransactionTemplate
 import javax.sql.DataSource
 
 /**
@@ -50,6 +52,21 @@ class JpaConfig(
         val em = entityManagerFactory.createEntityManager()
         val factory = JpaRepositoryFactory(em)
         return factory.getRepository(repositoryInterface)
+    }
+
+    /**
+     * 创建编程式事务模板（D-19 事务策略）。
+     *
+     * 基于 entityManagerFactory 创建 JpaTransactionManager，
+     * 用于编写多表事务（如创建群聊：插入 ConversationEntity + 批量插入 ConversationMemberEntity）。
+     * TransactionTemplate 通过 Koin DI 注入，在 Handler 中配合 ConversationLockManager 用于保证原子性。
+     *
+     * @return TransactionTemplate 实例
+     */
+    fun transactionTemplate(): TransactionTemplate {
+        val transactionManager = JpaTransactionManager(entityManagerFactory)
+        transactionManager.afterPropertiesSet()
+        return TransactionTemplate(transactionManager)
     }
 }
 

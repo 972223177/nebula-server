@@ -85,3 +85,43 @@ message ConversationBrief {
   int64 last_updated_at = 8;          // 会话最后更新时间
   int64 last_read_msg_id = 9;         // 用户在此会话的最后已读消息 ID
 }
+
+// ---- 推送事件 Payload（D-11, D-18）----
+
+// 群创建通知
+message GroupCreatedPayload {
+  string conversation_id = 1;         // 新群会话 ID
+  string name = 2;                    // 群名称
+  int64 creator_uid = 3;              // 创建者 UID
+}
+
+// 成员加入通知
+message MemberJoinedPayload {
+  string conversation_id = 1;         // 会话 ID
+  repeated int64 uids = 2;            // 新加入的成员 UID 列表
+  int64 inviter_uid = 3;              // 邀请人 UID
+}
+
+// 成员退出通知
+message MemberLeftPayload {
+  string conversation_id = 1;         // 会话 ID
+  int64 uid = 2;                      // 退出的成员 UID
+}
+
+// 成员被踢通知（推送给被踢者本人）
+message MemberKickedPayload {
+  string conversation_id = 1;         // 会话 ID
+  int64 uid = 2;                      // 被踢的成员 UID
+}
+
+// 群信息更新通知
+message GroupUpdatedPayload {
+  string conversation_id = 1;         // 会话 ID
+  optional string name = 2;           // 新群名称（不传则不修改）
+  optional string avatar_url = 3;     // 新群头像 URL（不传则不修改）
+}
+
+// 群解散通知
+message GroupDissolvedPayload {
+  string conversation_id = 1;         // 会话 ID
+}
