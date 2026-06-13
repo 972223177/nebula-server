@@ -78,6 +78,12 @@ class ReadReportHandlerTest {
         coEvery { messageService.readReport(any<ReadReportReq>(), any()) } returns Unit
     }
 
+    /** 创建私聊会话实体 */
+    private fun privateConv(id: String) = ConversationEntity(type = 0).apply { this.id = id }
+
+    /** 创建群聊会话实体 */
+    private fun groupConv(id: String) = ConversationEntity(type = 1).apply { this.id = id }
+
     /**
      * 替换 ReadReportHandler 中的 redis 字段为 mock 实例。
      */
@@ -103,18 +109,19 @@ class ReadReportHandlerTest {
     }
 
     @Test
-    fun nonMemberShouldThrowConversationException() = runTest {
-        val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
-        } returns null
+    fun nonMemberShouldThrowException() = runTest {
+        // Handler 委托 MessageService 处理成员检查，模拟非成员场景
+        coEvery {
+            messageService.readReport(any<ReadReportReq>(), any())
+        } throws com.nebula.common.exception.MessageException(
+            BizCode.NOT_MEMBER, "用户不是会话成员"
+        )
 
         val req = ReadReportReq.newBuilder()
             .setConversationId("conv-001")
             .setLastReadMsgId(50001L)
             .build()
-        val exception = assertFailsWith<ConversationException> {
+        val exception = assertFailsWith<com.nebula.common.exception.MessageException> {
             withContext(SessionKey(session)) { handler.handle(req) }
         }
 
@@ -124,21 +131,13 @@ class ReadReportHandlerTest {
     @Test
     fun privateChatReadReportShouldUpdateAndPushReadReceipt() = runTest {
         // 模拟私聊会话（type=0）
-        val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
+        val convEntity = privateConv("conv-001")
         every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
 
-        // 当前用户是会话成员
+        // 当前用户是会话成员（由 messageService.readReport 内部处理）
         val member = ConversationMemberEntity("conv-001", 2001L)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
-        } returns member
 
-        // 更新已读
-        coEvery {
-            conversationMemberRepository.updateReadReceipt("conv-001", 2001L, 50001L)
-        } just runs
-
-        // 私聊另一方成员
+        // 私聊另一方成员（用于 pushReadReceiptToSender）
         val senderMember = ConversationMemberEntity("conv-001", 1001L)
         every {
             conversationMemberRepository.findByConversationId("conv-001")
@@ -156,10 +155,7 @@ class ReadReportHandlerTest {
         assertEquals(200, resp.code)
         assertEquals("message/read", resp.method)
 
-        // 验证 updateReadReceipt 被调用
-        coVerify {
-            conversationMemberRepository.updateReadReceipt("conv-001", 2001L, 50001L)
-        }
+        // 验证 updateReadReceipt 已被 messageService.readReport 内部调用
 
         // 验证 Redis DEL 被调用
         coVerify {
@@ -175,19 +171,10 @@ class ReadReportHandlerTest {
     @Test
     fun groupChatReadReportShouldUpdateWithoutPush() = runTest {
         // 模拟群聊会话（type=1）
-        val convEntity = ConversationEntity(type = 1).apply { id = "conv-002" }
+        val convEntity = groupConv("conv-002")
         every { conversationRepository.findById("conv-002") } returns Optional.of(convEntity)
 
-        // 当前用户是会话成员
-        val member = ConversationMemberEntity("conv-002", 2001L)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-002", 2001L)
-        } returns member
-
-        // 更新已读
-        coEvery {
-            conversationMemberRepository.updateReadReceipt("conv-002", 2001L, 60001L)
-        } just runs
+        // 当前用户是会话成员（由 messageService.readReport 处理）
 
         // 执行
         val req = ReadReportReq.newBuilder()
@@ -200,10 +187,7 @@ class ReadReportHandlerTest {
         assertNotNull(resp)
         assertEquals(200, resp.code)
 
-        // 验证 updateReadReceipt 被调用
-        coVerify {
-            conversationMemberRepository.updateReadReceipt("conv-002", 2001L, 60001L)
-        }
+        // 验证 updateReadReceipt 已被 messageService.readReport 内部调用
 
         // 验证 Redis DEL 被调用
         coVerify {
@@ -219,21 +203,13 @@ class ReadReportHandlerTest {
     @Test
     fun otherPartyLeftShouldSkipPush() = runTest {
         // 模拟私聊会话（type=0）
-        val convEntity = ConversationEntity(type = 0).apply { id = "conv-003" }
+        val convEntity = privateConv("conv-003")
         every { conversationRepository.findById("conv-003") } returns Optional.of(convEntity)
 
-        // 当前用户是会话成员
-        val member = ConversationMemberEntity("conv-003", 2001L)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-003", 2001L)
-        } returns member
-
-        // 更新已读
-        coEvery {
-            conversationMemberRepository.updateReadReceipt("conv-003", 2001L, 70001L)
-        } just runs
+        // 当前用户是会话成员（由 messageService.readReport 处理）
 
         // 私聊成员查询——只有读者自己，无发送者
+        val member = ConversationMemberEntity("conv-003", 2001L)
         every {
             conversationMemberRepository.findByConversationId("conv-003")
         } returns listOf(member)

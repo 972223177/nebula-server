@@ -55,7 +55,7 @@ class UserServiceTest {
         userService = spyk(UserService(userRepository, idGenerator, onlineStatusRepository))
 
         // 默认模拟 idGenerator.nextId() 返回固定值
-        every { idGenerator.nextId() } returns mockUserId
+        coEvery { idGenerator.nextId() } returns mockUserId
     }
 
     // ═══════════════════════════════════════

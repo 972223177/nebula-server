@@ -9,7 +9,6 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -62,7 +61,7 @@ class WriteStepTest {
     @Test
     fun generateMsgIdShouldSetToContext() = runTest {
         injectMockRedis()
-        every { idGenerator.nextId() } returns msgId
+        coEvery { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
 
         val req = SendMessageReq.newBuilder()
@@ -81,7 +80,7 @@ class WriteStepTest {
     @Test
     fun buildChatMessageShouldSetToContext() = runTest {
         injectMockRedis()
-        every { idGenerator.nextId() } returns msgId
+        coEvery { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
 
         val req = SendMessageReq.newBuilder()
@@ -104,7 +103,7 @@ class WriteStepTest {
     @Test
     fun shouldCallMessageQueueRepositoryEnqueue() = runTest {
         injectMockRedis()
-        every { idGenerator.nextId() } returns msgId
+        coEvery { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
 
         val req = SendMessageReq.newBuilder()
@@ -122,7 +121,7 @@ class WriteStepTest {
     @Test
     fun shouldUpdateConversationMetaRedisKeys() = runTest {
         injectMockRedis()
-        every { idGenerator.nextId() } returns msgId
+        coEvery { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
 
         val req = SendMessageReq.newBuilder()
@@ -143,7 +142,7 @@ class WriteStepTest {
     @Test
     fun shouldUpdateDedupKeyWithActualMsgId() = runTest {
         injectMockRedis()
-        every { idGenerator.nextId() } returns msgId
+        coEvery { idGenerator.nextId() } returns msgId
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-entry-id"
 
         val req = SendMessageReq.newBuilder()
