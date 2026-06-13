@@ -1,0 +1,14 @@
+# Plugin 构建产物
+dist/
+build/
+
+# 本地配置
+.codebuddy/*.local.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
