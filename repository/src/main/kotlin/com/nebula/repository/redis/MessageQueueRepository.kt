@@ -30,6 +30,10 @@ class MessageQueueRepository(
         private const val CONSUMER_GROUP = "flush-workers"
         /** 消费者名称 */
         private const val CONSUMER_NAME = "worker-1"
+        /** 去重 SETNX key 前缀 */
+        private const val DEDUP_KEY_PREFIX = "dedup:msg:"
+        /** 去重 TTL：7 天 */
+        private const val DEDUP_TTL_SECONDS = 7 * 24 * 3600L
     }
 
     /**
@@ -70,6 +74,31 @@ class MessageQueueRepository(
     /** 确认消息已被处理 */
     suspend fun acknowledge(messageId: String) {
         redis.xack(STREAM_KEY, CONSUMER_GROUP, messageId)
+    }
+
+    /**
+     * 去重检测：SETNX + 设置 TTL（D-72）。
+     *
+     * 使用 Redis SETNX 原子操作检测 clientMessageId 是否已存在。
+     * 如果键不存在（首次发送），设置值为 senderUid 并返回 true。
+     * 如果键已存在（重复消息），返回 false。
+     * 连接异常时 fail-open 返回 true，由 MySQL 唯一索引作为最终去重保障。
+     *
+     * @param clientMsgId 客户端消息幂等标识
+     * @param senderUid 发送者用户 ID
+     * @return true 消息未重复（或无法判断），false 检测到重复
+     */
+    suspend fun checkAndSetDedup(clientMsgId: String, senderUid: Long): Boolean {
+        val key = "$DEDUP_KEY_PREFIX$clientMsgId"
+        return try {
+            val result = redis.setnx(key, senderUid.toString())
+            if (result == true) {
+                redis.expire(key, DEDUP_TTL_SECONDS)
+            }
+            result ?: true // null 时 fail-open，MySQL 唯一索引作为兜底
+        } catch (e: Exception) {
+            true // 连接异常时 fail-open，MySQL 唯一索引作为兜底（D-72）
+        }
     }
 
     /**

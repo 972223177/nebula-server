@@ -21,17 +21,19 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 
 /**
- * chat/send Handler（D-04, D-05, D-06, D-09, D-11, D-13）。
+ * chat/send Handler（D-04, D-05, D-06, D-09, D-11, D-13, D-72）。
  *
  * 职责：
  * - 委托 MessageService 处理核心业务逻辑（参数校验、成员验证、好友检查、写入 Redis Stream）
- * - 执行 Redis 去重检查（DedupStep 逻辑，gateway 层 Redis 操作）
  * - 写入后异步 fire-and-forget 执行未读计数递增和推送
+ *
+ * D-72：Redis SETNX 去重逻辑已下沉到 MessageQueueRepository.checkAndSetDedup() 中，
+ * handler 层不再处理去重。
  *
  * @param messageService 消息业务服务
  * @param pushService 推送服务（异步 fire-and-forget）
  * @param conversationMemberRepository 会话成员查询（异步未读计数）
- * @param connection Redis 连接（去重 + 未读计数）
+ * @param connection Redis 连接（未读计数 INCR 操作）
  * @param scope 协程作用域（Dispatcher.IO + SupervisorJob）
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
@@ -49,10 +51,6 @@ class SendMessageHandler(
     override val method: String = "chat/send"
 
     companion object {
-        /** 去重 SETNX key 前缀 */
-        private const val DEDUP_KEY_PREFIX = "dedup:msg:"
-        /** 去重 TTL：7 天 */
-        private const val DEDUP_TTL_SECONDS = 7 * 24 * 3600L
         private val logger = KotlinLogging.logger {}
     }
 
@@ -60,30 +58,17 @@ class SendMessageHandler(
         val session = currentCoroutineContext().requireSession()
         val senderUid = session.userId
 
-        // Step 1: 去重检查（Redis SETNX — gateway 层 Redis 操作）
-        val dedupKey = "$DEDUP_KEY_PREFIX${req.clientMessageId}"
-        val isDuplicate = !(redis.setnx(dedupKey, senderUid.toString()) ?: false)
-        if (isDuplicate) {
-            throw SendMessageException(BizCode.INVALID_PARAM, "重复消息（clientMessageId=${req.clientMessageId}）")
-        }
-        redis.expire(dedupKey, DEDUP_TTL_SECONDS)
+        // Step 1: 委托 MessageService 处理核心业务逻辑（D-72 去重已下沉到 repository 层）
+        val result = messageService.sendMessage(req, senderUid)
 
-        // Step 2: 委托 MessageService 处理核心业务逻辑
-        val result = try {
-            messageService.sendMessage(req, senderUid)
-        } catch (e: Exception) {
-            // 异常时清理去重 key，允许重试
-            redis.del(dedupKey)
-            throw e
-        }
-
-        // Step 3: 构建响应并异步推送
+        // Step 2: 构建响应（含服务端分配的 seq）
         val response = SendMessageResp.newBuilder()
             .setMsgId(result.msgId)
             .setServerTs(result.serverTs)
+            .setSeq(result.seq)
             .build()
 
-        // 异步 fire-and-forget：未读计数 + 推送
+        // Step 3: 异步 fire-and-forget：未读计数 + 推送
         scope.launch {
             asyncUnreadAndPush(result)
         }

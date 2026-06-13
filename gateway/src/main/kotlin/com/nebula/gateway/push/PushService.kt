@@ -11,7 +11,9 @@ import com.nebula.chat.conversation.MemberJoinedPayload
 import com.nebula.chat.conversation.MemberKickedPayload
 import com.nebula.chat.conversation.MemberLeftPayload
 import com.nebula.chat.message.ChatMessage
+import com.nebula.chat.message.DeliveryAckPayload
 import com.nebula.chat.message.ReadReceiptPayload
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.repository.ConversationMemberRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -30,10 +32,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
  *
  * @param userStreamRegistry 用户 StreamObserver 注册中心
  * @param conversationMemberRepository 会话成员查询接口
+ * @param deliveryTrackingService 投递三态跟踪服务（D-70 ~ D-72）
  */
 class PushService(
     private val userStreamRegistry: UserStreamRegistry,
-    private val conversationMemberRepository: ConversationMemberRepository
+    private val conversationMemberRepository: ConversationMemberRepository,
+    private val deliveryTrackingService: DeliveryTrackingService
 ) {
     /**
      * 向会话成员推送 ChatMessage 消息（D-09, D-11, D-12）。
@@ -68,6 +72,8 @@ class PushService(
                             .build())
                         .build()
                     observer.onNext(envelope)
+                    // D-70: 推送成功后标记为 sent 状态
+                    deliveryTrackingService.markSent(chatMessage.msgId, member.userId)
                 } catch (e: Exception) {
                     // D-05 容错：单个 observer 推送异常不影响其他 observer
                     logger.error(e) { "Failed to push CHAT_MESSAGE to userId=${member.userId}" }
@@ -103,6 +109,42 @@ class PushService(
             } catch (e: Exception) {
                 // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push READ_RECEIPT to senderUid=$senderUid" }
+                userStreamRegistry.removeStream(senderUid, observer)
+            }
+        }
+    }
+
+    /**
+     * 向发送者推送交付回执（DeliveryAck）（D-71）。
+     *
+     * 收到接收者客户端回执后调用，告知发送者消息已送达接收方设备。
+     * 非 suspend 函数 — 操作仅涉及内存（UserStreamRegistry.getStreams 返回快照列表），无 I/O。
+     *
+     * @param senderUid 发送者 userId
+     * @param msgId 消息 ID
+     * @param convId 会话 ID
+     */
+    fun pushDeliveryAck(senderUid: Long, msgId: Long, convId: String) {
+        val observers = userStreamRegistry.getStreams(senderUid)
+        val payload = DeliveryAckPayload.newBuilder()
+            .setMsgId(msgId)
+            .setConversationId(convId)
+            .build()
+        for (observer in observers) {
+            try {
+                val envelope = Envelope.newBuilder()
+                    .setDirection(Direction.PUSH)
+                    .setRequestId("")
+                    .setMessage(Message.newBuilder()
+                        .setEventType(PushEventType.DELIVERY_ACK)
+                        .setContent("")
+                        .setPayload(payload.toByteString())
+                        .build())
+                    .build()
+                observer.onNext(envelope)
+            } catch (e: Exception) {
+                // D-05 容错：单个 observer 推送异常不影响其他 observer
+                logger.error(e) { "Failed to push DELIVERY_ACK to senderUid=$senderUid, msgId=$msgId" }
                 userStreamRegistry.removeStream(senderUid, observer)
             }
         }
