@@ -46,6 +46,9 @@ dependencies {
     implementation(libs.flyway.mysql)
     implementation(kotlin("stdlib"))
 
+    // Koin DI — 模块初始化器需要 KoinComponent 和 Koin API
+    implementation(libs.koin.core)
+
     // Test
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)

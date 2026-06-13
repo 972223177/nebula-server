@@ -1,6 +1,7 @@
 package com.nebula.server
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.gateway.di.serviceModule
 import com.nebula.gateway.di.frameworkModule
 import com.nebula.gateway.di.userHandlerModule
 import com.nebula.gateway.di.chatHandlerModule
@@ -48,6 +49,7 @@ import kotlin.test.assertTrue
 class KoinVerificationTest {
 
     /** 构建外部依赖模块 — 使用 mock 对象代替真实基础设施 */
+    @Suppress("UNCHECKED_CAST")
     private fun buildMockModule() = module {
         single<UserRepository> { mockk() }
         single<SessionRepository> { mockk() }
@@ -62,6 +64,7 @@ class KoinVerificationTest {
         single<OnlineStatusRepository> { OnlineStatusRepository(get()) }
         single<PrivacyRepository> { PrivacyRepository(get(), get()) }
         single<TransactionTemplate> { mockk() }
+        single<List<SendMessageStep>> { listOf(mockk(), mockk()) }
     }
 
     @AfterEach
@@ -72,7 +75,7 @@ class KoinVerificationTest {
     @Test
     fun `all phase components are resolvable`() {
         startKoin {
-            modules(frameworkModule, userHandlerModule, chatHandlerModule, conversationHandlerModule, friendHandlerModule, buildMockModule())
+            modules(frameworkModule, serviceModule, userHandlerModule, chatHandlerModule, conversationHandlerModule, friendHandlerModule, buildMockModule())
         }
 
         // Phase 6 基础设施组件
