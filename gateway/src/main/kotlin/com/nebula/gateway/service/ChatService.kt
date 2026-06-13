@@ -5,12 +5,17 @@ import com.nebula.chat.Envelope
 import com.nebula.chat.Message
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
+import com.nebula.chat.friend.StatusChangedPayload
 import com.nebula.chat.user.LoginResp
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
+import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
+import com.nebula.repository.redis.OnlineStatusRepository
+import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.repository.repository.FriendshipRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.BindableService
 import io.grpc.MethodDescriptor
@@ -20,8 +25,11 @@ import io.grpc.stub.ServerCalls
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -45,12 +53,20 @@ import java.util.concurrent.ConcurrentHashMap
  * @param sessionRegistry Session 注册中心（含设备类型互踢逻辑）
  * @param registry Handler 注册中心
  * @param userStreamRegistry 用户 StreamObserver 注册中心（D-01）
+ * @param onlineStatusRepository 在线状态 Redis 操作（D-57）
+ * @param friendshipRepository 好友关系仓库（查询好友列表用于推送）
+ * @param pushService 推送服务
+ * @param privacyRepository 隐私设置仓库（过滤隐藏用户）
  */
 class ChatService(
     private val dispatcher: Dispatcher,
     private val sessionRegistry: SessionRegistry,
     private val registry: HandlerRegistry,
-    private val userStreamRegistry: UserStreamRegistry
+    private val userStreamRegistry: UserStreamRegistry,
+    private val onlineStatusRepository: OnlineStatusRepository,
+    private val friendshipRepository: FriendshipRepository,
+    private val pushService: PushService,
+    private val privacyRepository: PrivacyRepository
 ) : BindableService {
 
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
@@ -99,6 +115,9 @@ class ChatService(
         /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。 */
         var userId: Long? = null
 
+        /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏 */
+        var delayedOfflineJob: Job? = null
+
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
                 Direction.REQUEST -> scope.launch {
@@ -126,12 +145,29 @@ class ChatService(
          * 清理操作：
          * 1. 从 tokenToObserver 移除当前 responseObserver 的所有 token 映射
          * 2. 从 UserStreamRegistry 移除当前设备的 StreamObserver（D-01）
+         * 3. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
         private fun cleanupConnection() {
             tokenToObserver.entries.removeIf { it.value == responseObserver }
             // D-01: 移除当前设备 StreamObserver（不调 removeUser 以免移除其他设备的流）
             userId?.let { uid ->
                 userStreamRegistry.removeStream(uid, responseObserver)
+            }
+
+            // D-57: 60s 延迟离线任务（伪在线）
+            userId?.let { uid ->
+                delayedOfflineJob = scope.launch {
+                    delay(60_000)  // 60s 伪在线窗口
+                    // 再次检查是否还有其他设备在线
+                    if (userStreamRegistry.getStreams(uid).isEmpty()) {
+                        // 无剩余设备，标记离线
+                        withContext(Dispatchers.IO) {
+                            onlineStatusRepository.setOffline(uid)
+                        }
+                        // 推送状态变更给所有好友
+                        pushStatusChangeToFriends(uid, 0)
+                    }
+                }
             }
         }
     }
@@ -207,7 +243,19 @@ class ChatService(
             "responseObserver must be ChatStreamObserver"
         }
         responseObserver.userId = loginResp.userId
+
+        // D-57: 重连时取消旧的延迟离线任务
+        responseObserver.delayedOfflineJob?.cancel()
+
         userStreamRegistry.register(loginResp.userId, responseObserver)
+
+        // D-57: 标记在线 + 推送状态变更给所有好友
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                onlineStatusRepository.setOnline(loginResp.userId)
+            }
+            pushStatusChangeToFriends(loginResp.userId, 1)
+        }
 
         // 发送 LoginResp Envelope 给客户端
         val loginRespEnvelope = Envelope.newBuilder()
@@ -219,7 +267,7 @@ class ChatService(
     }
 
     /**
-     * 处理 PING 心跳请求，回复 PONG Envelope（D-27 双重心跳策略应用层）。
+     * 处理 PING 心跳请求，回复 PONG Envelope + 刷新在线状态 TTL（D-27, D-57）。
      *
      * @param envelope PING 请求 Envelope
      * @param responseObserver 当前连接的 StreamObserver
@@ -228,6 +276,15 @@ class ChatService(
         envelope: Envelope,
         responseObserver: StreamObserver<Envelope>
     ) {
+        // D-57: 刷新在线状态 TTL
+        (responseObserver as? ChatStreamObserver)?.userId?.let { uid ->
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    onlineStatusRepository.refreshTtl(uid)
+                }
+            }
+        }
+
         val pongEnvelope = Envelope.newBuilder()
             .setDirection(Direction.PONG)
             .setRequestId(envelope.requestId)
@@ -265,5 +322,50 @@ class ChatService(
 
     companion object {
         private val logger = KotlinLogging.logger {}
+    }
+
+    /**
+     * 推送状态变更给所有在线好友（D-50, D-57）。
+     *
+     * 查询好友列表 → 过滤隐藏用户 → 逐个 pushEventToUser(STATUS_CHANGED)。
+     * JPA 查询在 withContext(Dispatchers.IO) 中执行。
+     *
+     * @param userId 状态变更用户 UID
+     * @param status 新状态：0=离线 1=在线 2=隐藏
+     */
+    private fun pushStatusChangeToFriends(userId: Long, status: Int) {
+        scope.launch {
+            try {
+                val friendships = withContext(Dispatchers.IO) {
+                    friendshipRepository.findFriendsByUserId(
+                        userId, 0, org.springframework.data.domain.PageRequest.of(0, Int.MAX_VALUE)
+                    )
+                }
+                val friendUids = friendships.map { f ->
+                    if (f.userId == userId) f.friendId else f.userId
+                }.distinct()
+
+                // 过滤隐藏用户
+                val hiddenUids = privacyRepository.batchGetHideOnlineStatus(friendUids)
+                val visibleFriends = friendUids.filter { it !in hiddenUids }
+
+                val payload = StatusChangedPayload.newBuilder()
+                    .setUid(userId)
+                    .setStatus(status)
+                    .build()
+
+                visibleFriends.forEach { friendUid ->
+                    try {
+                        pushService.pushEventToUser(
+                            friendUid, PushEventType.STATUS_CHANGED, payload.toByteString()
+                        )
+                    } catch (e: Exception) {
+                        logger.warn(e) { "Failed to push status change to friend=$friendUid" }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn(e) { "pushStatusChangeToFriends failed for userId=$userId" }
+            }
+        }
     }
 }
