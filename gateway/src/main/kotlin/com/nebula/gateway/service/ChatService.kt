@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /** 缓存再投递缓冲区上限（D-67）：超过此数量丢弃最旧消息，防止内存泄漏 */
@@ -79,8 +80,8 @@ class ChatService(
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
     private val tokenToObserver = ConcurrentHashMap<String, StreamObserver<Envelope>>()
 
-    /** 标记 eviction callback 是否已注册，确保只注册一次 */
-    private var evictionCallbackRegistered = false
+    /** 标记 eviction callback 是否已注册，使用 AtomicBoolean 确保 check-then-act 的原子性 */
+    private val evictionCallbackRegistered = AtomicBoolean(false)
 
     /**
      * ChatService 协程作用域 — 用于桥接 gRPC 回调线程与协程。
@@ -124,10 +125,14 @@ class ChatService(
         private val responseObserver: StreamObserver<Envelope>
     ) : StreamObserver<Envelope> {
 
-        /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。 */
+        /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。
+         * 使用 @Volatile 保证协程写入与 gRPC 线程读取之间的可见性。 */
+        @Volatile
         var userId: Long? = null
 
-        /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏 */
+        /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏。
+         * 使用 @Volatile 保证 gRPC 线程写入与协程读取之间的可见性。 */
+        @Volatile
         var delayedOfflineJob: Job? = null
 
         /**
@@ -410,8 +415,7 @@ class ChatService(
      * 即将被关闭的旧连接，而非通过 UserStreamRegistry 推送到所有设备。
      */
     private fun ensureEvictionCallbackRegistered() {
-        if (!evictionCallbackRegistered) {
-            evictionCallbackRegistered = true
+        if (evictionCallbackRegistered.compareAndSet(false, true)) {
             sessionRegistry.onEviction { token ->
                 val observer = tokenToObserver.remove(token)
                 if (observer != null) {
