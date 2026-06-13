@@ -82,7 +82,7 @@ class KickMemberHandlerTest {
     }
 
     @Test
-    fun `正常踢人软删除目标并推送双事件`() = runTest {
+    fun `正常踢人软删除推送MEMBER_KICKED和MEMBER_LEFT`() = runTest {
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
@@ -110,7 +110,12 @@ class KickMemberHandlerTest {
         assertNotNull(resp)
         assertEquals(BizCode.OK.code, resp.code)
 
-        // 验证推送给被踢者
+        // 验证软删除被调用
+        coVerify {
+            conversationMemberRepository.softDeleteByConversationIdAndUserId("conv-001", 2001L)
+        }
+
+        // 验证推送 MEMBER_KICKED 给被踢者
         verify {
             pushService.pushEventToUser(
                 targetUid = 2001L,
@@ -119,7 +124,7 @@ class KickMemberHandlerTest {
             )
         }
 
-        // 验证推送给剩余成员（排除被踢者）
+        // 验证推送 MEMBER_LEFT 给剩余成员
         coVerify {
             pushService.pushConversationEvent(
                 convId = "conv-001",
@@ -136,8 +141,7 @@ class KickMemberHandlerTest {
             id = "conv-001"; status = 0; memberCount = 5
         }
         val ownerMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "owner" }
-        // 被踢目标也是群主
-        val targetOwner = ConversationMemberEntity("conv-001", 2001L).apply { role = "owner" }
+        val ownerTargetMember = ConversationMemberEntity("conv-001", 2001L).apply { role = "owner" }
 
         every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
         every {
@@ -145,7 +149,7 @@ class KickMemberHandlerTest {
         } returns ownerMember
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
-        } returns targetOwner
+        } returns ownerTargetMember
 
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
@@ -162,7 +166,7 @@ class KickMemberHandlerTest {
     fun `踢自己抛INVALID_PARAM`() = runTest {
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
-            .setUid(1001L) // 与 session.userId 相同
+            .setUid(1001L)
             .build()
         val exception = assertFailsWith<ConversationException> {
             withContext(SessionKey(session)) { handler.handle(req) }
@@ -176,13 +180,12 @@ class KickMemberHandlerTest {
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 0; memberCount = 5
         }
-        // 当前用户是普通成员
-        val normalMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
+        val member = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
 
         every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns normalMember
+        } returns member
 
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
@@ -206,7 +209,6 @@ class KickMemberHandlerTest {
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
         } returns ownerMember
-        // 被踢者不在群中
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
         } returns null
@@ -223,9 +225,24 @@ class KickMemberHandlerTest {
     }
 
     @Test
+    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
+        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+
+        val req = KickMemberReq.newBuilder()
+            .setConversationId("conv-missing")
+            .setUid(2001L)
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.CONV_NOT_FOUND, exception.bizCode)
+    }
+
+    @Test
     fun `群已解散抛GROUP_DISSOLVED`() = runTest {
         val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 1; memberCount = 0
+            id = "conv-001"; status = 1; memberCount = 5
         }
 
         every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)

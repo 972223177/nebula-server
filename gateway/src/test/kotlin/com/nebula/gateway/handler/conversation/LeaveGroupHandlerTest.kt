@@ -170,6 +170,20 @@ class LeaveGroupHandlerTest {
     }
 
     @Test
+    fun `会话不存在抛CONV_NOT_FOUND`() = runTest {
+        every { conversationRepository.findById("conv-missing") } returns Optional.empty()
+
+        val req = LeaveGroupReq.newBuilder()
+            .setConversationId("conv-missing")
+            .build()
+        val exception = assertFailsWith<ConversationException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+
+        assertEquals(BizCode.CONV_NOT_FOUND, exception.bizCode)
+    }
+
+    @Test
     fun `已解散群退群抛GROUP_DISSOLVED`() = runTest {
         val convEntity = ConversationEntity(type = 2).apply {
             id = "conv-001"; status = 1; memberCount = 0
