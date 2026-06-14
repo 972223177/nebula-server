@@ -25,7 +25,6 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap
@@ -298,7 +297,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 2 组：activateDelivery() 测试 ====================
 
     @Test
-    fun activateDeliveryShouldDeliverAllBufferedMessagesThenSetActive() = runTest {
+    fun activateDeliveryShouldDeliverAllBufferedMessagesThenSetActive() = runBlocking {
         // Given: pendingBuffer 有 3 条缓存消息
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -324,7 +323,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun activateDeliveryShouldContinueDeliveryOnIndividualMessageFailure() = runTest {
+    fun activateDeliveryShouldContinueDeliveryOnIndividualMessageFailure() = runBlocking {
         // Given: pendingBuffer 有 3 条消息，第 2 条 onNext 抛异常
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
