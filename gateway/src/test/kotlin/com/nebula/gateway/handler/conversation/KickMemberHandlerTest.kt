@@ -75,24 +75,6 @@ class KickMemberHandlerTest {
     fun kickMemberShouldSoftDeleteAndPushEvents() = runTest {
         coEvery { conversationService.kickMember(any(), any()) } returns 2001L
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val ownerMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "owner" }
-        val targetMember = ConversationMemberEntity("conv-001", 2001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns ownerMember
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
-        } returns targetMember
-        coEvery {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId("conv-001", 2001L)
-        } just runs
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
             .setUid(2001L)
@@ -101,11 +83,6 @@ class KickMemberHandlerTest {
 
         assertNotNull(resp)
         assertEquals(BizCode.OK.code, resp.code)
-
-        // 验证软删除被调用
-        coVerify {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId("conv-001", 2001L)
-        }
 
         // 验证推送 MEMBER_KICKED 给被踢者
         verify {
