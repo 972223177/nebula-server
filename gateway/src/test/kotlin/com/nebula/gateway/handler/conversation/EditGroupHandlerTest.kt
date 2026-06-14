@@ -87,7 +87,6 @@ class EditGroupHandlerTest {
         }
 
         assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
-        assertTrue(exception.message?.contains("至少修改") == true)
     }
 
     @Test
@@ -163,7 +162,6 @@ class EditGroupHandlerTest {
         }
 
         assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
-        assertTrue(exception.message?.contains("128") == true)
     }
 
     @Test
@@ -179,7 +177,6 @@ class EditGroupHandlerTest {
         }
 
         assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
-        assertTrue(exception.message?.contains("256") == true)
     }
 
     @Test

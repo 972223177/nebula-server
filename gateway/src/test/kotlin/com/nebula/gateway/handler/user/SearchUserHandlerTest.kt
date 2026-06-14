@@ -137,6 +137,11 @@ class SearchUserHandlerTest {
 
     @Test
     fun emptyKeywordShouldReturnEmpty() = runTest {
+        coEvery { userService.searchUsers(any(), any(), any()) } returns SearchUserResp.newBuilder()
+            .setHasMore(false)
+            .setNextCursor(0L)
+            .build()
+
         val req = SearchUserReq.newBuilder()
             .setKeyword("  ")
             .setCursor(0)
