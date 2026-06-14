@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit
  */
 class ChatServer(private val config: ApplicationConfig) {
 
+    /** gRPC Server 实例，start() 后非 null，stop() 后置 null */
     private var server: Server? = null
 
     /**

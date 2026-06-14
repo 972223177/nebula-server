@@ -43,13 +43,17 @@ class ReadReportHandler(
     private val connection: StatefulRedisConnection<String, String>
 ) : Handler<ReadReportReq, Response> {
 
+    /** Lettuce Redis 协程命令接口，由 connection.reactive() 构建 */
     private val redis: RedisCoroutinesCommands<String, String> =
         RedisCoroutinesCommandsImpl(connection.reactive())
 
     override val method: String = "message/read"
 
     companion object {
+        /** 私聊会话类型常量 */
         private const val PRIVATE_TYPE = 0
+
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
     }
 
@@ -79,6 +83,15 @@ class ReadReportHandler(
             .build()
     }
 
+    /**
+     * 在私聊场景下将已读回执推送给消息原发送者。
+     *
+     * 通过会话成员列表找出与 readerUid 不同的成员作为发送者，
+     * 构建 ReadReceiptPayload 后委托 PushService 推送。
+     *
+     * @param req 已读报告请求
+     * @param readerUid 阅读者用户 ID
+     */
     private suspend fun pushReadReceiptToSender(req: ReadReportReq, readerUid: Long) {
         val members = withContext(Dispatchers.IO) {
             conversationMemberRepository.findByConversationId(req.conversationId)

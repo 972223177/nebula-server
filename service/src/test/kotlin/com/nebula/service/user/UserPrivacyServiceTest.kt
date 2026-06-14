@@ -6,11 +6,18 @@ import com.nebula.chat.user.SetPrivacyReq
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
-import io.mockk.*
+import io.mockk.Runs
+import io.mockk.any
+import io.mockk.clearMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.just
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.*
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * UserPrivacyService 的单元测试。

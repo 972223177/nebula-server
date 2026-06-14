@@ -48,7 +48,6 @@ import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.user.UserService
 import io.lettuce.core.api.StatefulRedisConnection
 import jakarta.persistence.EntityManagerFactory
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

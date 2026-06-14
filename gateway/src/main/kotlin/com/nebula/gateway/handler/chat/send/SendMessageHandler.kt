@@ -45,6 +45,7 @@ class SendMessageHandler(
     private val scope: CoroutineScope
 ) : Handler<SendMessageReq, SendMessageResp> {
 
+    /** Lettuce Redis 协程命令接口，由 connection.reactive() 构建 */
     private val redis: RedisCoroutinesCommands<String, String> =
         RedisCoroutinesCommandsImpl(connection.reactive())
 
@@ -78,6 +79,8 @@ class SendMessageHandler(
 
     /**
      * 异步执行未读计数递增和消息推送。
+     *
+     * @param result Step 链执行结果，包含 context、chatMessage、messageEntity 等信息
      */
     private suspend fun asyncUnreadAndPush(result: SendMessageResult) {
         // 未读计数递增

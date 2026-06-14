@@ -46,6 +46,7 @@ class FriendService(
 ) {
 
     companion object {
+        /** 私聊会话类型常量 */
         private const val CONV_TYPE_PRIVATE = 0
 
         /**
@@ -399,10 +400,15 @@ class FriendService(
  * 好友申请结果。
  */
 data class FriendAddResult(
+    /** 好友申请 ID */
     val requestId: Long,
+    /** 是否双向竞赛自动接受（双方同时申请时触发自动建立好友关系） */
     val isMutualAccept: Boolean,
+    /** 私聊会话 ID，双向竞赛或接受后分配 */
     val convId: String?,
+    /** 发起者用户 ID */
     val fromUid: Long,
+    /** 接收者用户 ID */
     val toUid: Long
 )
 
@@ -410,7 +416,10 @@ data class FriendAddResult(
  * 好友接受结果。
  */
 data class FriendAcceptResult(
+    /** 发起者用户 ID */
     val fromUid: Long,
+    /** 接收者用户 ID */
     val toUid: Long,
+    /** 私聊会话 ID */
     val convId: String
 )

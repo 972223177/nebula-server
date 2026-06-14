@@ -12,6 +12,8 @@ interface DataSourceProvider {
      * 获取 [DataSource] 实例。
      *
      * 调用方无需关心连接池的生命周期，由实现类负责初始化和关闭。
+     *
+     * @return 已初始化的 [DataSource] 实例，用于获取数据库连接
      */
     fun getDataSource(): DataSource
 }

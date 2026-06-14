@@ -19,6 +19,8 @@ interface ModuleInitializer {
     /**
      * 执行本模块的初始化逻辑。
      *
+     * 通过 Koin 容器管理依赖以支持模块间解耦和测试替换（D-17）。
+     *
      * 实现步骤：
      * 1. 通过 get<Xxx>() 获取已注册的依赖（如 ApplicationConfig）
      * 2. 创建本模块所需的实例

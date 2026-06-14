@@ -154,7 +154,7 @@ class ModuleInitializerRegistrationTest {
         for (initializer in sorted1) {
             for (dep in initializer.dependencies) {
                 assertTrue(
-                    indexMap[dep]!! < indexMap[initializer.name]!!,
+                    indexMap.getValue(dep) < indexMap.getValue(initializer.name),
                     "依赖 '$dep' 应在 '${initializer.name}' 之前"
                 )
             }

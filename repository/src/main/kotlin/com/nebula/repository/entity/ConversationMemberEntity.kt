@@ -14,9 +14,11 @@ import java.time.LocalDateTime
     Index(name = "idx_user_convs", columnList = "user_id")
 ])
 class ConversationMemberEntity(
+    /** 会话 ID */
     @Column(nullable = false, length = 32)
     var conversationId: String,
 
+    /** 成员用户 ID */
     @Column(nullable = false)
     var userId: Long,
 
@@ -24,10 +26,13 @@ class ConversationMemberEntity(
     @Column(length = 16)
     var role: String = "member",
 
+    /** 最后已读消息 ID */
     var lastReadMessageId: Long = 0,
 
+    /** 未读消息计数 */
     var unreadCount: Int = 0,
 
+    /** 软删除标记：0=正常, 1=已退出/删除 */
     var deleted: Int = 0
 ) {
     @Id

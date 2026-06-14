@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.requireNotNull
 
 /**
  * 用于拓扑排序测试的 [ModuleInitializer] 桩实现。
@@ -104,7 +105,7 @@ class ModuleInitializerSorterTest {
         ) {
             sort(a, b)
         }
-        assertTrue(exception.message!!.contains("循环依赖"),
+        assertTrue(requireNotNull(exception.message).contains("循环依赖"),
             "exception message should mention cycle")
     }
 
@@ -117,7 +118,7 @@ class ModuleInitializerSorterTest {
         ) {
             sort(a)
         }
-        assertTrue(exception.message!!.contains("non_existent"),
+        assertTrue(requireNotNull(exception.message).contains("non_existent"),
             "exception message should mention the missing dependency name")
     }
 }

@@ -27,6 +27,7 @@ import java.io.File
  */
 object ConfigLoader {
 
+    /** 日志记录器 */
     private val log = KotlinLogging.logger {}
 
     /**

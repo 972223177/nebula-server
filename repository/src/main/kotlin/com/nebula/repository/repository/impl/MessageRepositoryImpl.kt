@@ -34,6 +34,11 @@ class MessageRepositoryImpl(
     @Volatile
     private var stopped = false
 
+    /**
+     * 将消息入队到 Redis Stream。
+     *
+     * @see MessageWriteRepository.enqueueMessage
+     */
     override suspend fun enqueueMessage(entity: MessageEntity): String {
         // 将 entity 序列化为 Map<String, String>
         val map = buildMap {
@@ -50,6 +55,11 @@ class MessageRepositoryImpl(
         return result ?: throw RuntimeException("Failed to enqueue message to Redis Stream")
     }
 
+    /**
+     * 从 Redis Stream 消费并批量刷入 MySQL。
+     *
+     * @see MessageWriteRepository.flushBatch
+     */
     override suspend fun flushBatch(): Int {
         val entries = messageQueue.consume(batchSize = 30, blockMs = 0)
         if (entries.isEmpty()) return 0
@@ -88,6 +98,11 @@ class MessageRepositoryImpl(
         }
     }
 
+    /**
+     * 确认消息已被处理。
+     *
+     * @see MessageWriteRepository.acknowledgeMessage
+     */
     override suspend fun acknowledgeMessage(messageId: String) {
         messageQueue.acknowledge(messageId)
     }
@@ -113,7 +128,12 @@ class MessageRepositoryImpl(
         stopped = true
     }
 
-    /** 将 StreamMessage 解析为 MessageEntity */
+    /**
+     * 将 StreamMessage 解析为 MessageEntity。
+     *
+     * @param entry Redis Stream 消息条目
+     * @return 解析后的 MessageEntity，关键字段缺失时返回 null
+     */
     private fun parseToEntity(entry: io.lettuce.core.StreamMessage<String, String>): MessageEntity? {
         val body = entry.body ?: return null
         return MessageEntity(

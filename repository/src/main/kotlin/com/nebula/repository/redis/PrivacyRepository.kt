@@ -40,10 +40,14 @@ class PrivacyRepository(
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
     companion object {
+        /** Redis key 前缀 */
         private const val KEY_PREFIX = "privacy:user:"
+        /** 缓存 TTL：7 天 */
         private const val TTL_SECONDS = 7 * 24 * 3600L  // 7 天
+        /** Redis 操作超时时间（毫秒） */
         private const val REDIS_TIMEOUT_MS = 500L
 
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
 
         /** 在线状态可见性：0=所有人可见, 2=隐藏 */
