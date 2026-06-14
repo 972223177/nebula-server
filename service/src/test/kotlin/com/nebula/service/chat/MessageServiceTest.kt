@@ -19,7 +19,6 @@ import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
 import com.nebula.service.sequence.SeqService
 import io.mockk.Runs
-import io.mockk.any
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.just
