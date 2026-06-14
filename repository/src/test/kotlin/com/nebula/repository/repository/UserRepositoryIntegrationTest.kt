@@ -146,7 +146,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
             em.find(UserEntity::class.java, savedId)
         }
 
-        val savedUser = requireNotNull(found, "Should find recently saved user by ID")
+        val savedUser = requireNotNull(found) { "Should find recently saved user by ID" }
         with(savedUser) {
             assertEquals(user.username, username, "Username should match")
             assertEquals(user.passwordHash, passwordHash, "Password hash should match")
@@ -176,7 +176,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
                 .firstOrNull()
         }
 
-        val foundUser = requireNotNull(found, "Should find user by username")
+        val foundUser = requireNotNull(found) { "Should find user by username" }
         assertEquals(user.id, foundUser.id, "Queried user ID should match")
         assertEquals(user.nickname, foundUser.nickname, "Queried nickname should match")
     }
@@ -289,7 +289,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
                 .resultList
                 .firstOrNull()
         }
-        val stillExists = requireNotNull(originalStillExists, "First user should still exist")
+        val stillExists = requireNotNull(originalStillExists) { "First user should still exist" }
         assertEquals(user1.id, stillExists.id)
     }
 
@@ -306,7 +306,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
         // 更新字段
         doInTransaction { em ->
             val loaded = em.find(UserEntity::class.java, requireNotNull(user.id))
-            val userToUpdate = requireNotNull(loaded, "Should find the just-saved user")
+            val userToUpdate = requireNotNull(loaded) { "Should find the just-saved user" }
             userToUpdate.nickname = "updatedNickname"
             userToUpdate.avatar = "https://example.com/new_avatar.png"
             userToUpdate.privacyStatus = 2
@@ -320,7 +320,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
             em.find(UserEntity::class.java, requireNotNull(user.id))
         }
 
-        val updatedUser = requireNotNull(updated, "Should still find user after update")
+        val updatedUser = requireNotNull(updated) { "Should still find user after update" }
         with(updatedUser) {
             assertEquals("updatedNickname", nickname, "Nickname should be updated")
             assertEquals("https://example.com/new_avatar.png", avatar, "Avatar URL should be updated")
@@ -343,7 +343,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
         // 执行删除
         doInTransaction { em ->
             val loaded = em.find(UserEntity::class.java, requireNotNull(user.id))
-            val userToRemove = requireNotNull(loaded, "Should find user before deletion")
+            val userToRemove = requireNotNull(loaded) { "Should find user before deletion" }
             em.remove(userToRemove)
         }
 
