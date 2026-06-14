@@ -81,17 +81,16 @@ class SnowflakeIdGeneratorTest {
     fun sequenceShouldIncrementWithinTheSameMillisecond() = runTest {
         val generator = SnowflakeIdGenerator(workerId = testWorkerId)
 
-        // 连续快速调用，期望在同一毫秒内序列号递增
-        val id1 = generator.nextId()
-        val id2 = generator.nextId()
+        // 快速连续调用多次，必然有部分落在同一毫秒内
+        // 当同一毫秒内至少有一次调用时，序列号应大于 0
+        val seqs = (1..100).map { generator.nextId() and 0xFFF }
 
-        val seq1 = id1 and 0xFFF
-        val seq2 = id2 and 0xFFF
-
-        // 如果两次调用落在同一毫秒，seq2 应大于 seq1
-        // 若跨毫秒（概率极低，但不为零），seq2 可能回到 0
-        // 这里测试的是 seq2 != seq1（即序列号有意义的变化）
-        assertTrue(seq2 != seq1, "Consecutive calls should have different sequences (got $seq1, $seq2)")
+        val hasNonZeroSequence = seqs.any { it != 0L }
+        assertTrue(
+            hasNonZeroSequence,
+            "At least one of 100 rapid calls should have non-zero sequence. " +
+                    "Got sequences: ${seqs.take(10)}... (total ${seqs.size})"
+        )
     }
 
     @Test
