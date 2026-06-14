@@ -7,7 +7,6 @@ import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.FriendshipRepository
 import io.mockk.Runs
-import io.mockk.any
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify

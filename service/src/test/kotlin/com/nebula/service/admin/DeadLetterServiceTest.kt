@@ -4,12 +4,8 @@ import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.repository.entity.DeadLetterEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.DeadLetterRepository
-import io.mockk.any
-import io.mockk.answers
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.firstArg
-import io.mockk.match
 import io.mockk.mockk
 import io.mockk.unmockkAll
 import jakarta.persistence.OptimisticLockException

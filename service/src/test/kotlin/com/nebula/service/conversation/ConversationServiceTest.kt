@@ -15,14 +15,10 @@ import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.UserRepository
 import io.mockk.Runs
-import io.mockk.any
-import io.mockk.answers
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.firstArg
 import io.mockk.just
-import io.mockk.match
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
