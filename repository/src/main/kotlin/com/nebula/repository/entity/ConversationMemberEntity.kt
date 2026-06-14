@@ -23,16 +23,19 @@ class ConversationMemberEntity(
     var userId: Long,
 
     /** 成员角色：owner=群主, member=普通成员（D-17） */
-    @Column(length = 16)
+    @Column(nullable = false, length = 16)
     var role: String = "member",
 
     /** 最后已读消息 ID */
+    @Column(nullable = false)
     var lastReadMessageId: Long = 0,
 
     /** 未读消息计数 */
+    @Column(nullable = false)
     var unreadCount: Int = 0,
 
     /** 软删除标记：0=正常, 1=已退出/删除 */
+    @Column(nullable = false)
     var deleted: Int = 0
 ) {
     @Id

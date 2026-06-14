@@ -69,6 +69,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
         config.setProperty("hibernate.dialect", "org.hibernate.dialect.MySQLDialect")
         config.setProperty("hibernate.hbm2ddl.auto", "validate")
         config.setProperty("hibernate.show_sql", "true")
+        config.setProperty("hibernate.physical_naming_strategy", "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy")
         config.addAnnotatedClass(UserEntity::class.java)
         config.addAnnotatedClass(FriendshipEntity::class.java)
         config.addAnnotatedClass(FriendRequestEntity::class.java)
