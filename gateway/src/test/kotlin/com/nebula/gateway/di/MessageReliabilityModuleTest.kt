@@ -112,7 +112,9 @@ class MessageReliabilityModuleTest {
     @Test
     fun messageReliabilityModuleShouldResolveAdminHandlerCollector() {
         startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val collector = GlobalContext.get().get<AdminHandlerCollector>()
+        val deadLetterQueryHandler = GlobalContext.get().get<DeadLetterQueryHandler>()
+        val retryDeadLetterHandler = GlobalContext.get().get<RetryDeadLetterHandler>()
+        val collector = AdminHandlerCollector(deadLetterQueryHandler, retryDeadLetterHandler)
         assertNotNull(collector)
     }
 }
