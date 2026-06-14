@@ -14,10 +14,10 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
-    maxHeapSize = "4g"
-    maxParallelForks = 1
-    // 禁用 fork 复用，每个测试类独立 JVM
-    forkEvery = 1
+    maxHeapSize = "2g"
+    maxParallelForks = 2
+    // 每 50 个测试类复用一个 JVM fork，兼顾隔离与性能
+    forkEvery = 50
 }
 
 dependencies {
