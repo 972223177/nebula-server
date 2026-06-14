@@ -29,6 +29,7 @@ import com.nebula.gateway.handler.user.LoginHandler
 import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.redis.MessageQueueRepository
@@ -85,6 +86,7 @@ class GatewayModuleTest {
     private val friendRequestRepo = mockk<FriendRequestRepository>()
     private val emf = mockk<EntityManagerFactory>()
     private val transactionTemplate = mockk<TransactionTemplate>()
+    private val deliveryTrackingService = mockk<DeliveryTrackingService>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /** Service 层 mock */
@@ -112,6 +114,7 @@ class GatewayModuleTest {
         single { friendRequestRepo }
         single { privacyRepo }
         single { transactionTemplate }
+        single { deliveryTrackingService }
     }
 
     /**
