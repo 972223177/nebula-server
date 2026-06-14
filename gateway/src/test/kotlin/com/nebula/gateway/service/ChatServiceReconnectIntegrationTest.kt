@@ -470,7 +470,7 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 5 组：handleLoginSuccess 分支测试 ====================
 
     @Test
-    fun handleLoginSuccessShouldSetDeliveryActiveWhenNoEvictedToken() = runTest {
+    fun handleLoginSuccessShouldSetDeliveryActiveWhenNoEvictedToken() = runBlocking {
         // Given: 创建 ChatStreamObserver，首次注册无旧连接被驱逐
         val observer = createChatStreamObserver(mockResponseObserver)
         coEvery { sessionRegistry.registerWithDeviceType(any()) } returns null
@@ -488,7 +488,7 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun handleLoginSuccessShouldActivateDeliveryWhenEvictedTokenExists() = runTest {
+    fun handleLoginSuccessShouldActivateDeliveryWhenEvictedTokenExists() = runBlocking {
         // Given: 创建 ChatStreamObserver，有旧连接被驱逐
         val oldToken = "old-token"
         val observer = createChatStreamObserver(mockResponseObserver)
