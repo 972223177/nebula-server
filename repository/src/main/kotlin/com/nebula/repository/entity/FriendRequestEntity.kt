@@ -20,10 +20,11 @@ class FriendRequestEntity(
     var toUid: Long,
 
     /** 申请状态：0=待处理, 1=已接受, 2=已拒绝 */
+    @Column(nullable = false)
     var status: Int = 0,
 
     /** 好友申请附言，D-42 */
-    @Column(length = 255)
+    @Column(nullable = false, length = 255)
     var message: String = ""
 ) {
     @Id
