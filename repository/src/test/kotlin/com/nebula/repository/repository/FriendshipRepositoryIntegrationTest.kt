@@ -122,12 +122,31 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
         }
     }
 
+    // ==================== 辅助方法 ====================
+
+    /**
+     * 创建测试用 [FriendshipEntity]，自动填充 createdAt。
+     */
+    private fun createFriendship(userId: Long, friendId: Long): FriendshipEntity =
+        FriendshipEntity(userId = userId, friendId = friendId).apply {
+            createdAt = java.time.LocalDateTime.now()
+        }
+
+    /**
+     * 创建测试用 [FriendRequestEntity]，自动填充 createdAt 和 updatedAt。
+     */
+    private fun createFriendRequest(fromUid: Long, toUid: Long, status: Int = 0): FriendRequestEntity =
+        FriendRequestEntity(fromUid = fromUid, toUid = toUid, status = status).apply {
+            createdAt = java.time.LocalDateTime.now()
+            updatedAt = java.time.LocalDateTime.now()
+        }
+
     // ==================== Friendship 测试 ====================
 
     /** 创建好友关系时，确保 userId < friendId 的约定能得到保持。 */
     @Test
     fun createFriendship() {
-        val friendship = FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID)
+        val friendship = createFriendship(USER_A_ID, USER_B_ID)
 
         val savedId = doInSession { session ->
             session.persist(friendship)
@@ -143,7 +162,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     fun findByUserIdAndFriendId() {
         // 插入测试数据
         doInSession { session ->
-            session.persist(FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID))
+            session.persist(createFriendship(USER_A_ID, USER_B_ID))
         }
 
         val found = doInReadOnlySession { session ->
@@ -163,7 +182,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     /** 软删除：将 deleted 置为 1 后，好友关系不再生效。 */
     @Test
     fun softDeleteFriendship() {
-        val friendship = FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID)
+        val friendship = createFriendship(USER_A_ID, USER_B_ID)
         doInSession { session ->
             session.persist(friendship)
         }
@@ -190,13 +209,13 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     @Test
     fun duplicateFriendshipPrevention() {
         doInSession { session ->
-            session.persist(FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID))
+            session.persist(createFriendship(USER_A_ID, USER_B_ID))
         }
 
         // 重复插入相同 userId 和 friendId 应触发唯一约束异常
         assertFailsWith<Exception> {
             doInSession { session ->
-                session.persist(FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID))
+                session.persist(createFriendship(USER_A_ID, USER_B_ID))
             }
         }
     }
@@ -206,8 +225,8 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     fun queryFriendsByUserId() {
         // 插入两个好友关系：USER_A <-> USER_B, USER_A <-> USER_C
         doInSession { session ->
-            session.persist(FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID))
-            session.persist(FriendshipEntity(userId = USER_A_ID, friendId = USER_C_ID))
+            session.persist(createFriendship(USER_A_ID, USER_B_ID))
+            session.persist(createFriendship(USER_A_ID, USER_C_ID))
         }
 
         val friends = doInReadOnlySession { session ->
@@ -229,7 +248,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     /** 创建待处理的好友申请，status 默认为 0（pending）。 */
     @Test
     fun createFriendRequest() {
-        val request = FriendRequestEntity(fromUid = USER_A_ID, toUid = USER_B_ID, status = 0)
+        val request = createFriendRequest(USER_A_ID, USER_B_ID)
 
         val savedId = doInSession { session ->
             session.persist(request)
@@ -245,8 +264,8 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     fun findByToUidAndStatus() {
         // USER_B 收到来自 USER_A 和 USER_C 的申请
         doInSession { session ->
-            session.persist(FriendRequestEntity(fromUid = USER_A_ID, toUid = USER_B_ID, status = 0))
-            session.persist(FriendRequestEntity(fromUid = USER_C_ID, toUid = USER_B_ID, status = 0))
+            session.persist(createFriendRequest(USER_A_ID, USER_B_ID))
+            session.persist(createFriendRequest(USER_C_ID, USER_B_ID))
         }
 
         val requests = doInReadOnlySession { session ->
@@ -266,7 +285,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     @Test
     fun findByFromUidAndToUidAndStatus() {
         doInSession { session ->
-            session.persist(FriendRequestEntity(fromUid = USER_A_ID, toUid = USER_B_ID, status = 0))
+            session.persist(createFriendRequest(USER_A_ID, USER_B_ID))
         }
 
         val found = doInReadOnlySession { session ->
@@ -300,7 +319,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     /** 更新申请状态：接受（status=1）或拒绝（status=2）。 */
     @Test
     fun updateRequestStatus() {
-        val request = FriendRequestEntity(fromUid = USER_A_ID, toUid = USER_B_ID, status = 0)
+        val request = createFriendRequest(USER_A_ID, USER_B_ID)
         doInSession { session ->
             session.persist(request)
         }

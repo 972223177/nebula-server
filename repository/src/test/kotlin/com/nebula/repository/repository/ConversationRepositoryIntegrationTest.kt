@@ -10,6 +10,7 @@ import org.hibernate.SessionFactory
 import org.hibernate.cfg.Configuration
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
@@ -34,6 +35,23 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
     /** 测试用用户 ID，确保与种子数据不冲突 */
     private val testUserId1 = 1000101L
     private val testUserId2 = 1000102L
+
+    /**
+     * 每个测试用例执行前清理测试数据，避免固定 ID 的用户/会话/成员数据跨测试冲突。
+     *
+     * 仅删除 ID >= 1000000 的用户（保护 Flyway 种子数据 1000001~1000003），
+     * 再删除从属的会话和成员数据。
+     */
+    @BeforeEach
+    fun cleanUp() {
+        doInSession { session ->
+            session.createNativeMutationQuery("DELETE FROM conversation_members").executeUpdate()
+            session.createNativeMutationQuery("DELETE FROM conversations").executeUpdate()
+            session.createMutationQuery("DELETE FROM UserEntity WHERE id >= :minId")
+                .setParameter("minId", 1000000L)
+                .executeUpdate()
+        }
+    }
 
     @BeforeAll
     fun setup() {
