@@ -29,11 +29,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.Continuation
-import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 /**
@@ -136,31 +134,15 @@ class ChatServiceReconnectIntegrationTest {
 
     /**
      * 通过反射调用 ChatStreamObserver 的 suspend 方法 activateDelivery()。
-     * 使用 CountDownLatch 同步等待协程完成，避免手动管理 Continuation。
+     * 使用 suspendCoroutine 等待协程完成，避免 CountDownLatch 阻塞 runBlocking 的事件循环。
      */
-    private fun callActivateDelivery(observer: Any) {
-        val latch = CountDownLatch(1)
-        // 创建自定义 Continuation，当协程完成时释放 latch
-        val continuation = object : Continuation<Unit> {
-            override val context: CoroutineContext get() = EmptyCoroutineContext
-            override fun resumeWith(result: Result<Unit>) {
-                latch.countDown()
-            }
-        }
-        try {
+    private suspend fun callActivateDelivery(observer: Any) {
+        suspendCoroutine<Unit> { cont ->
             val method = chatStreamObserverClass.getDeclaredMethod(
                 "activateDelivery",
                 Continuation::class.java
             ).apply { isAccessible = true }
-            method.invoke(observer, continuation)
-            // 等待协程完成（超时 5s）
-            if (!latch.await(5, TimeUnit.SECONDS)) {
-                throw RuntimeException("activateDelivery timed out after 5 seconds")
-            }
-        } catch (e: Exception) {
-            if (e is RuntimeException && e.message?.contains("timed out") == true) throw e
-            // 如果反射调用本身抛异常（非协程相关），则重新抛出
-            throw e
+            method.invoke(observer, cont)
         }
     }
 
@@ -172,23 +154,19 @@ class ChatServiceReconnectIntegrationTest {
         return constructor.newInstance(chatService, responseObserver)
     }
 
-    /** 反射调用 handleLoginSuccess（suspend 方法），在 runBlocking 中执行 */
-    private fun callHandleLoginSuccess(observer: Any, response: Response) {
-        runBlocking {
-            // 在协程上下文中，通过反射调用 handleLoginSuccess
-            // suspend 函数的 JVM 签名：handleLoginSuccess(Response, StreamObserver, Continuation) -> Object
-            val method = ChatService::class.java.getDeclaredMethod(
-                "handleLoginSuccess",
-                Response::class.java,
-                StreamObserver::class.java,
-                Continuation::class.java
-            ).apply { isAccessible = true }
-            // 使用 kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
-            // 或直接通过 runBlocking 的协程作用域调用
-            @Suppress("UNCHECKED_CAST")
-            val result = suspendCoroutine<Any?> { cont ->
-                method.invoke(chatService, response, observer, cont)
-            }
+    /** 反射调用 handleLoginSuccess（suspend 方法），在协程中执行 */
+    private suspend fun callHandleLoginSuccess(observer: Any, response: Response) {
+        // 在协程上下文中，通过反射调用 handleLoginSuccess
+        // suspend 函数的 JVM 签名：handleLoginSuccess(Response, StreamObserver, Continuation) -> Object
+        val method = ChatService::class.java.getDeclaredMethod(
+            "handleLoginSuccess",
+            Response::class.java,
+            StreamObserver::class.java,
+            Continuation::class.java
+        ).apply { isAccessible = true }
+        // 使用 suspendCoroutine 等待协程完成
+        suspendCoroutine<Any?> { cont ->
+            method.invoke(chatService, response, observer, cont)
         }
     }
 
