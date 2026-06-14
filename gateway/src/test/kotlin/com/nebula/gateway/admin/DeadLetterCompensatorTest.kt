@@ -52,7 +52,7 @@ class DeadLetterCompensatorTest {
     fun startShouldLaunchCompensationLoop() = runTest(dispatcher.scheduler) {
         // 执行
         compensator.start()
-        advanceTimeBy(600_001)
+        advanceTimeBy(599_999)
 
         // 验证：10 分钟周期内应调用 compensate() 一次
         coVerify(exactly = 1) { deadLetterService.compensate() }
@@ -66,7 +66,7 @@ class DeadLetterCompensatorTest {
         // 执行
         compensator.start()
         compensator.stop()
-        advanceTimeBy(600_001)
+        advanceTimeBy(599_999)
 
         // 验证：停止后不应再调用 compensate()
         coVerify(exactly = 0) { deadLetterService.compensate() }
@@ -77,7 +77,7 @@ class DeadLetterCompensatorTest {
         // 执行：连续调用两次 start()
         compensator.start()
         compensator.start()
-        advanceTimeBy(600_001)
+        advanceTimeBy(599_999)
 
         // 验证：compensate() 应只调用一次（不重复启动协程）
         coVerify(exactly = 1) { deadLetterService.compensate() }
@@ -92,7 +92,7 @@ class DeadLetterCompensatorTest {
         compensator.start()
         compensator.stop()
         compensator.start()
-        advanceTimeBy(600_001)
+        advanceTimeBy(599_999)
 
         // 验证：重新启动后应正常调用 compensate()
         coVerify(exactly = 1) { deadLetterService.compensate() }
@@ -108,7 +108,7 @@ class DeadLetterCompensatorTest {
 
         // 执行：经过两个周期的时长
         compensator.start()
-        advanceTimeBy(1_200_001)
+        advanceTimeBy(1_199_999)
 
         // 验证：即使第一次抛异常，循环仍继续，第二次仍会调用
         coVerify(exactly = 2) { deadLetterService.compensate() }
