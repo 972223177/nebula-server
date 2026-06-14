@@ -173,7 +173,7 @@ Agent:
 
 ### 阶段四：编译与单元测试
 
-在启动服务之前，确保代码可以编译通过且单元测试全部通过。如果编译或测试失败，直接标记 FAILED 并跳过后续集成验证。
+**注意**：Gradle Kotlin 项目（如 Nebula）的编译和测试会消耗 2-4GB 内存，可能导致机器发热严重。因此，执行前会询问用户是否跳过。
 
 #### 步骤 4a：探测项目类型
 
@@ -208,7 +208,25 @@ else
 fi
 ```
 
-#### 步骤 4b：执行编译和测试
+#### 步骤 4b：询问用户是否跳过（高危项目）
+
+如果探测到的项目类型是 `gradle` 且包含 Kotlin 源码（通过检测 `*.kt` 文件），或者项目类型是其他编译密集型语言，**必须先询问用户**：
+
+```text
+1. 检测到 Gradle Kotlin 项目 — 编译会消耗 2-4GB 内存，可能导致机器发热
+2. 使用 AskUserQuestion 询问用户是否跳过编译和测试
+3. 问题示例："检测到 Gradle Kotlin 项目，编译和测试会消耗大量内存（2-4GB）。是否跳过？"
+   - 选项 A：「跳过，只做源码级验证 (推荐)」 — 默认选择
+   - 选项 B：「执行编译和测试」
+4. 如果用户选择跳过 → 记录 SKIP，不执行编译和测试
+5. 如果用户选择执行 → 正常执行步骤 4c
+```
+
+**对于非 Gradle Kotlin 项目**（maven/node/go/rust），同样询问用户，但说明内存消耗较小。
+
+**如果用户选择跳过**：编译和测试记为 SKIP，不阻止后续验证流程。在人体验证清单中添加编译验证项。
+
+#### 步骤 4c：执行编译和测试（仅在用户同意后）
 
 ```bash
 echo "项目类型: $PROJECT_TYPE"
@@ -228,14 +246,15 @@ TEST_EXIT=$?
 
 | 步骤 | 项目类型 | 命令 | 结果 | 状态 |
 |------|---------|------|------|------|
-| 编译 | {gradle/maven/node/go/rust} | {实际命令} | {输出摘要} | ✓ PASS / ✗ FAIL |
-| 单元测试 | {gradle/maven/node/go/rust} | {实际命令} | {M/N passed} | ✓ PASS / ✗ FAIL |
+| 编译 | {gradle/maven/node/go/rust} | {实际命令} | {输出摘要} | ✓ PASS / ✗ FAIL / ? SKIP |
+| 单元测试 | {gradle/maven/node/go/rust} | {实际命令} | {M/N passed} | ✓ PASS / ✗ FAIL / ? SKIP |
 
 **失败处理**：编译或单元测试失败 → 不进入集成验证，直接标记 FAILED。
 
 **特殊处理**：
 - 如果项目无 build/test script（如纯文档项目）→ 记录 WARNING，不标记 FAILED
 - 如果 `PROJECT_TYPE=unknown` → 跳过编译测试，记录原因，不标记 FAILED
+- 如果用户选择跳过 → 记录 SKIP，注明原因「用户选择跳过（内存考虑）」
 
 ### 阶段五：集成冒烟验证
 
@@ -600,8 +619,8 @@ status: passed|failed|partial|human_needed
 ## 编译与单元测试
 | 步骤 | 项目类型 | 命令 | 结果 | 状态 |
 |------|---------|------|------|------|
-| 编译 | {类型} | {实际命令} | {输出} | ✓ PASS / ✗ FAIL |
-| 单元测试 | {类型} | {实际命令} | {M/N passed} | ✓ PASS / ✗ FAIL |
+| 编译 | {类型} | {实际命令 / 用户选择跳过} | {输出 / 跳过原因} | ✓ PASS / ✗ FAIL / ? SKIP |
+| 单元测试 | {类型} | {实际命令 / 用户选择跳过} | {M/N passed / 跳过原因} | ✓ PASS / ✗ FAIL / ? SKIP |
 
 ## 集成冒烟验证
 | 步骤 | 内容 | 状态 |
@@ -633,12 +652,13 @@ status: passed|failed|partial|human_needed
 
 ## 最终裁决
 **状态优先级（从高到低）**：
-1. 编译或单元测试失败 → **FAILED**（代码不可构建）
+1. 编译或单元测试失败（非 SKIP）→ **FAILED**（代码不可构建）
 2. 任何 L1-L4 有 FAILED → **FAILED**
 3. 集成冒烟验证有 FAILED → **FAILED**（服务无法启动或请求失败）
 4. 人体验证清单非空 → **HUMAN_NEEDED**
 5. 行为抽查有 FAIL → **PARTIAL**（记录 gap）
-6. 全部通过 → **PASSED**
+6. 编译/测试被跳过（SKIP）→ **PARTIAL**（编译验证未执行，标记 gap，记录在人体验证清单）
+7. 全部通过 → **PASSED**
 ```
 
 ## 完成标记
@@ -656,7 +676,7 @@ status: passed|failed|partial|human_needed
 - 每层有具体检测命令输出，不做主观判断
 - 发现存根时给出具体文件名和行号
 - 内存文件（memory/）不作为验证目标
-- 编译 + 单元测试在集成验证之前执行，失败则直接标记 FAILED
+- 编译 + 单元测试：执行前需用户确认（AskUserQuestion），Gradle Kotlin 项目特别提示内存消耗（2-4GB）。失败则标记 FAILED，跳过则标记 SKIP
 - 集成冒烟验证：启动前需用户确认（AskUserQuestion），不可跳过确认自动执行
 - 集成冒烟验证涉及 docker compose up、gradle run 等耗时操作，不设 < 10 秒限制
 - 集成冒烟验证失败不影响行为抽查（行为抽查有独立判断）

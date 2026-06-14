@@ -140,10 +140,14 @@ class GatewayModuleTest {
         // Phase 6: Chat & Message
         single { scope }
         single { UserStreamRegistry() }
-        single { PushService(get(), get()) }
+        single { PushService(get(), get(), get()) }
         single { SendMessageHandler(messageService, get(), get(), get(), get()) }
         single { PullMessagesHandler(messageService) }
         single { ReadReportHandler(messageService, get(), get(), get(), get()) }
+
+        // Phase 10: Message Reliability
+        single { com.nebula.service.sequence.SeqService(get()) }
+        single { com.nebula.gateway.handler.message.MessageSeqHandler(get()) }
 
         // Phase 7: Conversation
         single { ConversationLockManager() }
@@ -216,7 +220,8 @@ class GatewayModuleTest {
         val chatCollector = com.nebula.gateway.handler.chat.ChatHandlerCollector(
             GlobalContext.get().get<SendMessageHandler>(),
             GlobalContext.get().get<PullMessagesHandler>(),
-            GlobalContext.get().get<ReadReportHandler>()
+            GlobalContext.get().get<ReadReportHandler>(),
+            GlobalContext.get().get<com.nebula.gateway.handler.message.MessageSeqHandler>()
         )
         chatCollector.registerAll(registry)
 

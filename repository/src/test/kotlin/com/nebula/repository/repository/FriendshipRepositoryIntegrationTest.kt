@@ -9,6 +9,7 @@ import org.hibernate.SessionFactory
 import org.hibernate.cfg.Configuration
 import org.hibernate.query.Query
 import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
@@ -36,9 +37,13 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
         private const val NON_EXISTENT_ID: Long = 9999999
     }
 
-    @BeforeEach
+    @BeforeAll
     fun setUp() {
         sessionFactory = createSessionFactory()
+    }
+
+    @BeforeEach
+    fun cleanUp() {
         cleanTables()
     }
 

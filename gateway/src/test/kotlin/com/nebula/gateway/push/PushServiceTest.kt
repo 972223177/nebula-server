@@ -4,6 +4,7 @@ import com.nebula.chat.Envelope
 import com.nebula.chat.PushEventType
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.ReadReceiptPayload
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
@@ -32,6 +33,7 @@ class PushServiceTest {
 
     private lateinit var userStreamRegistry: UserStreamRegistry
     private lateinit var conversationMemberRepository: ConversationMemberRepository
+    private lateinit var deliveryTrackingService: DeliveryTrackingService
     private lateinit var pushService: PushService
 
     private val convId = "conv-001"
@@ -43,7 +45,8 @@ class PushServiceTest {
     fun setUp() {
         userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true)
         conversationMemberRepository = mockk<ConversationMemberRepository>(relaxed = true)
-        pushService = PushService(userStreamRegistry, conversationMemberRepository)
+        deliveryTrackingService = mockk<DeliveryTrackingService>(relaxed = true)
+        pushService = PushService(userStreamRegistry, conversationMemberRepository, deliveryTrackingService)
     }
 
     @Test
