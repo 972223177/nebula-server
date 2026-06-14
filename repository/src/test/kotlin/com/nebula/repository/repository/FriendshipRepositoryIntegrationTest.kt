@@ -155,7 +155,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
             query.uniqueResult()
         }
 
-        val friendshipEntity = requireNotNull(found, "Should find friendship by userId and friendId")
+        val friendshipEntity = requireNotNull(found) { "Should find friendship by userId and friendId" }
         assertTrue(friendshipEntity.userId == USER_A_ID && friendshipEntity.friendId == USER_B_ID)
     }
 
@@ -279,7 +279,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
             query.uniqueResult()
         }
 
-        val pendingRequest = requireNotNull(found, "Should find pending friend request")
+        val pendingRequest = requireNotNull(found) { "Should find pending friend request" }
         assertTrue(pendingRequest.fromUid == USER_A_ID && pendingRequest.toUid == USER_B_ID && pendingRequest.status == 0)
 
         // 验证不匹配的状态返回空
