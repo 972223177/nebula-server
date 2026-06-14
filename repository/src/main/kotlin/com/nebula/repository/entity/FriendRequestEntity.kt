@@ -11,12 +11,15 @@ import java.time.LocalDateTime
     Index(name = "idx_pending_requests", columnList = "to_uid, status")
 ])
 class FriendRequestEntity(
+    /** 申请发起方 UID */
     @Column(nullable = false)
     var fromUid: Long,
 
+    /** 申请接收方 UID */
     @Column(nullable = false)
     var toUid: Long,
 
+    /** 申请状态：0=待处理, 1=已接受, 2=已拒绝 */
     var status: Int = 0,
 
     /** 好友申请附言，D-42 */

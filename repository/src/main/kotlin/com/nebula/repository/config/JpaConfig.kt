@@ -47,7 +47,12 @@ class JpaConfig(
         emfBean.getObject()!!
     }
 
-    /** 获取 Spring Data JPA Repository 代理 */
+    /**
+     * 获取 Spring Data JPA Repository 代理。
+     *
+     * @param repositoryInterface JPA Repository 接口类
+     * @return Repository 代理实例
+     */
     fun <T> getRepository(repositoryInterface: Class<T>): T {
         val em = entityManagerFactory.createEntityManager()
         val factory = JpaRepositoryFactory(em)
@@ -70,7 +75,11 @@ class JpaConfig(
     }
 }
 
-/** 执行 Flyway 数据库迁移 */
+/**
+ * 执行 Flyway 数据库迁移。
+ *
+ * @param dataSource 数据源，由 DataSourceProvider 提供
+ */
 private fun runFlywayMigrations(dataSource: DataSource) {
     Flyway.configure()
         .dataSource(dataSource)

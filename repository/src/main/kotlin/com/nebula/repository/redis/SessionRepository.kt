@@ -24,22 +24,42 @@ class SessionRepository(
         private const val DEFAULT_TTL_SECONDS = 7 * 24 * 3600L  // 7 天
     }
 
-    /** 保存 session token */
+    /**
+     * 保存 session token。
+     *
+     * @param token Session 令牌
+     * @param userData 用户数据（JSON 格式）
+     * @param ttlSeconds TTL 秒数，默认 7 天
+     */
     suspend fun save(token: String, userData: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
         redis.setex("$KEY_PREFIX$token", ttlSeconds, userData)
     }
 
-    /** 按 token 查找 session 数据 */
+    /**
+     * 按 token 查找 session 数据。
+     *
+     * @param token Session 令牌
+     * @return 用户数据 JSON，不存在返回 null
+     */
     suspend fun findByToken(token: String): String? {
         return redis.get("$KEY_PREFIX$token")
     }
 
-    /** 滑动续期 TTL（D-13） */
+    /**
+     * 滑动续期 TTL（D-13）。
+     *
+     * @param token Session 令牌
+     * @param ttlSeconds 续期 TTL 秒数，默认 7 天
+     */
     suspend fun refreshTtl(token: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
         redis.expire("$KEY_PREFIX$token", ttlSeconds)
     }
 
-    /** 删除 session token */
+    /**
+     * 删除 session token。
+     *
+     * @param token Session 令牌
+     */
     suspend fun delete(token: String) {
         redis.del("$KEY_PREFIX$token")
     }
@@ -47,17 +67,32 @@ class SessionRepository(
     // ==================== 通用 Redis key/value 操作 ====================
     // 以下方法不校验 key 前缀，由调用方负责 key 命名逻辑
 
-    /** 通用 Redis 字符串写入（用于设备类型映射等场景） */
+    /**
+     * 通用 Redis 字符串写入（用于设备类型映射等场景）。
+     *
+     * @param key Redis key
+     * @param value 字符串值
+     * @param ttlSeconds TTL 秒数，默认 7 天
+     */
     suspend fun saveRaw(key: String, value: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
         redis.setex(key, ttlSeconds, value)
     }
 
-    /** 通用 Redis 字符串读取 */
+    /**
+     * 通用 Redis 字符串读取。
+     *
+     * @param key Redis key
+     * @return 字符串值，不存在返回 null
+     */
     suspend fun findRaw(key: String): String? {
         return redis.get(key)
     }
 
-    /** 删除 Redis key */
+    /**
+     * 删除 Redis key。
+     *
+     * @param key 待删除的 key
+     */
     suspend fun deleteKey(key: String) {
         redis.del(key)
     }

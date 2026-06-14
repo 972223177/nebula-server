@@ -22,9 +22,11 @@ class UserPrivacyService(
     /**
      * 设置在线状态可见性。
      *
+     * 更新 Redis 隐私标记后同步调整在线状态 Redis Key，
+     * 隐藏时标记为 hidden，恢复时标记为 online。
+     *
      * @param userId 当前用户 ID
      * @param req 设置请求（含 hideOnlineStatus）
-     * @return 设置响应
      */
     suspend fun setHideOnlineStatus(userId: Long, req: SetPrivacyReq) {
         val hide = req.hideOnlineStatus

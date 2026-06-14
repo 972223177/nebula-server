@@ -11,7 +11,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * GetPrivacyHandler 在线状态可见性读取 Handler 单元测试（BIZ-USER-06）。
@@ -45,7 +46,7 @@ class GetPrivacyHandlerTest {
             handler.handle(req)
         }
 
-        assertEquals(true, result.hideOnlineStatus)
+        assertTrue(result.hideOnlineStatus)
     }
 
     @Test
@@ -58,6 +59,6 @@ class GetPrivacyHandlerTest {
             handler.handle(req)
         }
 
-        assertEquals(false, result.hideOnlineStatus)
+        assertFalse(result.hideOnlineStatus)
     }
 }

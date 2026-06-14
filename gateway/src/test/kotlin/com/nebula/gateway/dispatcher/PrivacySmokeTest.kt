@@ -24,7 +24,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Privacy 集成冒烟测试。
@@ -131,7 +133,7 @@ class PrivacySmokeTest {
         // Then
         assertEquals(BizCode.OK.code, response.code, "读取隐私设置应返回 200")
         val resp = GetPrivacyResp.parseFrom(response.result)
-        assertEquals(true, resp.hideOnlineStatus, "隐藏状态应为 true")
+        assertTrue(resp.hideOnlineStatus, "隐藏状态应为 true")
     }
 
     @Test
@@ -150,7 +152,7 @@ class PrivacySmokeTest {
 
         // Then
         assertEquals(BizCode.OK.code, response.code, "读取隐私设置应返回 200")
-        assertEquals(false, GetPrivacyResp.parseFrom(response.result).hideOnlineStatus, "可见状态应为 false")
+        assertFalse(GetPrivacyResp.parseFrom(response.result).hideOnlineStatus, "可见状态应为 false")
     }
 
     @Test
@@ -169,7 +171,7 @@ class PrivacySmokeTest {
 
         // Then
         assertEquals(BizCode.OK.code, response.code, "默认状态应返回 200")
-        assertEquals(false, GetPrivacyResp.parseFrom(response.result).hideOnlineStatus, "默认应为可见")
+        assertFalse(GetPrivacyResp.parseFrom(response.result).hideOnlineStatus, "默认应为可见")
     }
 
     // ===================================================================
@@ -203,7 +205,7 @@ class PrivacySmokeTest {
             GetPrivacyReq.getDefaultInstance())
 
         assertEquals(BizCode.OK.code, getResp.code, "步骤2: 读取应返回 200")
-        assertEquals(true, GetPrivacyResp.parseFrom(getResp.result).hideOnlineStatus, "步骤2: 应为隐藏状态")
+        assertTrue(GetPrivacyResp.parseFrom(getResp.result).hideOnlineStatus, "步骤2: 应为隐藏状态")
     }
 
     @Test
@@ -233,6 +235,6 @@ class PrivacySmokeTest {
             GetPrivacyReq.getDefaultInstance())
 
         assertEquals(BizCode.OK.code, getResp.code, "步骤2: 读取应返回 200")
-        assertEquals(false, GetPrivacyResp.parseFrom(getResp.result).hideOnlineStatus, "步骤2: 应为可见状态")
+        assertFalse(GetPrivacyResp.parseFrom(getResp.result).hideOnlineStatus, "步骤2: 应为可见状态")
     }
 }

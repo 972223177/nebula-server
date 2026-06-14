@@ -1,7 +1,6 @@
 package com.nebula.gateway.handler.conversation
 
 import com.nebula.gateway.dispatcher.HandlerRegistry
-import com.nebula.gateway.handler.Handler
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest

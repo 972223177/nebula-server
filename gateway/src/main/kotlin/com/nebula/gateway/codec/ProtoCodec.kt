@@ -63,7 +63,9 @@ object ProtoCodec {
      * @param toByteArray 序列化函数，(Any) -> ByteArray
      */
     data class CodecPair(
+        /** 反序列化函数，将 ByteArray 转为 Proto 消息实例 */
         val parseFrom: (ByteArray) -> Any,
+        /** 序列化函数，将 Proto 消息实例转为 ByteArray */
         val toByteArray: (Any) -> ByteArray
     )
 

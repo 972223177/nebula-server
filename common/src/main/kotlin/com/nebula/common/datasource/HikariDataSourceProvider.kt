@@ -10,6 +10,8 @@ import javax.sql.DataSource
  *
  * 读取 [DatabaseConfig] 并使用 HikariCP 配置连接池参数。
  * 利用 Kotlin [by lazy] 实现延迟单例初始化，仅在首次调用 [getDataSource] 时构建连接池。
+ *
+ * @param config 数据库连接池配置，包含连接串、池大小、超时等参数
  */
 class HikariDataSourceProvider(
     private val config: DatabaseConfig
@@ -23,21 +25,21 @@ class HikariDataSourceProvider(
      */
     private val hikariDataSource: HikariDataSource by lazy {
         HikariConfig().apply {
-            // 构建 JDBC 连接 URL
+            // 统一拼接 JDBC URL 以保证所有连接使用相同的 SSL、编码和时区设置
             jdbcUrl = buildJdbcUrl()
             username = config.username
             password = config.password
 
-            // 连接池大小配置
+            // 控制并发连接上限与预热连接数，防止数据库连接槽位耗尽导致服务不可用
             maximumPoolSize = config.poolSize
             minimumIdle = config.minIdle
 
-            // 超时与存活配置
+            // 设置获取超时和连接存活周期，快速失败而非无限阻塞，定期回收陈旧连接
             connectionTimeout = config.connectionTimeout
             idleTimeout = config.idleTimeout
             maxLifetime = config.maxLifetime
 
-            // 连接泄漏检测阈值（超出则日志警告）
+            // 设置泄漏检测阈值以快速定位未归还的 Connection，避免连接池耗尽
             leakDetectionThreshold = config.leakDetectionThreshold
 
             // ---- MySQL 预处理语句性能优化 ----
@@ -54,12 +56,22 @@ class HikariDataSourceProvider(
         }.let(::HikariDataSource)
     }
 
+    /**
+     * 获取 HikariCP 数据源实例，首次调用触发连接池延迟初始化。
+     *
+     * [HikariDataSource] 由 [by lazy] 延迟创建，仅在首次调用时实例化并配置连接池参数。
+     *
+     * @return 已初始化的 [HikariDataSource] 实例
+     */
     override fun getDataSource(): DataSource = hikariDataSource
 
     /**
      * 构建 MySQL JDBC 连接 URL。
      *
-     * 包含 SSL 优先、UTF-8 编码和 UTC 时区等必要参数。
+     * 统一拼接 JDBC URL 以保证所有连接使用相同的 SSL、编码和时区设置，避免多环境连接行为不一致。
+     * 生产环境 SSL 模式设置为 PREFERRED，允许降级到非加密连接以兼容内网部署。
+     *
+     * @return MySQL JDBC 连接 URL 字符串，包含 SSL/编码/时区参数
      */
     private fun buildJdbcUrl(): String {
         return "jdbc:mysql://${config.host}:${config.port}/${config.database}" +

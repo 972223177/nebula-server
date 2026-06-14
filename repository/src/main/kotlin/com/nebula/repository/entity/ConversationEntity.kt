@@ -12,19 +12,25 @@ import java.time.LocalDateTime
 @Entity
 @Table(name = "conversations")
 class ConversationEntity(
+    /** 会话类型：0=私聊, 2=群聊 */
     @Column(nullable = false)
     var type: Int,
 
+    /** 群组名称 */
     @Column(length = 128)
     var name: String = "",
 
+    /** 群组头像 URL */
     @Column(length = 256)
     var avatar: String = "",
 
+    /** 群主用户 ID */
     var groupOwnerUid: Long? = null,
 
+    /** 群成员计数 */
     var memberCount: Int = 0,
 
+    /** 群成员上限 */
     var maxMembers: Int = 200,
 
     /** 会话状态：0=正常, 1=已解散（D-17） */

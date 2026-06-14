@@ -4,7 +4,14 @@ import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.repository.entity.DeadLetterEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.DeadLetterRepository
-import io.mockk.*
+import io.mockk.any
+import io.mockk.answers
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.firstArg
+import io.mockk.match
+import io.mockk.mockk
+import io.mockk.unmockkAll
 import jakarta.persistence.OptimisticLockException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -15,7 +22,9 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
 import java.util.Optional
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * DeadLetterService 单元测试 — 覆盖死信创建、补偿重试、手动重试、分页查询、永久失败标记（Phase 10）。

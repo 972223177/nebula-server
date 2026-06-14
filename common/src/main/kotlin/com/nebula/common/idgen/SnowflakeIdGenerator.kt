@@ -20,7 +20,9 @@ import kotlinx.coroutines.sync.withLock
  * @param epoch 自定义纪元起点（毫秒时间戳），默认 2023-11-14T21:33:20.000Z
  */
 class SnowflakeIdGenerator(
+    /** 工作节点 ID（0~1023），分布式下每实例必须唯一，ID 冲突会导致跨节点消息乱序 */
     val workerId: Long,
+    /** 自定义纪元起点（毫秒时间戳），前移基准时间以延长 41 bit 时间戳可用年限 */
     val epoch: Long = 1700000000000L
 ) {
 
@@ -96,6 +98,9 @@ class SnowflakeIdGenerator(
      *
      * 不采用 Thread.sleep 以避免不可预测的唤醒延迟，尤其在毫秒粒度下 sleep(1)
      * 实际可能休眠 2~15ms，自旋消耗 CPU 但延迟远低于 sleep。
+     *
+     * @param lastTimestamp 上次生成 ID 时记录的时间戳
+     * @return 越过 lastTimestamp 后的当前毫秒时间戳
      */
     private fun waitNextMillis(lastTimestamp: Long): Long {
         var timestamp = currentTimeMillis()
@@ -105,6 +110,12 @@ class SnowflakeIdGenerator(
         return timestamp
     }
 
-    /** 抽象系统时钟调用，便于单元测试时注入模拟时钟或用 System.currentTimeMillis() */
+    /**
+     * 获取当前系统毫秒时间戳。
+     *
+     * 抽象为独立方法便于单元测试时注入模拟时钟，生产环境使用 System.currentTimeMillis()。
+     *
+     * @return 当前系统毫秒时间戳
+     */
     private fun currentTimeMillis(): Long = System.currentTimeMillis()
 }

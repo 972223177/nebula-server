@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDateTime
 import java.util.Optional
+import kotlin.requireNotNull
 
 /**
  * UserService 单元测试。
@@ -335,7 +336,7 @@ class UserServiceTest {
         assertEquals(10002L, resp.getUsers(1).uid)
         assertTrue(resp.hasMore)
         assertEquals(
-            users[limit - 1].createdAt!!.atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+            requireNotNull(users[limit - 1].createdAt).atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
             resp.nextCursor
         )
     }
