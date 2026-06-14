@@ -6,7 +6,7 @@ import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.hibernate.cfg.Configuration
 import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import java.time.LocalDateTime
 import kotlin.test.*
@@ -28,7 +28,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
 
     private lateinit var emf: EntityManagerFactory
 
-    @BeforeEach
+    @BeforeAll
     fun setUp() {
         emf = createEntityManagerFactory()
     }
