@@ -17,6 +17,7 @@ import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
+import com.nebula.service.sequence.SeqService
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
@@ -39,6 +40,7 @@ class MessageServiceTest {
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var idGenerator: SnowflakeIdGenerator
+    private lateinit var seqService: SeqService
     private lateinit var messageService: MessageService
 
     /** 测试用常量 */
@@ -84,13 +86,17 @@ class MessageServiceTest {
         conversationRepository = mockk()
         friendshipRepository = mockk()
         idGenerator = mockk()
+        seqService = mockk<SeqService>()
+        coEvery { seqService.nextSeq(any(), any()) } returns 1L
+        coEvery { seqService.currentSeq(any(), any()) } returns 1L
         messageService = MessageService(
             messageRepository,
             messageQueueRepository,
             conversationMemberRepository,
             conversationRepository,
             friendshipRepository,
-            idGenerator
+            idGenerator,
+            seqService
         )
     }
 
