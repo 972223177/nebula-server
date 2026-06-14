@@ -9,7 +9,11 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import java.time.LocalDateTime
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.fail
 
 /**
  * 用户实体的 JPA 集成测试。
@@ -135,15 +139,15 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
 
         val savedId = doInTransaction { em ->
             em.persist(user)
-            user.id!!
+            requireNotNull(user.id)
         }
 
         val found = doInReadOnly { em ->
             em.find(UserEntity::class.java, savedId)
         }
 
-        assertNotNull(found, "Should find recently saved user by ID")
-        with(found!!) {
+        val savedUser = requireNotNull(found, "Should find recently saved user by ID")
+        with(savedUser) {
             assertEquals(user.username, username, "Username should match")
             assertEquals(user.passwordHash, passwordHash, "Password hash should match")
             assertEquals(user.nickname, nickname, "Nickname should match")
@@ -172,9 +176,9 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
                 .firstOrNull()
         }
 
-        assertNotNull(found, "Should find user by username")
-        assertEquals(user.id, found!!.id, "Queried user ID should match")
-        assertEquals(user.nickname, found.nickname, "Queried nickname should match")
+        val foundUser = requireNotNull(found, "Should find user by username")
+        assertEquals(user.id, foundUser.id, "Queried user ID should match")
+        assertEquals(user.nickname, foundUser.nickname, "Queried nickname should match")
     }
 
     /** 查询Non-existent username should return null。 */
@@ -206,7 +210,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         // 查询 user1 和 user3（跳过 user2）
-        val targetIds = listOf(user1.id!!, user3.id!!)
+        val targetIds = listOf(requireNotNull(user1.id), requireNotNull(user3.id))
 
         val found = doInReadOnly { em ->
             em.createQuery(
@@ -229,7 +233,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
             em.persist(user)
         }
 
-        val targetIds = listOf(user.id!!, 9999999999999L)
+        val targetIds = listOf(requireNotNull(user.id), 9999999999999L)
 
         val found = doInReadOnly { em ->
             em.createQuery(
@@ -270,17 +274,11 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
             updatedAt = LocalDateTime.now()
         }
 
-        var exceptionThrown = false
-        try {
+        assertFailsWith<Exception> {
             doInTransaction { em ->
                 em.persist(user2)
             }
-        } catch (e: Exception) {
-            // 期望抛出异常（如 ConstraintViolationException、DataIntegrityViolationException 等）
-            exceptionThrown = true
         }
-
-        assertTrue(exceptionThrown, "Duplicate username should trigger unique constraint exception")
 
         // 验证第一个用户仍然存在，数据未被污染
         val originalStillExists = doInReadOnly { em ->
@@ -291,8 +289,8 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
                 .resultList
                 .firstOrNull()
         }
-        assertNotNull(originalStillExists, "First user should still exist")
-        assertEquals(user1.id, originalStillExists!!.id)
+        val stillExists = requireNotNull(originalStillExists, "First user should still exist")
+        assertEquals(user1.id, stillExists.id)
     }
 
     // ==================== 更新与删除测试 ====================
@@ -307,23 +305,23 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
 
         // 更新字段
         doInTransaction { em ->
-            val loaded = em.find(UserEntity::class.java, user.id!!)
-            assertNotNull(loaded, "Should find the just-saved user")
-            loaded!!.nickname = "updatedNickname"
-            loaded.avatar = "https://example.com/new_avatar.png"
-            loaded.privacyStatus = 2
-            loaded.passwordHash = "\$2a\$10\$updatedHashForTest"
-            loaded.updatedAt = LocalDateTime.now()
-            em.merge(loaded)
+            val loaded = em.find(UserEntity::class.java, requireNotNull(user.id))
+            val userToUpdate = requireNotNull(loaded, "Should find the just-saved user")
+            userToUpdate.nickname = "updatedNickname"
+            userToUpdate.avatar = "https://example.com/new_avatar.png"
+            userToUpdate.privacyStatus = 2
+            userToUpdate.passwordHash = "\$2a\$10\$updatedHashForTest"
+            userToUpdate.updatedAt = LocalDateTime.now()
+            em.merge(userToUpdate)
         }
 
         // 验证更新结果
         val updated = doInReadOnly { em ->
-            em.find(UserEntity::class.java, user.id!!)
+            em.find(UserEntity::class.java, requireNotNull(user.id))
         }
 
-        assertNotNull(updated, "Should still find user after update")
-        with(updated!!) {
+        val updatedUser = requireNotNull(updated, "Should still find user after update")
+        with(updatedUser) {
             assertEquals("updatedNickname", nickname, "Nickname should be updated")
             assertEquals("https://example.com/new_avatar.png", avatar, "Avatar URL should be updated")
             assertEquals(2, privacyStatus, "Privacy status should be updated to hidden")
@@ -344,14 +342,14 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
 
         // 执行删除
         doInTransaction { em ->
-            val loaded = em.find(UserEntity::class.java, user.id!!)
-            assertNotNull(loaded, "Should find user before deletion")
-            em.remove(loaded!!)
+            val loaded = em.find(UserEntity::class.java, requireNotNull(user.id))
+            val userToRemove = requireNotNull(loaded, "Should find user before deletion")
+            em.remove(userToRemove)
         }
 
         // 验证删除结果
         val deleted = doInReadOnly { em ->
-            em.find(UserEntity::class.java, user.id!!)
+            em.find(UserEntity::class.java, requireNotNull(user.id))
         }
 
         assertNull(deleted, "Should return null after deletion")

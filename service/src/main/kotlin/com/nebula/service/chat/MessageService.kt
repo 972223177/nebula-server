@@ -45,6 +45,7 @@ class MessageService(
 ) {
 
     companion object {
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
         /** 私聊类型常量 */
         private const val CONV_TYPE_PRIVATE = 0
@@ -243,6 +244,8 @@ class MessageService(
 
     /**
      * 将 MessageEntity 转换为 ChatMessage Protobuf。
+     *
+     * @return 转换后的 ChatMessage Protobuf 对象
      */
     private fun MessageEntity.toChatMessage(): ChatMessage {
         val builder = ChatMessage.newBuilder()

@@ -34,6 +34,7 @@ class WriteStep(
     private val connection: StatefulRedisConnection<String, String>
 ) : SendMessageStep {
 
+    /** Lettuce Redis 协程命令接口，由 connection.reactive() 构建 */
     private val redis: RedisCoroutinesCommands<String, String> =
         RedisCoroutinesCommandsImpl(connection.reactive())
 

@@ -46,6 +46,8 @@ class RedisConfig(
      * 初始化 Redis 基础设施。
      *
      * 启动时调用，确保消费者组等基础设施就绪。
+     *
+     * @param messageQueueRepo 消息队列仓库，用于确保消费者组就绪
      */
     suspend fun initializeRedisInfra(messageQueueRepo: MessageQueueRepository) {
         messageQueueRepo.ensureConsumerGroup()

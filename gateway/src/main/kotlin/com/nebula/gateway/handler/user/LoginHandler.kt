@@ -43,6 +43,14 @@ class LoginHandler(
         return buildLoginResp(userId, token, req)
     }
 
+    /**
+     * 构建登录成功响应。
+     *
+     * @param userId 经过密码验证或 Token 验证确认的用户 ID
+     * @param token 新生成或当前有效的会话 Token
+     * @param req 客户端登录请求，用于回传 deviceType 和 deviceId
+     * @return 填充了 userId、token、server_now、deviceType、deviceId 的 LoginResp
+     */
     private fun buildLoginResp(userId: Long, token: String, req: LoginReq): LoginResp {
         return LoginResp.newBuilder()
             .setUserId(userId)

@@ -38,6 +38,7 @@ class SetPrivacyHandler(
     private val friendshipRepository: FriendshipRepository
 ) : Handler<SetPrivacyReq, Response> {
 
+    /** 推送专用协程作用域（IO 调度器 + SupervisorJob），fire-and-forget 模式 */
     private val pushScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override val method: String = "user/setPrivacy"

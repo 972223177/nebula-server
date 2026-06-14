@@ -41,6 +41,9 @@ class DeadLetterQueryHandler(
      * 将 [DeadLetterEntity] 转换为 [DeadLetterItem] Protobuf 消息。
      *
      * createdAt 转换为毫秒时间戳（Proto 定义的 int64 类型）。
+     *
+     * @param entity 死信数据库实体
+     * @return 死信 Protobuf 消息项
      */
     private fun toDeadLetterItem(entity: DeadLetterEntity): DeadLetterItem {
         return DeadLetterItem.newBuilder()

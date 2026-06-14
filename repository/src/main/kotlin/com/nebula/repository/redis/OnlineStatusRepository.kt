@@ -43,26 +43,43 @@ class OnlineStatusRepository(
         private val json = Json { ignoreUnknownKeys = true }
     }
 
-    /** 标记用户在线（status=1），写入 JSON 并设置 TTL */
+    /**
+     * 标记用户在线（status=1），写入 JSON 并设置 TTL。
+     *
+     * @param userId 用户 ID
+     */
     suspend fun setOnline(userId: Long) {
         val data = OnlineStatusData(status = 1, lastActiveAt = System.currentTimeMillis())
         val jsonStr = json.encodeToString(data)
         redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, jsonStr)
     }
 
-    /** 标记用户隐藏（status=2），写入 JSON 并设置 TTL */
+    /**
+     * 标记用户隐藏（status=2），写入 JSON 并设置 TTL。
+     *
+     * @param userId 用户 ID
+     */
     suspend fun setHidden(userId: Long) {
         val data = OnlineStatusData(status = 2, lastActiveAt = System.currentTimeMillis())
         val jsonStr = json.encodeToString(data)
         redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, jsonStr)
     }
 
-    /** 标记用户离线，删除 key */
+    /**
+     * 标记用户离线，删除 key。
+     *
+     * @param userId 用户 ID
+     */
     suspend fun setOffline(userId: Long) {
         redis.del("$KEY_PREFIX$userId")
     }
 
-    /** 获取用户在线状态数据，key 不存在返回 null */
+    /**
+     * 获取用户在线状态数据，key 不存在返回 null。
+     *
+     * @param userId 用户 ID
+     * @return 在线状态数据，key 不存在或解析失败返回 null
+     */
     suspend fun getStatus(userId: Long): OnlineStatusData? {
         val jsonStr = redis.get("$KEY_PREFIX$userId") ?: return null
         return try {
@@ -73,12 +90,21 @@ class OnlineStatusRepository(
         }
     }
 
-    /** 检查用户是否在线（status >= 1 即认为在线，兼容 status=2 隐藏场景） */
+    /**
+     * 检查用户是否在线（status >= 1 即认为在线，兼容 status=2 隐藏场景）。
+     *
+     * @param userId 用户 ID
+     * @return true 表示在线（含隐藏），false 表示离线
+     */
     suspend fun isOnline(userId: Long): Boolean {
         return getStatus(userId) != null
     }
 
-    /** 刷新 key 的 TTL 为 60s */
+    /**
+     * 刷新 key 的 TTL 为 60s。
+     *
+     * @param userId 用户 ID
+     */
     suspend fun refreshTtl(userId: Long) {
         redis.expire("$KEY_PREFIX$userId", TTL_SECONDS)
     }

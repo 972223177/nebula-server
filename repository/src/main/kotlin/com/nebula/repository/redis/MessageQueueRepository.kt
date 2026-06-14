@@ -53,7 +53,12 @@ class MessageQueueRepository(
         }
     }
 
-    /** 将消息写入 Redis Stream */
+    /**
+     * 将消息写入 Redis Stream。
+     *
+     * @param message 消息键值对
+     * @return Redis Stream 消息 ID，失败返回 null
+     */
     suspend fun enqueue(message: Map<String, String>): String? {
         return redis.xadd(
             STREAM_KEY,
@@ -62,7 +67,13 @@ class MessageQueueRepository(
         )
     }
 
-    /** 消费一批消息 */
+    /**
+     * 消费一批消息。
+     *
+     * @param batchSize 批量消费条数上限
+     * @param blockMs 阻塞等待时间（毫秒），0 表示非阻塞
+     * @return 消费到的消息列表
+     */
     suspend fun consume(batchSize: Long, blockMs: Long): List<StreamMessage<String, String>> {
         return redis.xreadgroup(
             Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
@@ -71,7 +82,11 @@ class MessageQueueRepository(
         ).toList()
     }
 
-    /** 确认消息已被处理 */
+    /**
+     * 确认消息已被处理。
+     *
+     * @param messageId Redis Stream 消息 ID
+     */
     suspend fun acknowledge(messageId: String) {
         redis.xack(STREAM_KEY, CONSUMER_GROUP, messageId)
     }

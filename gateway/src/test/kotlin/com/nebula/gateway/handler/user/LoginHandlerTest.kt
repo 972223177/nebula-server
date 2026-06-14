@@ -12,6 +12,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -64,12 +65,10 @@ class LoginHandlerTest {
             .setPassword("wrong-password")
             .build()
 
-        try {
+        val e = assertFailsWith<UserException> {
             handler.handle(req)
-            kotlin.test.fail("应抛出 UserException(AUTH_FAILED)")
-        } catch (e: UserException) {
-            assertEquals(BizCode.AUTH_FAILED, e.bizCode)
         }
+        assertEquals(BizCode.AUTH_FAILED, e.bizCode)
     }
 
     @Test
@@ -81,12 +80,10 @@ class LoginHandlerTest {
             .setPassword("some-password")
             .build()
 
-        try {
+        val e = assertFailsWith<UserException> {
             handler.handle(req)
-            kotlin.test.fail("应抛出 UserException(USER_NOT_FOUND)")
-        } catch (e: UserException) {
-            assertEquals(BizCode.USER_NOT_FOUND, e.bizCode)
         }
+        assertEquals(BizCode.USER_NOT_FOUND, e.bizCode)
     }
 
     @Test

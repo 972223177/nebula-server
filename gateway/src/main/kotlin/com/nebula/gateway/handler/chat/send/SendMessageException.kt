@@ -16,6 +16,7 @@ class SendMessageException(
 ) : BizException(bizCode, msg) {
 
     companion object {
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
     }
 }

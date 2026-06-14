@@ -12,9 +12,11 @@ import java.time.LocalDateTime
     Index(name = "idx_friends", columnList = "friend_id")
 ])
 class FriendshipEntity(
+    /** 用户 ID */
     @Column(nullable = false)
     var userId: Long,
 
+    /** 好友用户 ID */
     @Column(nullable = false)
     var friendId: Long
 ) {
@@ -25,5 +27,6 @@ class FriendshipEntity(
     @Column(nullable = false, updatable = false)
     var createdAt: LocalDateTime? = null
 
+    /** 软删除标记：0=正常, 1=已删除 */
     var deleted: Int = 0
 }

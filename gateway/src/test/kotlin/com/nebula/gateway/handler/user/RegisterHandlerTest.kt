@@ -9,6 +9,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
@@ -57,12 +58,10 @@ class RegisterHandlerTest {
             .setNickname("新用户")
             .build()
 
-        try {
+        val e = assertFailsWith<UserException> {
             handler.handle(req)
-            kotlin.test.fail("应抛出 UserException(USERNAME_EXISTS)")
-        } catch (e: UserException) {
-            assertEquals(BizCode.USERNAME_EXISTS, e.bizCode)
         }
+        assertEquals(BizCode.USERNAME_EXISTS, e.bizCode)
     }
 
     @Test
@@ -75,12 +74,10 @@ class RegisterHandlerTest {
             .setNickname("新用户")
             .build()
 
-        try {
+        val e = assertFailsWith<UserException> {
             handler.handle(req)
-            kotlin.test.fail("应抛出 UserException(INVALID_PARAM)")
-        } catch (e: UserException) {
-            assertEquals(BizCode.INVALID_PARAM, e.bizCode)
         }
+        assertEquals(BizCode.INVALID_PARAM, e.bizCode)
     }
 
     @Test
@@ -93,11 +90,9 @@ class RegisterHandlerTest {
             .setNickname("新用户")
             .build()
 
-        try {
+        val e = assertFailsWith<UserException> {
             handler.handle(req)
-            kotlin.test.fail("应抛出 UserException(INVALID_PARAM)")
-        } catch (e: UserException) {
-            assertEquals(BizCode.INVALID_PARAM, e.bizCode)
         }
+        assertEquals(BizCode.INVALID_PARAM, e.bizCode)
     }
 }

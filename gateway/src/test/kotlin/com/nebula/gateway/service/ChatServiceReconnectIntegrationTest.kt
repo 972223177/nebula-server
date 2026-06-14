@@ -289,7 +289,8 @@ class ChatServiceReconnectIntegrationTest {
 
         // Then: pendingBuffer 仍为 1000 条，最旧消息（first）被 poll
         assert(pendingBuffer.size == 1000) { "Expected buffer size 1000, got ${pendingBuffer.size}" }
-        assert(pendingBuffer.peek()!!.requestId != "first") { "Expected oldest message to be dropped" }
+        val head = requireNotNull(pendingBuffer.peek())
+        assert(head.requestId != "first") { "Expected oldest message to be dropped" }
         assert(pendingBuffer.any { it.requestId == "new" }) { "Expected new message in buffer" }
         verify(exactly = 0) { mockResponseObserver.onNext(any()) }
     }
@@ -413,7 +414,8 @@ class ChatServiceReconnectIntegrationTest {
         // Then: delayedOfflineJob != null
         val delayedOfflineJob: Job? = getField<Job?>(observer, "delayedOfflineJob")
         assert(delayedOfflineJob != null) { "Expected delayedOfflineJob to be set" }
-        assert(!delayedOfflineJob!!.isCompleted) { "Expected delayedOfflineJob to be active" }
+        val job = requireNotNull(delayedOfflineJob)
+        assert(!job.isCompleted) { "Expected delayedOfflineJob to be active" }
     }
 
     @Test

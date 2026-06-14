@@ -24,7 +24,6 @@ import com.nebula.repository.entity.UserEntity
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.withContext
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
 import java.time.LocalDateTime

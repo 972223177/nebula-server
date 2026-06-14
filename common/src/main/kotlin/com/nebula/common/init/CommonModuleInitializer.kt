@@ -21,6 +21,12 @@ class CommonModuleInitializer : ModuleInitializer, KoinComponent {
     override val name = "common"
     override val dependencies = emptyList<String>()
 
+    /**
+     * 创建 SnowflakeIdGenerator 和 HikariCP DataSourceProvider 并注册到 Koin 容器。
+     *
+     * 两个产物均为单例，供其他模块通过 Koin get() 获取。
+     * 初始化的顺序无关紧要（无外部依赖），但后续模块依赖本模块产物时由 ModuleInitializerSorter 保证执行顺序。
+     */
     override fun init() {
         val config = get<ApplicationConfig>()
         val koin = GlobalContext.get()

@@ -1,9 +1,7 @@
 package com.nebula.gateway.handler.conversation
 
 import com.nebula.chat.PushEventType
-import com.nebula.chat.Response
 import com.nebula.chat.conversation.EditGroupReq
-import com.nebula.chat.conversation.GroupUpdatedPayload
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
@@ -14,9 +12,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
 import kotlinx.coroutines.withContext
+import org.junit.jupiter.api.BeforeEach
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -89,7 +86,7 @@ class EditGroupHandlerTest {
         }
 
         assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
-        assertTrue(exception.message!!.contains("至少修改"))
+        assertTrue(exception.message?.contains("至少修改") == true)
     }
 
     @Test
@@ -165,7 +162,7 @@ class EditGroupHandlerTest {
         }
 
         assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
-        assertTrue(exception.message!!.contains("128"))
+        assertTrue(exception.message?.contains("128") == true)
     }
 
     @Test
@@ -181,7 +178,7 @@ class EditGroupHandlerTest {
         }
 
         assertEquals(BizCode.INVALID_PARAM, exception.bizCode)
-        assertTrue(exception.message!!.contains("256"))
+        assertTrue(exception.message?.contains("256") == true)
     }
 
     @Test

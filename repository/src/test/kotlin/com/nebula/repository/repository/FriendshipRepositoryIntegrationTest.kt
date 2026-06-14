@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -154,8 +155,8 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
             query.uniqueResult()
         }
 
-        assertNotNull(found, "Should find friendship by userId and friendId")
-        assertTrue(found!!.userId == USER_A_ID && found.friendId == USER_B_ID)
+        val friendshipEntity = requireNotNull(found, "Should find friendship by userId and friendId")
+        assertTrue(friendshipEntity.userId == USER_A_ID && friendshipEntity.friendId == USER_B_ID)
     }
 
     /** 软删除：将 deleted 置为 1 后，好友关系不再生效。 */
@@ -168,8 +169,8 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
 
         // 执行软删除
         doInSession { session ->
-            val toDelete = session.get(FriendshipEntity::class.java, friendship.id)
-            toDelete!!.deleted = 1
+            val toDelete = requireNotNull(session.get(FriendshipEntity::class.java, friendship.id))
+            toDelete.deleted = 1
             session.merge(toDelete)
         }
 
@@ -177,7 +178,8 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
         val deletedEntity = doInReadOnlySession { session ->
             session.get(FriendshipEntity::class.java, friendship.id)
         }
-        assertTrue(deletedEntity!!.deleted == 1, "Deleted flag should be 1 after soft delete")
+        val deleted = requireNotNull(deletedEntity)
+        assertTrue(deleted.deleted == 1, "Deleted flag should be 1 after soft delete")
     }
 
     /**
@@ -191,16 +193,11 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         // 重复插入相同 userId 和 friendId 应触发唯一约束异常
-        var exceptionThrown = false
-        try {
+        assertFailsWith<Exception> {
             doInSession { session ->
                 session.persist(FriendshipEntity(userId = USER_A_ID, friendId = USER_B_ID))
             }
-        } catch (e: Exception) {
-            // 期望抛出的约束违背异常（如 ConstraintViolationException、DataIntegrityViolationException 等）
-            exceptionThrown = true
         }
-        assertTrue(exceptionThrown, "Duplicate friendship should throw constraint exception")
     }
 
     /** 根据 userId 查询所有好友（含双向：userId 或 friendId 匹配，且 deleted=0）。 */
@@ -282,8 +279,8 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
             query.uniqueResult()
         }
 
-        assertNotNull(found, "Should find pending friend request")
-        assertTrue(found!!.fromUid == USER_A_ID && found.toUid == USER_B_ID && found.status == 0)
+        val pendingRequest = requireNotNull(found, "Should find pending friend request")
+        assertTrue(pendingRequest.fromUid == USER_A_ID && pendingRequest.toUid == USER_B_ID && pendingRequest.status == 0)
 
         // 验证不匹配的状态返回空
         val notFound = doInReadOnlySession { session ->
@@ -309,27 +306,29 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
 
         // 接受申请
         doInSession { session ->
-            val loaded = session.get(FriendRequestEntity::class.java, request.id)
-            loaded!!.status = 1
+            val loaded = requireNotNull(session.get(FriendRequestEntity::class.java, request.id))
+            loaded.status = 1
             session.merge(loaded)
         }
 
         val accepted = doInReadOnlySession { session ->
             session.get(FriendRequestEntity::class.java, request.id)
         }
-        assertTrue(accepted!!.status == 1, "Status should be 1 after accept")
+        val acceptedRequest = requireNotNull(accepted)
+        assertTrue(acceptedRequest.status == 1, "Status should be 1 after accept")
 
         // 拒绝申请
         doInSession { session ->
-            val loaded = session.get(FriendRequestEntity::class.java, request.id)
-            loaded!!.status = 2
+            val loaded = requireNotNull(session.get(FriendRequestEntity::class.java, request.id))
+            loaded.status = 2
             session.merge(loaded)
         }
 
         val rejected = doInReadOnlySession { session ->
             session.get(FriendRequestEntity::class.java, request.id)
         }
-        assertTrue(rejected!!.status == 2, "Status should be 2 after reject")
+        val rejectedRequest = requireNotNull(rejected)
+        assertTrue(rejectedRequest.status == 2, "Status should be 2 after reject")
     }
 
     /** 查询不存在的 ID 应返回 null。 */

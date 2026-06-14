@@ -40,7 +40,10 @@ class LeaveGroupHandler(
     override val method: String = "conversation/leave_group"
 
     companion object {
+        /** 群聊已解散状态常量 */
         private const val STATUS_DISSOLVED = 1
+
+        /** 群主角色常量 */
         private const val ROLE_OWNER = "owner"
     }
 

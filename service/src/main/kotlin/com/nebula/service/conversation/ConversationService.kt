@@ -39,11 +39,17 @@ class ConversationService(
 ) {
 
     companion object {
+        /** 群聊最大成员数 */
         private const val MAX_MEMBERS = 200
+        /** 私聊会话类型常量 */
         private const val CONV_TYPE_PRIVATE = 0
+        /** 群聊会话类型常量 */
         private const val CONV_TYPE_GROUP = 2
+        /** 群主角色标识 */
         private const val ROLE_OWNER = "owner"
+        /** 群成员角色标识 */
         private const val ROLE_MEMBER = "member"
+        /** 会话列表单页最大条数 */
         private const val MAX_LIST_LIMIT = 50
     }
 

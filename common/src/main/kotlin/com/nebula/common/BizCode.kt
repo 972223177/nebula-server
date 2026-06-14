@@ -78,6 +78,15 @@ enum class BizCode(val code: Int, val msg: String) {
     CACHE_ERROR(9002, "cache error");
 
     companion object {
+        /**
+         * 根据整数码查找对应的 [BizCode] 枚举值。
+         *
+         * 遍历所有枚举条目，匹配 [BizCode.code] 与输入参数一致的条目。
+         * 若找不到匹配则返回 null，由调用方决定兜底行为（如返回 UNKNOWN 或抛异常）。
+         *
+         * @param code 业务状态码
+         * @return 匹配的 [BizCode] 枚举值，未匹配返回 null
+         */
         fun fromCode(code: Int): BizCode? = entries.find { it.code == code }
     }
 }

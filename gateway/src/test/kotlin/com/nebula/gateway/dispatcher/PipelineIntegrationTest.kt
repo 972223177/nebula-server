@@ -13,7 +13,6 @@ import com.nebula.chat.user.SearchUserResp
 import com.nebula.chat.user.UserBrief
 import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
-import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.PingHandler
@@ -29,18 +28,12 @@ import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
-import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.SessionRepository
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.user.UserService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import jakarta.persistence.EntityManager
-import jakarta.persistence.EntityManagerFactory
-import jakarta.persistence.EntityTransaction
-import java.util.Optional
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test

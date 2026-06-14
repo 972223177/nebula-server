@@ -7,7 +7,21 @@ import org.springframework.data.jpa.repository.JpaRepository
  * 好友请求数据仓库。
  */
 interface FriendRequestRepository : JpaRepository<FriendRequestEntity, Long> {
+    /**
+     * 按接收方 UID 和状态查询好友申请列表。
+     *
+     * @param toUid 申请接收方 UID
+     * @param status 申请状态
+     * @return 匹配的申请列表
+     */
     fun findByToUidAndStatus(toUid: Long, status: Int): List<FriendRequestEntity>
+    /**
+     * 按发起方和接收方精确查找好友申请。
+     *
+     * @param fromUid 申请发起方 UID
+     * @param toUid 申请接收方 UID
+     * @return 好友申请实体，不存在返回 null
+     */
     fun findByFromUidAndToUid(fromUid: Long, toUid: Long): FriendRequestEntity?
 
     /**

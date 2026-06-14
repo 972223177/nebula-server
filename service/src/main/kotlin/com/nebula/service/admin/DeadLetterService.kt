@@ -33,6 +33,7 @@ class DeadLetterService(
 ) {
 
     companion object {
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
 
         /** 最大补偿重试次数：超过此次数标记为永久失败 */

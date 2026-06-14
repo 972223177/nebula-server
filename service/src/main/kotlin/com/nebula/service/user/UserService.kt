@@ -36,6 +36,7 @@ class UserService(
 ) {
 
     companion object {
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
         /** BCrypt cost 因子（D-03） */
         private const val BCRYPT_COST = 12

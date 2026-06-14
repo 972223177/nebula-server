@@ -21,6 +21,7 @@ class SeqService(
     private val connection: StatefulRedisConnection<String, String>
 ) {
 
+    /** Lettuce 协程 Redis 命令接口，通过 connection.reactive() 构造 */
     private val redis: RedisCoroutinesCommands<String, String> =
         RedisCoroutinesCommandsImpl(connection.reactive())
 
@@ -34,6 +35,7 @@ class SeqService(
         /** 最大序列号阈值，超过此值时重置为 1，留出 10000 的缓冲空间防止并发溢出 */
         const val MAX_SEQ_THRESHOLD = Long.MAX_VALUE - 10000
 
+        /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
     }
 

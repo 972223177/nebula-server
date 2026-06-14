@@ -9,9 +9,14 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.requireNotNull
 
 /**
  * OnlineStatusRepository 三值状态单元测试（D-57）。
@@ -56,7 +61,7 @@ class OnlineStatusRepositoryTest {
         val result = repository.getStatus(1L)
 
         assertNotNull(result)
-        assertEquals(1, result!!.status)
+        assertEquals(1, requireNotNull(result).status)
     }
 
     @Test
@@ -67,7 +72,7 @@ class OnlineStatusRepositoryTest {
         val result = repository.getStatus(2L)
 
         assertNotNull(result)
-        assertEquals(2, result!!.status)
+        assertEquals(2, requireNotNull(result).status)
     }
 
     @Test

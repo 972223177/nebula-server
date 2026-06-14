@@ -14,27 +14,35 @@ import java.time.LocalDateTime
     Index(name = "uk_client_msg_id", columnList = "client_message_id", unique = true)
 ])
 class MessageEntity(
+    /** 会话 ID，外键关联 conversations 表 */
     @Column(nullable = false, length = 32)
     var conversationId: String,
 
+    /** 发送者用户 ID */
     @Column(nullable = false)
     var senderUid: Long,
 
+    /** 消息类型编号 */
     var messageType: Int,
 
+    /** 消息文本内容 */
     @Lob
     @Column(columnDefinition = "TEXT", nullable = false)
     var content: String,
 
+    /** 消息二进制载荷，如媒体文件元信息 */
     @Lob
     @Column(columnDefinition = "BLOB")
     var payload: ByteArray? = null,
 
+    /** 客户端消息唯一标识，用于去重 */
     @Column(length = 64)
     var clientMessageId: String? = null,
 
+    /** 客户端发送时间戳（毫秒） */
     var clientTs: Long,
 
+    /** 服务端接收时间戳（毫秒） */
     var serverTs: Long
 ) {
     @Id

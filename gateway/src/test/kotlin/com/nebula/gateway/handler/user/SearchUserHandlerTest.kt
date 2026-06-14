@@ -9,6 +9,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -63,7 +64,7 @@ class SearchUserHandlerTest {
         assertNotNull(resp)
         assertEquals(2, resp.usersCount, "搜索结果应为 2 条")
         assertEquals("testuser1", resp.usersList[0].username)
-        assertTrue(!resp.hasMore, "2 条结果不超过 20 条限制，hasMore 应为 false")
+        assertFalse(resp.hasMore, "2 条结果不超过 20 条限制，hasMore 应为 false")
     }
 
     @Test
@@ -82,7 +83,7 @@ class SearchUserHandlerTest {
 
         assertNotNull(resp)
         assertEquals(0, resp.usersCount, "无匹配结果")
-        assertEquals(false, resp.hasMore, "无更多数据")
+        assertFalse(resp.hasMore, "无更多数据")
     }
 
     @Test
@@ -106,7 +107,7 @@ class SearchUserHandlerTest {
 
         assertNotNull(resp)
         assertEquals(20, resp.usersCount, "应只返回 20 条")
-        assertEquals(true, resp.hasMore, "实际有 21 条，hasMore 应为 true")
+        assertTrue(resp.hasMore, "实际有 21 条，hasMore 应为 true")
     }
 
     @Test
@@ -131,7 +132,7 @@ class SearchUserHandlerTest {
         assertNotNull(resp)
         assertEquals(2, resp.usersCount)
         assertEquals(1002L, resp.nextCursor)
-        assertEquals(false, resp.hasMore)
+        assertFalse(resp.hasMore)
     }
 
     @Test
@@ -145,6 +146,6 @@ class SearchUserHandlerTest {
 
         assertNotNull(resp)
         assertEquals(0, resp.usersCount, "空关键词应返回空结果")
-        assertEquals(false, resp.hasMore)
+        assertFalse(resp.hasMore)
     }
 }
