@@ -3,13 +3,12 @@ package com.nebula.gateway.handler.friend
 import com.nebula.chat.friend.FriendBrief
 import com.nebula.chat.friend.FriendListReq
 import com.nebula.chat.friend.FriendListResp
-import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
+import com.nebula.gateway.testutil.sessionContext
 import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -21,8 +20,6 @@ import kotlin.test.assertEquals
  * - 正常分页查询 → 返回好友列表含完整 6 个字段
  * - 空好友列表 → 返回空列表
  * - 隐藏用户过滤 → 隐藏用户在线状态显示为 0
- *
- * Session 注入方式：使用 withContext(SessionKey(session)) 包裹 handle() 调用。
  */
 class FriendListHandlerTest {
 
@@ -42,7 +39,7 @@ class FriendListHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun listShouldReturnFullFriendFields() = runTest {
+    fun listShouldReturnFullFriendFields() = runTest(sessionContext(session)) {
         // Given: 当前用户有两个好友
         val expectedResp = FriendListResp.newBuilder()
             .addFriends(FriendBrief.newBuilder()
@@ -69,9 +66,7 @@ class FriendListHandlerTest {
             .build()
 
         // When: 执行查询
-        val result = withContext(SessionKey(session)) {
-            handler.handle(req)
-        }
+        val result = handler.handle(req)
 
         // Then: 验证返回两个好友
         assertEquals(2, result.friendsCount)
@@ -98,7 +93,7 @@ class FriendListHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun listEmptyShouldReturnEmpty() = runTest {
+    fun listEmptyShouldReturnEmpty() = runTest(sessionContext(session)) {
         // Given: 当前用户没有好友记录
         val expectedResp = FriendListResp.getDefaultInstance()
 
@@ -110,9 +105,7 @@ class FriendListHandlerTest {
             .build()
 
         // When: 执行查询
-        val result = withContext(SessionKey(session)) {
-            handler.handle(req)
-        }
+        val result = handler.handle(req)
 
         // Then: 返回空列表（默认实例）
         assertEquals(0, result.friendsCount)
@@ -123,7 +116,7 @@ class FriendListHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun hiddenUserFilterShouldHideOnlineStatus() = runTest {
+    fun hiddenUserFilterShouldHideOnlineStatus() = runTest(sessionContext(session)) {
         // Given: 当前用户有一个好友，但该好友设置了隐藏在线状态
         val expectedResp = FriendListResp.newBuilder()
             .addFriends(FriendBrief.newBuilder()
@@ -143,9 +136,7 @@ class FriendListHandlerTest {
             .build()
 
         // When: 执行查询
-        val result = withContext(SessionKey(session)) {
-            handler.handle(req)
-        }
+        val result = handler.handle(req)
 
         // Then: 验证好友信息正常返回，但在线状态为 0（隐藏用户不暴露真实状态）
         assertEquals(1, result.friendsCount)

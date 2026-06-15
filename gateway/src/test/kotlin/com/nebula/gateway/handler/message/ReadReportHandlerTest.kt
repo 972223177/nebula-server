@@ -85,8 +85,14 @@ class ReadReportHandlerTest {
     private fun groupConv(id: String) = ConversationEntity(type = 1).apply { this.id = id }
 
     /**
-     * 替换 ReadReportHandler 中的 redis 字段为 mock 实例。
+     * 通过反射替换 ReadReportHandler 中的 [redis] 字段为 mock 实例。
+     *
+     * 原因：ReadReportHandler 中 redis 字段为 private val，由 connection.reactive()
+     * 初始化。测试中 connection 本身已是 mock，但其 reactive() 返回值仍为真实 Lettuce
+     * 实现，无法在单元测试中直接控制。此处通过反射绕过 private 访问限制注入 mock，
+     * 避免引入生产代码修改（如增加 redis 构造函数参数）。
      */
+    @Suppress("UNCHECKED_CAST")
     private fun injectMockRedis() {
         val field = ReadReportHandler::class.java.getDeclaredField("redis")
         field.isAccessible = true

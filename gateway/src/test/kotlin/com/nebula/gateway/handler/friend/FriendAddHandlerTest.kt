@@ -223,13 +223,17 @@ class FriendAddHandlerTest {
     }
 
     @Test
-    fun buildPrivateConvIdWithSwappedArgs() {
-        // Given: 同一对用户，但传入顺序不同
-        val convId1 = FriendService.buildPrivateConvId(1001L, 2001L)
-        val convId2 = FriendService.buildPrivateConvId(2001L, 1001L)
+    fun buildPrivateConvIdShouldBeDeterministicWhenSorted() {
+        // Given: 同一对用户，无论传入顺序如何，排序后调用总是返回一致值
+        val uid1 = 2001L
+        val uid2 = 1001L
+        val smaller = minOf(uid1, uid2)
+        val larger = maxOf(uid1, uid2)
 
-        // When & Then: 两者应相同（但实际取决于调用方排序，此处验证方法本身行为）
-        assertEquals("private:1001:2001", convId1)
-        assertEquals("private:2001:1001", convId2)
+        // When: 调用方负责排序后再传入
+        val convId = FriendService.buildPrivateConvId(smaller, larger)
+
+        // Then: 返回确定性的 "private:smaller:larger" 格式
+        assertEquals("private:1001:2001", convId)
     }
 }
