@@ -94,7 +94,8 @@ class FriendService(
 
             // 更新对方申请为 accepted
             reverseRequest.status = 1
-            withContext(Dispatchers.IO) { friendRequestRepository.save(reverseRequest) }
+            // D-80/H15: saveAndFlush 立即触发 UK 检查，在事务内检测重复而非提交时
+            withContext(Dispatchers.IO) { friendRequestRepository.saveAndFlush(reverseRequest) }
 
             // 创建/恢复好友关系
             val friendship = existingFriendship ?: FriendshipEntity(
@@ -104,7 +105,8 @@ class FriendService(
             if (friendship.deleted == 1) {
                 friendship.deleted = 0
             }
-            withContext(Dispatchers.IO) { friendshipRepository.save(friendship) }
+            // D-80/H15: saveAndFlush 立即触发 UK 检查，在事务内检测重复
+            withContext(Dispatchers.IO) { friendshipRepository.saveAndFlush(friendship) }
 
             // 创建私聊会话（如果不存在）
             var conv = withContext(Dispatchers.IO) {

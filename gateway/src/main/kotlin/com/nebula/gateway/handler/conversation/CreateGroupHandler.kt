@@ -9,6 +9,8 @@ import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.runBlocking
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 创建群聊 Handler — method = "conversation/create_group"（D-02, D-05, D-10, D-19）。
@@ -20,11 +22,13 @@ import kotlinx.coroutines.currentCoroutineContext
  *
  * @param conversationService 会话业务服务
  * @param lockManager 会话级互斥锁管理器
+ * @param transactionTemplate 编程式事务模板（D-79）
  * @param pushService 推送服务
  */
 class CreateGroupHandler(
     private val conversationService: ConversationService,
     private val lockManager: ConversationLockManager,
+    private val transactionTemplate: TransactionTemplate,
     private val pushService: PushService
 ) : Handler<CreateGroupReq, CreateGroupResp> {
 
@@ -33,8 +37,14 @@ class CreateGroupHandler(
     override suspend fun handle(req: CreateGroupReq): CreateGroupResp {
         val session = currentCoroutineContext().requireSession()
 
-        // 委托 ConversationService 处理业务逻辑
-        val result = conversationService.createGroup(req, session.userId)
+        // D-79/H14: 锁 + 事务包裹，确保跨表写入原子性
+        val result = lockManager.withLock("create") {
+            transactionTemplate.execute {
+                runBlocking {
+                    conversationService.createGroup(req, session.userId)
+                }
+            }!!
+        }
 
         // 事务提交后异步推送 GROUP_CREATED 给初始成员（排除创建者，D-10）
         val payload = GroupCreatedPayload.newBuilder()

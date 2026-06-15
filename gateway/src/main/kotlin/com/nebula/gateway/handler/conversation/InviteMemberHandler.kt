@@ -12,6 +12,7 @@ import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.runBlocking
 
 /**
  * 邀请成员 Handler — method = "conversation/invite_member"（D-03, D-05, D-19）。
@@ -38,7 +39,15 @@ class InviteMemberHandler(
 
     override suspend fun handle(req: InviteMemberReq): Response {
         val session = currentCoroutineContext().requireSession()
-        val newMemberUids = conversationService.inviteMember(req, session.userId)
+
+        // D-79/H17+H20: 锁 + 事务包裹，确保批量邀请与 memberCount 原子性
+        val newMemberUids = lockManager.withLock(req.conversationId) {
+            transactionTemplate.execute {
+                runBlocking {
+                    conversationService.inviteMember(req, session.userId)
+                }
+            }!!
+        }
 
         // 推送 MEMBER_JOINED 给现有成员
         val payload = MemberJoinedPayload.newBuilder()

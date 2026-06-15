@@ -222,14 +222,9 @@ class ConversationService(
             newMemberUids.add(uid)
         }
 
-        // 更新成员计数
-        val currentCount = withContext(Dispatchers.IO) {
-            conversationMemberRepository.countActiveByConversationId(convId)
-        }
-        conv.memberCount = currentCount.toInt()
-        conv.updatedAt = LocalDateTime.now()
+        // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
         withContext(Dispatchers.IO) {
-            conversationRepository.save(conv)
+            conversationRepository.incrementMemberCount(convId, newMemberUids.size)
         }
 
         return newMemberUids
@@ -263,14 +258,9 @@ class ConversationService(
             conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, userId)
         }
 
-        // 更新成员计数
-        val currentCount = withContext(Dispatchers.IO) {
-            conversationMemberRepository.countActiveByConversationId(convId)
-        }
-        conv.memberCount = currentCount.toInt()
-        conv.updatedAt = LocalDateTime.now()
+        // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
         withContext(Dispatchers.IO) {
-            conversationRepository.save(conv)
+            conversationRepository.incrementMemberCount(convId, -1)
         }
     }
 
@@ -312,14 +302,9 @@ class ConversationService(
             conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, targetUid)
         }
 
-        // 更新成员计数
-        val currentCount = withContext(Dispatchers.IO) {
-            conversationMemberRepository.countActiveByConversationId(convId)
-        }
-        conv.memberCount = currentCount.toInt()
-        conv.updatedAt = LocalDateTime.now()
+        // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
         withContext(Dispatchers.IO) {
-            conversationRepository.save(conv)
+            conversationRepository.incrementMemberCount(convId, -1)
         }
 
         return targetUid
