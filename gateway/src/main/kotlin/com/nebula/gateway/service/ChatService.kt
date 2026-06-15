@@ -134,6 +134,10 @@ class ChatService(
         @Volatile
         var userId: Long? = null
 
+        /** 会话 Token（CQ-05: 连接断开时用于清理 SessionRegistry）。由 handleLoginSuccess 设置。 */
+        @Volatile
+        var token: String? = null
+
         /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏。
          * 使用 @Volatile 保证 gRPC 线程写入与协程读取之间的可见性。 */
         @Volatile
@@ -366,12 +370,21 @@ class ChatService(
          * 清理操作：
          * 1. 从 tokenToObserver 移除当前 responseObserver（精确匹配实例，D-67 并发安全）
          * 2. 从 UserStreamRegistry 移除当前设备的 StreamObserver（防御性检查，D-01）
-         * 3. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
+         * 3. 从 SessionRegistry 清除会话（CQ-05: 确保重连时生成新 connectionId）
+         * 4. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
         private fun cleanupConnection() {
             // D-67 并发安全：使用 values.remove() 精确匹配当前 observer 实例
             // 避免 entries.removeIf 遍历所有条目时误匹配其他线程新注册的 observer
             tokenToObserver.values.remove(responseObserver)
+
+            // CQ-05: 清除会话，确保重连时生成新 connectionId
+            token?.let { tok ->
+                sessionRegistry.removeFromLocalCache(tok)
+                scope.launch {
+                    sessionRegistry.removeFromRedis(tok)
+                }
+            }
 
             // D-01: 移除当前设备 StreamObserver（不调 removeUser 以免移除其他设备的流）
             userId?.let { uid ->
@@ -474,6 +487,9 @@ class ChatService(
             "responseObserver must be ChatStreamObserver"
         }
         responseObserver.userId = loginResp.userId
+
+        // CQ-05: 记录 token 用于连接断开时清理 SessionRegistry
+        responseObserver.token = session.token
 
         // D-57: 重连时取消旧的延迟离线任务
         responseObserver.delayedOfflineJob?.cancel()

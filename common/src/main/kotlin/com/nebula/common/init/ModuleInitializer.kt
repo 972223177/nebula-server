@@ -27,4 +27,12 @@ interface ModuleInitializer {
      * 3. 通过 Koin API（如 koin.declare()）将产物注册到容器
      */
     fun init()
+
+    /**
+     * 回滚本模块已分配的资源（CQ-09）。
+     *
+     * 当初始化链中某个模块失败时，逆序调用已成功初始化的模块的 shutdown() 方法释放资源。
+     * 默认空实现，需要资源清理的子类应覆盖此方法。
+     */
+    fun shutdown() {}
 }
