@@ -1,5 +1,6 @@
 package com.nebula.gateway.push
 
+import com.nebula.chat.Direction
 import com.nebula.chat.Envelope
 import com.nebula.chat.PushEventType
 import com.nebula.chat.message.ChatMessage
@@ -12,10 +13,13 @@ import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 /**
  * PushService 单元测试。
@@ -63,6 +67,7 @@ class PushServiceTest {
         pushService.pushMessage(convId, chatMessage, senderUid)
 
         // 验证 getStreams 没有被发送者调用（已排除）
+        verify(exactly = 0) { userStreamRegistry.getStreams(senderUid) }
         // 但 receiverUid 被调用了
         verify { userStreamRegistry.getStreams(receiverUid) }
     }
@@ -79,8 +84,13 @@ class PushServiceTest {
 
         pushService.pushMessage(convId, chatMessage, senderUid)
 
-        // 验证对 observer 调用了 onNext
-        verify(exactly = 1) { observer.onNext(any()) }
+        // 捕获 Envelope 并验证 direction 和 pushEventType
+        val envelopeSlot = slot<Envelope>()
+        verify(exactly = 1) { observer.onNext(capture(envelopeSlot)) }
+        val envelope = envelopeSlot.captured
+        assertEquals(Direction.PUSH, envelope.direction, "direction 应为 PUSH")
+        assertEquals(PushEventType.CHAT_MESSAGE, envelope.message.eventType, "pushEventType 应为 CHAT_MESSAGE")
+        assertNotNull(envelope.message.payload, "payload 不应为空")
     }
 
     @Test
@@ -112,7 +122,12 @@ class PushServiceTest {
 
         pushService.pushReadReceipt(senderUid, payload)
 
-        verify(exactly = 1) { observer.onNext(any()) }
+        // 捕获 Envelope 并验证 pushEventType
+        val envelopeSlot = slot<Envelope>()
+        verify(exactly = 1) { observer.onNext(capture(envelopeSlot)) }
+        val envelope = envelopeSlot.captured
+        assertEquals(Direction.PUSH, envelope.direction, "direction 应为 PUSH")
+        assertEquals(PushEventType.READ_RECEIPT, envelope.message.eventType, "pushEventType 应为 READ_RECEIPT")
     }
 
     @Test
@@ -164,8 +179,14 @@ class PushServiceTest {
             excludeUids = setOf(otherUid)
         )
 
-        // receiverUid 未在排除列表，应收到推送
-        verify(exactly = 1) { observer.onNext(any()) }
+        // receiverUid 未在排除列表，应收到推送，且验证 Envelope 内容
+        val envelopeSlot = slot<Envelope>()
+        verify(exactly = 1) { observer.onNext(capture(envelopeSlot)) }
+        assertEquals(
+            PushEventType.GROUP_CREATED,
+            envelopeSlot.captured.message.eventType,
+            "pushEventType 应为 GROUP_CREATED"
+        )
     }
 
     @Test
@@ -222,7 +243,12 @@ class PushServiceTest {
             payloadBytes = ByteString.EMPTY
         )
 
-        verify(exactly = 1) { observer.onNext(any()) }
+        // 捕获 Envelope 并验证 eventType 和 payload
+        val envelopeSlot = slot<Envelope>()
+        verify(exactly = 1) { observer.onNext(capture(envelopeSlot)) }
+        val envelope = envelopeSlot.captured
+        assertEquals(PushEventType.MEMBER_KICKED, envelope.message.eventType, "pushEventType 应为 MEMBER_KICKED")
+        assertEquals(ByteString.EMPTY, envelope.message.payload, "payload 应为传入的 ByteString.EMPTY")
     }
 
     @Test
