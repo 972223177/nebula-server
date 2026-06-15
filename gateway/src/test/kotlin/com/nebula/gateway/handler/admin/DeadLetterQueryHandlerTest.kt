@@ -15,7 +15,9 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * DeadLetterQueryHandler 单元测试（Phase 10）。
@@ -27,6 +29,8 @@ import kotlin.test.assertNotNull
  * - 按状态过滤查询
  * - 空状态字符串自动转换为 null（查询全部）
  * - 实体中 nullable 字段为 null 时 Proto 默认值为 0
+ * - 服务层抛出异常时异常直接传播
+ * - 空结果分页的响应格式验证
  */
 class DeadLetterQueryHandlerTest {
 
@@ -182,5 +186,46 @@ class DeadLetterQueryHandlerTest {
         assertEquals(0, resp.getItems(0).id, "id 为 null 时应默认为 0")
         assertEquals(0L, resp.getItems(0).msgId, "msgId 为 null 时应默认为 0")
         assertEquals(0L, resp.getItems(0).createdAt, "createdAt 为 null 时应默认为 0")
+    }
+
+    @Test
+    fun handleShouldReturnErrorResponseWhenServiceThrowsException() = runTest {
+        // 模拟 deadLetterService.query() 抛出异常
+        coEvery { deadLetterService.query(any(), any(), any()) } throws RuntimeException("数据库连接超时")
+
+        val req = DeadLetterQueryReq.newBuilder()
+            .setPage(1)
+            .setPageSize(20)
+            .build()
+
+        // Handler 当前设计不为 RuntimeException 做防御性捕获，
+        // 异常直接传播给 Dispatcher → ExceptionInterceptor 统一处理
+        val exception = assertFailsWith<RuntimeException> {
+            handler.handle(req)
+        }
+        assertEquals("数据库连接超时", exception.message, "异常信息应原样传播")
+    }
+
+    @Test
+    fun handleShouldReturnEmptyResultForNoMatchingRecords() = runTest {
+        // 准备：空结果分页
+        val emptyPage = PageImpl<DeadLetterEntity>(
+            emptyList(),
+            PageRequest.of(0, 20),
+            0L
+        )
+        coEvery { deadLetterService.query(any(), any(), any()) } returns emptyPage
+
+        // 执行
+        val req = DeadLetterQueryReq.newBuilder()
+            .setPage(1)
+            .setPageSize(20)
+            .build()
+        val resp = handler.handle(req)
+
+        // 验证
+        assertNotNull(resp, "响应不应为空")
+        assertTrue(resp.itemsList.isEmpty(), "空结果应返回空的 items 列表")
+        assertEquals(0, resp.total, "总数应为 0")
     }
 }

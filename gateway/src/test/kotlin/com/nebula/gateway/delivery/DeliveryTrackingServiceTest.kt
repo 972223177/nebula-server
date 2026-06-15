@@ -102,6 +102,37 @@ class DeliveryTrackingServiceTest {
         coVerify(exactly = 0) { tracker.setStatus(any(), any(), any()) }
     }
 
+    @Test
+    fun markDeliveredShouldSucceedWhenCurrentIsNull() = runTest {
+        // 键不存在（getStatus 返回 null）→ 应正常写入 delivered 状态（D-70 首次标记）
+        coEvery { tracker.getStatus(msgId, uid) } returns null
+        coEvery { tracker.setStatus(msgId, uid, 1) } returns true
+
+        val result = service.markDelivered(msgId, uid)
+
+        assertEquals(true, result, "当前状态为 null（键不存在）时 markDelivered 应成功")
+        coVerify {
+            tracker.getStatus(msgId, uid)
+            tracker.setStatus(msgId, uid, 1)
+        }
+    }
+
+    @Test
+    fun markDeliveredShouldPreventDuplicateFromMultipleDevices() = runTest {
+        // 模拟多设备场景：第一设备标记 sent→delivered 成功
+        coEvery { tracker.getStatus(msgId, uid) } returns 0 andThen 1
+        coEvery { tracker.setStatus(msgId, uid, 1) } returns true
+
+        val result1 = service.markDelivered(msgId, uid)
+        assertEquals(true, result1, "第一设备 markDelivered 应成功")
+
+        // 第二设备尝试标记 → 因已 delivered 被拒绝（HSETNX 语义）
+        val result2 = service.markDelivered(msgId, uid)
+        assertEquals(false, result2, "多设备重复 markDelivered 应被拒绝")
+
+        coVerify(exactly = 1) { tracker.setStatus(msgId, uid, 1) }
+    }
+
     // ──────────────────────────────────────────────
     // markRead
     // ──────────────────────────────────────────────
