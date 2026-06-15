@@ -37,7 +37,7 @@ class GatewayModuleChatTest : HandlerRegistryTestBase() {
         single { scope }
         single { UserStreamRegistry() }
 
-        single { SendMessageHandler(messageService, pushService, get(), get(), get()) }
+        single { SendMessageHandler(messageService, pushService, get(), get(), get(), get()) }
         single { PullMessagesHandler(messageService) }
         single { ReadReportHandler(messageService, get(), get(), pushService, get()) }
         single { MessageSeqHandler(seqService) }

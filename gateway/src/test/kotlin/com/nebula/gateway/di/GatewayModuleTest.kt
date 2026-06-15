@@ -143,7 +143,7 @@ class GatewayModuleTest {
         single { scope }
         single { UserStreamRegistry() }
         single { PushService(get(), get(), get()) }
-        single { SendMessageHandler(messageService, get(), get(), get(), get()) }
+        single { SendMessageHandler(messageService, get(), get(), get(), get(), get()) }
         single { PullMessagesHandler(messageService) }
         single { ReadReportHandler(messageService, get(), get(), get(), get()) }
 
@@ -156,7 +156,7 @@ class GatewayModuleTest {
         single { ListConversationsHandler(conversationService) }
         single { GroupMembersHandler(conversationService) }
         single { EditGroupHandler(conversationService, get()) }
-        single { CreateGroupHandler(conversationService, get(), get()) }
+        single { CreateGroupHandler(conversationService, get(), get(), get()) }
         single { InviteMemberHandler(conversationService, get(), get(), get(), get()) }
         single { LeaveGroupHandler(conversationService, get(), get(), get(), get()) }
         single { KickMemberHandler(conversationService, get(), get(), get(), get()) }
@@ -166,8 +166,8 @@ class GatewayModuleTest {
         single { FriendRequestsHandler(friendService) }
         single { FriendListHandler(friendService) }
         single { FriendDeleteHandler(friendService) }
-        single { FriendAddHandler(friendService, get(), get()) }
-        single { FriendAcceptHandler(friendService, get(), get()) }
+        single { FriendAddHandler(friendService, get(), get(), get(), get()) }
+        single { FriendAcceptHandler(friendService, get(), get(), get(), get()) }
     }
 
     @AfterEach

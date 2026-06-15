@@ -112,7 +112,7 @@ class FriendSmokeTest {
         )
 
         val dispatcher = singleHandlerDispatcher(
-            FriendAddHandler(friendService, pushService, mockLockManager()),
+            FriendAddHandler(friendService, pushService, mockLockManager(), mockk(), mockk()),
             FriendAddReq::class, FriendAddResp::class
         )
 
@@ -131,7 +131,7 @@ class FriendSmokeTest {
     @Test
     fun friendAddSelfApplicationShouldReturnSelfFriend() = runTest {
         val dispatcher = singleHandlerDispatcher(
-            FriendAddHandler(friendService, pushService, mockLockManager()),
+            FriendAddHandler(friendService, pushService, mockLockManager(), mockk(), mockk()),
             FriendAddReq::class, FriendAddResp::class
         )
         coEvery { friendService.addFriend(any(), any()) } throws FriendException(BizCode.SELF_FRIEND)
@@ -150,7 +150,7 @@ class FriendSmokeTest {
         )
 
         val dispatcher = singleHandlerDispatcher(
-            FriendAddHandler(friendService, pushService, mockLockManager()),
+            FriendAddHandler(friendService, pushService, mockLockManager(), mockk(), mockk()),
             FriendAddReq::class, FriendAddResp::class
         )
 
@@ -176,7 +176,7 @@ class FriendSmokeTest {
         )
 
         val dispatcher = singleHandlerDispatcher(
-            FriendAcceptHandler(friendService, pushService, mockLockManager()),
+            FriendAcceptHandler(friendService, pushService, mockLockManager(), mockk(), mockk()),
             FriendAcceptReq::class, Response::class
         )
 
@@ -194,7 +194,7 @@ class FriendSmokeTest {
         coEvery { friendService.acceptFriendRequest(any(), any()) } throws FriendException(BizCode.REQUEST_NOT_FOUND)
 
         val dispatcher = singleHandlerDispatcher(
-            FriendAcceptHandler(friendService, pushService, mockLockManager()),
+            FriendAcceptHandler(friendService, pushService, mockLockManager(), mockk(), mockk()),
             FriendAcceptReq::class, Response::class
         )
 
@@ -375,10 +375,10 @@ class FriendSmokeTest {
     fun fullFlowShouldCompleteFriendLifecycle() = runTest {
         // 预创建所有 Handler
         val addHandler = FriendAddHandler(
-            friendService, pushService, mockLockManager()
+            friendService, pushService, mockLockManager(), mockk(), mockk()
         )
         val acceptHandler = FriendAcceptHandler(
-            friendService, pushService, mockLockManager()
+            friendService, pushService, mockLockManager(), mockk(), mockk()
         )
         val rejectHandler = FriendRejectHandler(friendService)
         val deleteHandler = FriendDeleteHandler(friendService)

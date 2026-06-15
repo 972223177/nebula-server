@@ -137,7 +137,7 @@ class LoginHandlerTest {
         val req = LoginReq.newBuilder()
             .setUsername("auditUser")
             .setPassword("valid-password")
-            .setDeviceType(com.nebula.chat.user.DeviceType.MOBILE)
+            .setDeviceType(com.nebula.chat.common.DeviceType.MOBILE)
             .build()
 
         // 登录成功不应抛出异常，审计日志由 LoginHandler 内部自动记录

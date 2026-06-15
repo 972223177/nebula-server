@@ -53,7 +53,7 @@ class SendMessageHandlerTest {
         connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-        handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, connection, scope)
+        handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, mockk(), connection, scope)
     }
 
     @Test
