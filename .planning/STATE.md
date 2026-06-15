@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
+milestone_name: Phase 1-10 Complete / Phase 11 Code Quality
 status: Phase 10 complete
-last_updated: "2026-06-14T00:00:00.000Z"
+last_updated: "2026-06-15T00:00:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 10
@@ -19,9 +19,9 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** Phase 09 — Reconnection
-**Phase count:** 11
-**Requirements:** 70 v1 requirements mapped
+**Current focus:** Phase 11 — Code Quality & Production Hardening  
+**Phase count:** 11  
+**Requirements:** 85 v1 requirements mapped (70 original + 15 CQ new)
 
 ## Phase Status
 
@@ -37,11 +37,18 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 8 — Friend & Online Status | Complete | 2026-06-13 | 2026-06-13 |
 | 9 — Reconnection | Complete | 2026-06-13 | 2026-06-13 |
 | 10 — Message Reliability | Complete | 2026-06-13 | 2026-06-14 |
-| 11 — Performance & Monitoring | Pending | — | — |
+| 11 — Code Quality & Production Hardening | Pending | — | — |
 
 ## Next Actions
 
-1. `/nx-discuss 11` — 开始阶段 11（Performance & Monitoring）讨论
+1. `/nx-discuss 11` — 开始阶段 11（Code Quality & Production Hardening）讨论
+2. 阶段 11 基于 2026-06-15 全量代码审查结果：85 个问题（18 HIGH / 36 MEDIUM / 31 LOW）跨越 5 个模块
+
+## Recent Events
+
+| Date | Task | Impact |
+|------|------|--------|
+| 2026-06-15 | 全量代码审查 | 5 并行 subagent 审查 common/repository/service/gateway/server 模块，发现 85 个问题（18 HIGH / 36 MEDIUM / 31 LOW）。生成综合问题清单，作为 Phase 11 需求基线 |
 
 ## Quick Tasks Completed
 

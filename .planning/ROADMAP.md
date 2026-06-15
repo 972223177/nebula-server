@@ -5,7 +5,7 @@
 
 ## Overview
 
-**11 phases** | **70 v1 requirements mapped** | 100% covered
+**11 phases** | **85 v1 requirements mapped** | 91% covered (Phase 1-10 complete)
 
 | Phase | Name | Requirements | Success Criteria |
 |-------|------|--------------|------------------|
@@ -19,7 +19,7 @@
 | 8 | Friend & Online Status | BIZ-FRIEND-01~06, BIZ-STATUS-01~03 | Add/accept/reject/delete/list, status visibility |
 | 9 | Reconnection | RECON-01~05 | State machine, exponential backoff, connection cleanup |
 | 10 | Message Reliability | REL-01~04 | 3-state delivery, idempotent retry, dead letter, gap detect |
-| 11 | Performance & Monitoring | PERF-01~05 | Scenarios, metrics, tools, optimization, alerts |
+| 11 | Code Quality & Production Hardening | CQ-01~15 | Fix 18 HIGH + 36 MEDIUM + 31 LOW issues from code review |
 
 ---
 
@@ -291,20 +291,38 @@ Plans:
 
 ---
 
-## Phase 11: Performance & Monitoring
+## Phase 11: Code Quality & Production Hardening
 
-**Goal:** Define benchmark scenarios, set up monitoring, run performance tests, optimize.
+**Goal:** Fix all HIGH/MEDIUM severity issues discovered in cross-module code review, and address LOW issues for maintainability.
 
-**Requirements:** PERF-01, PERF-02, PERF-03, PERF-04, PERF-05
+**Requirements:** CQ-01, CQ-02, CQ-03, CQ-04, CQ-05, CQ-06, CQ-07, CQ-08, CQ-09, CQ-10, CQ-11, CQ-12, CQ-13, CQ-14, CQ-15
 
 **Success Criteria:**
 
-1. 5 benchmark scenarios defined and runnable
-2. 8 metrics collected per test run
-3. Testing tool selected and configured
-4. Measured baselines for each metric
-5. 4-layer optimization plan documented
-6. Production monitoring with 8 alert thresholds configured
+1. All 18 HIGH severity issues resolved (dead code removed, transactions added, race conditions fixed, shutdown hook added)
+2. All 36 MEDIUM severity issues resolved (security configs, N+1 queries, data loss paths, logging, validation)
+3. All 31 LOW severity issues resolved (code quality improvements, test enhancements, cleanup)
+4. No regression — all existing tests pass
+5. Each fix verified with unit/integration test where applicable
+
+**Plans:** 4 plans in 3 waves
+
+**Background:** 2026-06-15 cross-module code review by 5 parallel agents found 85 issues (18 HIGH, 36 MEDIUM, 31 LOW) across all 5 modules (common, repository, service, gateway, server).
+
+Plans:
+
+**Wave 1** *(autonomous — P0 HIGH severity safety/production issues)*
+
+- [ ] 11-01-PLAN.md — Security & Production Hardening (SHUTDOWN, SSL, Redis, Password Leak)
+- [ ] 11-02-PLAN.md — Data Consistency & Race Conditions (Service Transaction + Repository Race Fix)
+
+**Wave 2** *(parallel — P1 MEDIUM business correctness issues)*
+
+- [ ] 11-03-PLAN.md — Data Integrity & Error Handling (N+1 Queries, Pagination Bug, Payload Loss, Dead Code Fix)
+
+**Wave 3** *(parallel — P2 LOW code quality & test improvements)*
+
+- [ ] 11-04-PLAN.md — Code Quality & Test Hardening (Magic Numbers, Null Safety, Test Coverage, Logging)
 
 ---
 
@@ -380,11 +398,21 @@ Plans:
 | REL-02 | 10 | Pending |
 | REL-03 | 10 | Pending |
 | REL-04 | 10 | Pending |
-| PERF-01 | 11 | Pending |
-| PERF-02 | 11 | Pending |
-| PERF-03 | 11 | Pending |
-| PERF-04 | 11 | Pending |
-| PERF-05 | 11 | Pending |
+| CQ-01 | 11 | Pending |
+| CQ-02 | 11 | Pending |
+| CQ-03 | 11 | Pending |
+| CQ-04 | 11 | Pending |
+| CQ-05 | 11 | Pending |
+| CQ-06 | 11 | Pending |
+| CQ-07 | 11 | Pending |
+| CQ-08 | 11 | Pending |
+| CQ-09 | 11 | Pending |
+| CQ-10 | 11 | Pending |
+| CQ-11 | 11 | Pending |
+| CQ-12 | 11 | Pending |
+| CQ-13 | 11 | Pending |
+| CQ-14 | 11 | Pending |
+| CQ-15 | 11 | Pending |
 
 ---
 
@@ -398,7 +426,7 @@ Plans:
 - Phase 6 blocks 10 — chat reliability depends on message flow
 - Phase 8 blocks 9 — online status needed for reconnection logic
 - Phase 9 blocks 10 — reconnection is foundation for message reliability
-- Phase 11 independent — can start after Phase 3 when basic functionality exists
+- Phase 11 independent — can start immediately, all Phase 1-10 source code available for fixes
 
 ---
 

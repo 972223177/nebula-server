@@ -88,11 +88,14 @@ object ConfigLoader {
                 connectionTimeout = config.getLong("database.connection-timeout"),
                 idleTimeout = config.getLong("database.idle-timeout"),
                 maxLifetime = config.getLong("database.max-lifetime"),
-                leakDetectionThreshold = config.getLong("database.leak-detection-threshold")
+                leakDetectionThreshold = config.getLong("database.leak-detection-threshold"),
+                sslEnabled = if (config.hasPath("database.ssl")) config.getBoolean("database.ssl") else false
             ),
             redis = RedisConfig(
                 host = config.getString("redis.host"),
-                port = config.getInt("redis.port")
+                port = config.getInt("redis.port"),
+                password = if (config.hasPath("redis.password")) config.getString("redis.password") else "",
+                ssl = if (config.hasPath("redis.ssl")) config.getBoolean("redis.ssl") else false
             ),
             ssl = SslConfig(
                 enabled = config.getBoolean("ssl.enabled"),

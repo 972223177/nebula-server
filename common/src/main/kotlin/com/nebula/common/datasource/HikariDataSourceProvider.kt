@@ -69,13 +69,15 @@ class HikariDataSourceProvider(
      * 构建 MySQL JDBC 连接 URL。
      *
      * 统一拼接 JDBC URL 以保证所有连接使用相同的 SSL、编码和时区设置，避免多环境连接行为不一致。
-     * 生产环境 SSL 模式设置为 PREFERRED，允许降级到非加密连接以兼容内网部署。
+     * SSL 模式根据配置动态选择（D-77）：生产环境 VERIFY_CA，开发环境 DISABLED。
      *
      * @return MySQL JDBC 连接 URL 字符串，包含 SSL/编码/时区参数
      */
     private fun buildJdbcUrl(): String {
+        // D-77: sslEnabled 为 true 时使用 VERIFY_CA（严格要求证书校验），否则禁用 SSL
+        val sslMode = if (config.sslEnabled) "VERIFY_CA" else "DISABLED"
         return "jdbc:mysql://${config.host}:${config.port}/${config.database}" +
-                "?sslMode=PREFERRED" +
+                "?sslMode=$sslMode" +
                 "&useUnicode=true" +
                 "&characterEncoding=UTF-8" +
                 "&serverTimezone=UTC"
