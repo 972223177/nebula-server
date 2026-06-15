@@ -10,6 +10,7 @@ import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
+import com.nebula.repository.repository.findByIdOrNull
 import com.nebula.service.chat.MessageService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi

@@ -9,6 +9,7 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.service.user.UserService
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.slf4j.LoggerFactory
 import java.util.UUID
 
 /**
@@ -36,7 +37,7 @@ class LoginHandler(
             val existingSession = sessionRegistry.validate(token)
             if (existingSession != null) {
                 // CQ-10: Token 重连审计日志
-                logger.info(AuditMarkers.LOGIN) { "user_login | uid=${existingSession.userId} | method=token | success=true | device=${req.deviceType}" }
+                auditLogger.info(AuditMarkers.LOGIN, "user_login | uid=${existingSession.userId} | method=token | success=true | device=${req.deviceType}")
                 return buildLoginResp(existingSession.userId, existingSession.token, req)
             }
         }
@@ -46,11 +47,11 @@ class LoginHandler(
             val userId = userService.loginByPassword(req)
             val token = UUID.randomUUID().toString()
             // CQ-10: 密码登录成功审计日志
-            logger.info(AuditMarkers.LOGIN) { "user_login | uid=$userId | method=password | success=true | device=${req.deviceType}" }
+            auditLogger.info(AuditMarkers.LOGIN, "user_login | uid=$userId | method=password | success=true | device=${req.deviceType}")
             buildLoginResp(userId, token, req)
         } catch (e: UserException) {
             // CQ-10: 密码登录失败审计日志
-            logger.warn(AuditMarkers.LOGIN) { "user_login | uid=unknown | method=password | success=false | reason=${e.bizCode.name}" }
+            auditLogger.warn(AuditMarkers.LOGIN, "user_login | uid=unknown | method=password | success=false | reason=${e.bizCode.name}")
             throw e
         }
     }
@@ -75,6 +76,7 @@ class LoginHandler(
     }
 
     companion object {
-        private val logger = KotlinLogging.logger {}
+        /** 审计日志记录器 — 使用 SLF4J 原生 API 支持 Marker */
+        private val auditLogger = LoggerFactory.getLogger(LoginHandler::class.java)
     }
 }

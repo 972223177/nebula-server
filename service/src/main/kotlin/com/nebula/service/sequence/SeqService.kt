@@ -103,6 +103,6 @@ class SeqService(
      */
     suspend fun tryRestoreSeq(convId: String, uid: Long, nextSeq: Long): Boolean {
         val redisKey = key(convId, uid)
-        return redis.setnx(redisKey, nextSeq.toString())
+        return redis.setnx(redisKey, nextSeq.toString()) ?: false
     }
 }

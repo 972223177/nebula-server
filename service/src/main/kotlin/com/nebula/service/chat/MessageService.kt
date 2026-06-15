@@ -18,6 +18,7 @@ import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.MessageRepository
+import com.nebula.repository.repository.findByIdOrNull
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -43,6 +43,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.hibernate.core)
     implementation(libs.spring.tx)
+    implementation(libs.hikaricp)
+    implementation(libs.spring.data.jpa)
 
     // Phase 4: Handler Framework — Koin 启动
     implementation(libs.koin.core)

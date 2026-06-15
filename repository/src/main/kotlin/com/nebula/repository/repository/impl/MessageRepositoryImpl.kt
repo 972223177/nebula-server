@@ -4,7 +4,6 @@ import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.MessageWriteRepository
-import com.nebula.service.admin.DeadLetterService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.EntityManagerFactory
 import kotlinx.coroutines.CoroutineScope
@@ -15,8 +14,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.springframework.dao.DataIntegrityViolationException
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 
 /**
  * 消息写入路径实现（DB-03, D-11）。
@@ -34,12 +31,17 @@ class MessageRepositoryImpl(
     private val messageQueue: MessageQueueRepository,
     private val jpaMessageRepo: MessageRepository,
     private val emf: EntityManagerFactory
-) : MessageWriteRepository, KoinComponent {
-
-    /** M11: 通过 Koin 延迟注入 DeadLetterService，避免 Repository 层与 Gateway 层的初始化循环依赖 */
-    private val deadLetterService: DeadLetterService by inject()
+) : MessageWriteRepository {
 
     private val logger = KotlinLogging.logger {}
+
+    /**
+     * M11: 死信创建回调 — 由 Gateway 层在启动后注入。
+     *
+     * 签名：(conversationId, senderUid, messageType, content, payload, clientMsgId, clientTs, failReason) → Unit
+     * 使用基本类型避免跨模块依赖。
+     */
+    var onDeadLetter: (suspend (String, Long, Int, String, ByteArray?, String?, Long, String) -> Unit)? = null
     @Volatile
     private var stopped = false
 
@@ -100,24 +102,27 @@ class MessageRepositoryImpl(
         } catch (e: DataIntegrityViolationException) {
             logger.warn(e) { "唯一索引冲突，为冲突消息创建死信记录" }
             // M11: UK 冲突时为每条消息创建死信记录，而非静默跳过
-            entries.forEach { entry ->
-                val parsed = parseToEntity(entry)
-                if (parsed != null) {
-                    try {
-                        runBlocking {
-                            deadLetterService.create(
-                                conversationId = parsed.conversationId,
-                                senderUid = parsed.senderUid,
-                                messageType = parsed.messageType,
-                                content = parsed.content,
-                                payload = parsed.payload,
-                                clientMsgId = parsed.clientMessageId,
-                                clientTs = parsed.clientTs,
-                                failReason = "UK 冲突: client_msg_id=${parsed.clientMessageId}"
-                            )
+            val handler = onDeadLetter
+            if (handler != null) {
+                entries.forEach { entry ->
+                    val parsed = parseToEntity(entry)
+                    if (parsed != null) {
+                        try {
+                            runBlocking {
+                                handler(
+                                    parsed.conversationId,
+                                    parsed.senderUid,
+                                    parsed.messageType,
+                                    parsed.content,
+                                    parsed.payload,
+                                    parsed.clientMessageId,
+                                    parsed.clientTs,
+                                    "UK 冲突: client_msg_id=${parsed.clientMessageId}"
+                                )
+                            }
+                        } catch (dlEx: Exception) {
+                            logger.error(dlEx) { "创建死信记录失败: clientMsgId=${parsed.clientMessageId}" }
                         }
-                    } catch (dlEx: Exception) {
-                        logger.error(dlEx) { "创建死信记录失败: clientMsgId=${parsed.clientMessageId}" }
                     }
                 }
             }
