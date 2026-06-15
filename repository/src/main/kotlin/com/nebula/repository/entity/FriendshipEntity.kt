@@ -30,3 +30,10 @@ class FriendshipEntity(
     /** 软删除标记：0=正常, 1=已删除 */
     var deleted: Int = 0
 }
+
+/**
+ * 好友关系是否有效（未软删除）（D-86, CQ-15/L05）。
+ *
+ * 替代魔法数字 `deleted == 0` 的语义化访问。
+ */
+val FriendshipEntity.isActive: Boolean get() = deleted == 0

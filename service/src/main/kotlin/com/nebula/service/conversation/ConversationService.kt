@@ -15,9 +15,11 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
+import com.nebula.repository.entity.isActive
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.repository.repository.findByIdOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -186,7 +188,7 @@ class ConversationService(
      */
     suspend fun inviteMember(req: InviteMemberReq, operatorUid: Long): List<Long> {
         val convId = req.conversationId
-        val conv = withContext(Dispatchers.IO) { conversationRepository.findById(convId).orElse(null) }
+        val conv = conversationRepository.findByIdOrNull(convId)
             ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
         // 验证操作者是群主
@@ -207,9 +209,9 @@ class ConversationService(
 
         for (uid in req.uidsList) {
             val existing = existingMap[uid]
-            if (existing != null && existing.deleted == 0) continue // 已在群中
+            if (existing != null && existing.isActive) continue // 已在群中
 
-            if (existing != null && existing.deleted == 1) {
+            if (existing != null && !existing.isActive) {
                 // 恢复已退出的成员
                 existing.deleted = 0
                 existing.joinedAt = now
@@ -242,7 +244,7 @@ class ConversationService(
      */
     suspend fun leaveGroup(req: LeaveGroupReq, userId: Long) {
         val convId = req.conversationId
-        val conv = withContext(Dispatchers.IO) { conversationRepository.findById(convId).orElse(null) }
+        val conv = conversationRepository.findByIdOrNull(convId)
             ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
         val member = withContext(Dispatchers.IO) {
@@ -279,7 +281,7 @@ class ConversationService(
         val convId = req.conversationId
         val targetUid = req.uid
 
-        val conv = withContext(Dispatchers.IO) { conversationRepository.findById(convId).orElse(null) }
+        val conv = conversationRepository.findByIdOrNull(convId)
             ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
         // 验证操作者是群主
@@ -322,7 +324,7 @@ class ConversationService(
      */
     suspend fun editGroupInfo(req: EditGroupReq, operatorUid: Long) {
         val convId = req.conversationId
-        val conv = withContext(Dispatchers.IO) { conversationRepository.findById(convId).orElse(null) }
+        val conv = conversationRepository.findByIdOrNull(convId)
             ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
         // 验证操作者是群主
@@ -361,13 +363,13 @@ class ConversationService(
         val member = withContext(Dispatchers.IO) {
             conversationMemberRepository.findByConversationIdAndUserId(convId, userId)
         }
-        if (member == null || member.deleted == 1) {
+        if (member == null || !member.isActive) {
             throw ConversationException(BizCode.NOT_MEMBER)
         }
 
         val members = withContext(Dispatchers.IO) {
             conversationMemberRepository.findByConversationId(convId)
-        }.filter { it.deleted == 0 }
+        }.filter { it.isActive }
 
         val uidList = members.map { it.userId }
         val userMap = if (uidList.isNotEmpty()) {

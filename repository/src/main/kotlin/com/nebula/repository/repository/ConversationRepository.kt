@@ -1,6 +1,8 @@
 package com.nebula.repository.repository
 
 import com.nebula.repository.entity.ConversationEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
@@ -61,3 +63,14 @@ interface ConversationRepository : JpaRepository<ConversationEntity, String> {
         @Param("delta") delta: Int
     ): Int
 }
+
+/**
+ * 按 ID 查找会话，不存在时返回 null（D-86, CQ-15/L14）。
+ *
+ * 替代重复 9 次的 `withContext(Dispatchers.IO) { findById(id).orElse(null) }` 模式。
+ *
+ * @param id 会话 ID
+ * @return 会话实体，不存在时返回 null
+ */
+suspend fun ConversationRepository.findByIdOrNull(id: String): ConversationEntity? =
+    withContext(Dispatchers.IO) { findById(id).orElse(null) }

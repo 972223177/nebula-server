@@ -45,3 +45,10 @@ class ConversationMemberEntity(
     @Column(nullable = false, updatable = false)
     var joinedAt: LocalDateTime? = null
 }
+
+/**
+ * 成员是否为活跃状态（未软删除）（D-86, CQ-15/L06）。
+ *
+ * 替代魔法数字 `deleted == 0` 的语义化访问。
+ */
+val ConversationMemberEntity.isActive: Boolean get() = deleted == 0
