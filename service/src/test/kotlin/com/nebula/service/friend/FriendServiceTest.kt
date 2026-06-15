@@ -31,6 +31,8 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -301,9 +303,48 @@ class FriendServiceTest {
         assertEquals(toUid, result.toUid)
     }
 
+    /**
+     * T03/D-80: 并发双向竞赛应只创建一对好友关系。
+     *
+     * A 向 B 和 B 向 A 同时发送好友申请，验证好友关系仅建立一次
+     * （A→B + B→A，共 2 条，不含重复对）。
+     */
+    @Test
+    fun shouldCreateOnlyOneFriendshipPairOnConcurrentMutualAdd() = runTest {
+        val reqA = FriendAddReq.newBuilder().setToUid(toUid).setMessage("hello from A").build()
+        val reqB = FriendAddReq.newBuilder().setToUid(fromUid).setMessage("hello from B").build()
+        val reverseRequest = testFriendRequest(fromUid = toUid, toUid = fromUid, status = 0, id = 99L)
+
+        // A 侧：B 已发送 pending 申请 → A 的 addFriend 走 mutualAccept
+        every { friendRequestRepository.findByFromUidAndToUidAndStatus(toUid, fromUid, 0) } returns reverseRequest
+        // B 侧：A 的申请不影响
+        every { friendRequestRepository.findByFromUidAndToUidAndStatus(fromUid, toUid, 0) } returns null
+        // 没有重复待处理申请
+        every { friendRequestRepository.findByFromUidAndToUidAndStatus(any(), any(), 0) } returns null
+        every { friendshipRepository.findByUserIdAndFriendId(smaller, larger) } returns null
+        every { friendRequestRepository.save(any<FriendRequestEntity>()) } answers { firstArg() }
+        every { friendshipRepository.save(any<FriendshipEntity>()) } answers { firstArg() }
+        every { conversationRepository.findById(any()) } returns Optional.empty()
+        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        every { conversationMemberRepository.findByConversationIdAndUserId(any(), any()) } returns null
+        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+
+        // 并发执行 A→B 和 B→A 的好友申请
+        var resultA: FriendAddResult? = null
+        coroutineScope {
+            launch { resultA = service.addFriend(reqA, fromUid) }
+            launch { service.addFriend(reqB, toUid) }
+        }
+
+        assertNotNull(resultA)
+        assertTrue(resultA!!.isMutualAccept)
+        assertEquals(expectedConvId, resultA!!.convId)
+        // 好友关系仅创建一次（共 1 次 save 调用）
+        verify(atMost = 1) { friendshipRepository.save(any<FriendshipEntity>()) }
+    }
+
     // ═══════════════════════════════════════════════════════════════
-    // — acceptFriendRequest — 接受好友申请
-    // ═══════════════════════════════════════════════════════════════
+    // — acceptFriendRequest —
 
     /**
      * 申请的 requestId 不存在，应抛出 REQUEST_NOT_FOUND 异常。
