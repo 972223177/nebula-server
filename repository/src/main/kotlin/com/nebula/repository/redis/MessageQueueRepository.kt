@@ -75,9 +75,15 @@ class MessageQueueRepository(
      * @return 消费到的消息列表
      */
     suspend fun consume(batchSize: Long, blockMs: Long): List<StreamMessage<String, String>> {
+        val args = XReadArgs.Builder.count(batchSize)
+        // D-xx: blockMs <= 0 时不设置 BLOCK 选项，避免 Redis 将 BLOCK 0 理解为"永远阻塞"
+        // 详见 Lettuce 实现：不调用 .block() 时 XREADGROUP 为立即返回（非阻塞模式）
+        if (blockMs > 0) {
+            args.block(blockMs)
+        }
         return redis.xreadgroup(
             Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
-            XReadArgs.Builder.count(batchSize).block(blockMs),
+            args,
             XReadArgs.StreamOffset.lastConsumed(STREAM_KEY)
         ).toList()
     }
