@@ -75,9 +75,17 @@ class Dispatcher(
                 .setMsg("method not found: $method")
                 .build()
 
-        // Step 2: 反序列化请求参数
+        // Step 2: 反序列化请求参数（CQ-05: 捕获反序列化异常返回错误响应）
         @Suppress("UNCHECKED_CAST")
-        val req = protoCodec.deserialize(entry, envelopeRequest.params)
+        val req = try {
+            protoCodec.deserialize(entry, envelopeRequest.params)
+        } catch (e: Exception) {
+            logger.error(e) { "请求参数反序列化失败: method=$method" }
+            return Response.newBuilder()
+                .setCode(BizCode.INVALID_PARAM.code)
+                .setMsg("请求参数反序列化失败: ${e.message}")
+                .build()
+        }
 
         // Step 3: 构建 Pipeline 链尾 — 最终调用 Handler
         val handlerChain: Interceptor.Chain = object : Interceptor.Chain {
