@@ -44,7 +44,7 @@ class JpaConfig(
             )
         }
         emfBean.afterPropertiesSet()
-        emfBean.getObject()!!
+        emfBean.getObject() ?: error("EntityManagerFactory 未初始化")
     }
 
     /**

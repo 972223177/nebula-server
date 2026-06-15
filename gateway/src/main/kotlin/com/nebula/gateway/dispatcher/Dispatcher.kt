@@ -44,7 +44,6 @@ class Dispatcher(
      * [SupervisorJob] 隔离单个 Handler 异常，[CoroutineExceptionHandler] 兜底防止 JVM 崩溃。
      * 使用 `warn` 级别避免与 ExceptionInterceptor 的 `error` 日志重复。
      */
-    @Suppress("unused")
     private val scope = CoroutineScope(
         Dispatchers.IO +
         SupervisorJob() +
