@@ -47,9 +47,26 @@ object ConfigLoader {
 
         // 系统属性优先级最高，可覆盖文件配置（用于 K8s ConfigMap 注入 -D 参数）
         val fileConfig = ConfigFactory.parseFile(File(configPath))
+
+        // 非生产环境加载 config/{env}.conf 作为开发默认值回退层
+        // 避免开发者每次手动设置数据库密码等环境变量
+        val envConfig = if (env != "prod") {
+            val envPath = "config/${env}.conf"
+            val envFile = File(envPath)
+            if (envFile.exists()) {
+                log.info { "加载环境配置: $envPath" }
+                ConfigFactory.parseFile(envFile)
+            } else {
+                ConfigFactory.empty()
+            }
+        } else {
+            ConfigFactory.empty()
+        }
+
         val resolvedConfig = ConfigFactory.systemProperties()
             .withFallback(fileConfig)                          // 第二优先级: 文件配置
-            .withFallback(ConfigFactory.defaultReference())    // 第三优先级: 库默认值
+            .withFallback(envConfig)                           // 第三优先级: 环境回退
+            .withFallback(ConfigFactory.defaultReference())    // 第四优先级: 库默认值
             .resolve()
 
         val appConfig = parseConfig(resolvedConfig, env)
@@ -82,7 +99,7 @@ object ConfigLoader {
                 port = config.getInt("database.port"),
                 database = config.getString("database.database"),
                 username = config.getString("database.username"),
-                password = config.getString("database.password"),
+                password = if (config.hasPath("database.password")) config.getString("database.password") else "",
                 poolSize = config.getInt("database.pool-size"),
                 minIdle = config.getInt("database.min-idle"),
                 connectionTimeout = config.getLong("database.connection-timeout"),
@@ -127,6 +144,11 @@ object ConfigLoader {
         }
 
         // 连接池大小校验（CQ-09: 过大浪费资源，过小无法处理并发）
+        // D-77: 数据库密码为空的警告（开发环境可能无密码，生产环境需设置 DB_PASSWORD）
+        if (config.database.password.isBlank()) {
+            log.warn { "database.password 未设置 — 如果 MySQL 需要密码认证，请设置 DB_PASSWORD 环境变量" }
+        }
+
         require(config.database.poolSize in 1..100) {
             "database.pool-size 必须在 1-100 范围内，当前值: ${config.database.poolSize}"
         }
