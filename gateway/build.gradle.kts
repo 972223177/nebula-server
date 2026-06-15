@@ -14,7 +14,7 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
-    maxParallelForks = 4
+    maxParallelForks = 2
     // 每 50 个测试类复用一个 JVM fork，兼顾隔离与性能
     forkEvery = 50
 }
