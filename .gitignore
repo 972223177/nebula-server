@@ -10,3 +10,4 @@ local.properties
 .env
 out/
 *.class
+.kotlin/
