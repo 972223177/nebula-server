@@ -52,7 +52,9 @@ object ConfigLoader {
             .withFallback(ConfigFactory.defaultReference())    // 第三优先级: 库默认值
             .resolve()
 
-        return parseConfig(resolvedConfig, env)
+        val appConfig = parseConfig(resolvedConfig, env)
+        validateConfig(appConfig)
+        return appConfig
     }
 
     /**
@@ -98,5 +100,37 @@ object ConfigLoader {
                 privateKeyPath = config.getString("ssl.private-key-path")
             )
         )
+    }
+
+    /**
+     * 验证配置值的有效范围（CQ-09）。
+     *
+     * 在应用启动早期阶段执行校验，避免无效配置导致运行时错误。
+     * 端口范围遵循 IANA 标准：系统端口 0-1023 保留，动态端口 49152-65535 可选。
+     *
+     * @param config 已解析的 ApplicationConfig 实例
+     * @throws IllegalArgumentException 当配置值超出有效范围时抛出
+     */
+    private fun validateConfig(config: ApplicationConfig) {
+        // 端口范围校验（CQ-09: 防止使用特权端口或无效端口）
+        require(config.server.port in 1024..65535) {
+            "server.port 必须在 1024-65535 范围内，当前值: ${config.server.port}"
+        }
+        require(config.database.port in 1..65535) {
+            "database.port 必须在 1-65535 范围内，当前值: ${config.database.port}"
+        }
+        require(config.redis.port in 1..65535) {
+            "redis.port 必须在 1-65535 范围内，当前值: ${config.redis.port}"
+        }
+
+        // 连接池大小校验（CQ-09: 过大浪费资源，过小无法处理并发）
+        require(config.database.poolSize in 1..100) {
+            "database.pool-size 必须在 1-100 范围内，当前值: ${config.database.poolSize}"
+        }
+        require(config.database.minIdle in 0..config.database.poolSize) {
+            "database.min-idle(${config.database.minIdle}) 不能超过 pool-size(${config.database.poolSize})"
+        }
+
+        log.info { "配置校验通过 — server.port=${config.server.port}, db.poolSize=${config.database.poolSize}, redis.port=${config.redis.port}" }
     }
 }
