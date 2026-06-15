@@ -25,7 +25,7 @@ val chatHandlerModule = module {
     single { PushService(get(), get(), get()) }
 
     // Handler 注册 — 依赖 Service 层
-    single { SendMessageHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) }
+    single { SendMessageHandler(get(), get(), get(), get(), get(), get(named("sendHandlerScope"))) }
     single { PullMessagesHandler(get()) }
     single { ReadReportHandler(get(), get(), get(), get(), get()) }
 

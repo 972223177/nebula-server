@@ -199,10 +199,13 @@ class ConversationService(
         val newMemberUids = mutableListOf<Long>()
         val now = LocalDateTime.now()
 
+        // D-83/M13: 前置批量查询替代 N+1 循环
+        val existingMap = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationIdAndUserIds(convId, req.uidsList)
+        }.associateBy { it.userId }
+
         for (uid in req.uidsList) {
-            val existing = withContext(Dispatchers.IO) {
-                conversationMemberRepository.findByConversationIdAndUserId(convId, uid)
-            }
+            val existing = existingMap[uid]
             if (existing != null && existing.deleted == 0) continue // 已在群中
 
             if (existing != null && existing.deleted == 1) {

@@ -17,6 +17,8 @@ import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.repository.ConversationMemberRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 消息推送服务（D-11, D-12, D-15）。
@@ -55,7 +57,10 @@ class PushService(
      * @param excludeUid 排除的发送者 userId，不向自己推送
      */
     suspend fun pushMessage(convId: String, chatMessage: ChatMessage, excludeUid: Long) {
-        val members = conversationMemberRepository.findByConversationId(convId)
+        // D-84/M18: 包裹 withContext(Dispatchers.IO) 避免阻塞协程线程
+        val members = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationId(convId)
+        }
         val targets = members.filter { it.userId != excludeUid }
 
         for (member in targets) {
@@ -155,6 +160,38 @@ class PushService(
     }
 
     /**
+     * 向指定成员列表推送 ChatMessage（M29: 复用批量查询结果，避免二次 DB 查询）。
+     *
+     * 与 [pushMessage] 的区别：本方法接受预查询的成员 userId 列表，而非通过 conversationMemberRepository 再次查询。
+     *
+     * @param targetUids 目标用户 ID 列表（已过滤 excludeUid）
+     * @param chatMessage 待推送的 ChatMessage
+     */
+    fun pushMessageToMembers(targetUids: List<Long>, chatMessage: ChatMessage) {
+        for (uid in targetUids) {
+            val observers = userStreamRegistry.getStreams(uid)
+            for (observer in observers) {
+                try {
+                    val envelope = Envelope.newBuilder()
+                        .setDirection(Direction.PUSH)
+                        .setRequestId("")
+                        .setMessage(Message.newBuilder()
+                            .setEventType(PushEventType.CHAT_MESSAGE)
+                            .setContent("")
+                            .setPayload(chatMessage.toByteString())
+                            .build())
+                        .build()
+                    observer.onNext(envelope)
+                    deliveryTrackingService.markSent(chatMessage.msgId, uid)
+                } catch (e: Exception) {
+                    logger.error(e) { "Failed to push CHAT_MESSAGE to userId=$uid" }
+                    userStreamRegistry.removeStream(uid, observer)
+                }
+            }
+        }
+    }
+
+    /**
      * 向会话所有成员推送会话事件（D-11, D-18）。
      *
      * 遍历会话成员列表（排除 excludeUids），为每个成员的所有在线设备构建 PUSH Envelope。
@@ -171,7 +208,10 @@ class PushService(
         payloadBytes: com.google.protobuf.ByteString,
         excludeUids: Set<Long> = emptySet()
     ) {
-        val members = conversationMemberRepository.findByConversationId(convId)
+        // D-84/M18: 包裹 withContext(Dispatchers.IO) 避免阻塞协程线程
+        val members = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationId(convId)
+        }
         val targets = members.filter { it.userId !in excludeUids }
 
         for (member in targets) {

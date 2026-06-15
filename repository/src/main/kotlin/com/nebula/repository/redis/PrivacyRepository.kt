@@ -129,6 +129,7 @@ class PrivacyRepository(
                     }
                 } catch (e: Exception) {
                     logger.error(e) { "Async MySQL privacy update failed for userId=$userId" }
+                    throw e  // M26: 重新抛出异常，而非静默吞掉，确保调用方可感知失败
                 }
             }
         } catch (e: TimeoutCancellationException) {
