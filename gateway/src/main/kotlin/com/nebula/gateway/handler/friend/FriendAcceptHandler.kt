@@ -11,6 +11,8 @@ import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.friend.FriendService
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.runBlocking
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 接受好友申请 Handler（D-43, D-45, D-52）。
@@ -22,11 +24,15 @@ import kotlinx.coroutines.currentCoroutineContext
  * @param friendService 好友业务服务
  * @param pushService 推送服务
  * @param lockManager 会话级互斥锁管理器
+ * @param transactionTemplate 编程式事务模板（D-79）
+ * @param friendshipRepository 好友关系仓库（保留供后续使用）
  */
 class FriendAcceptHandler(
     private val friendService: FriendService,
     private val pushService: PushService,
-    private val lockManager: ConversationLockManager
+    private val lockManager: ConversationLockManager,
+    private val transactionTemplate: TransactionTemplate,
+    @Suppress("unused") private val friendshipRepository: com.nebula.repository.repository.FriendshipRepository
 ) : Handler<FriendAcceptReq, Response> {
 
     override val method: String = "friend/accept"
@@ -34,7 +40,12 @@ class FriendAcceptHandler(
     override suspend fun handle(req: FriendAcceptReq): Response {
         val session = currentCoroutineContext().requireSession()
 
-        val result = friendService.acceptFriendRequest(req, session.userId)
+        // D-79/H16: 事务包裹确保跨 Repository 写入原子性
+        val result = transactionTemplate.execute {
+            runBlocking {
+                friendService.acceptFriendRequest(req, session.userId)
+            }
+        }!!
 
         // 推送 FRIEND_ACCEPTED 给双方
         val acceptedPayload = FriendAcceptedPayload.newBuilder()

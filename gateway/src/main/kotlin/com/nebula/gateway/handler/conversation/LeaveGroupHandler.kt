@@ -14,6 +14,7 @@ import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 /**
@@ -58,7 +59,14 @@ class LeaveGroupHandler(
 
         if (selfMember != null && selfMember.role == ROLE_OWNER) {
             // 群主退群 → 解散群（D-09）
-            conversationService.leaveGroup(req, session.userId)
+            // D-79/H18: 事务包裹确保 member 删除 + conversation 更新原子性
+            lockManager.withLock(convId) {
+                transactionTemplate.execute {
+                    runBlocking {
+                        conversationService.leaveGroup(req, session.userId)
+                    }
+                }
+            }
 
             // 推送 GROUP_DISSOLVED（D-09）
             val payload = GroupDissolvedPayload.newBuilder()
@@ -71,7 +79,14 @@ class LeaveGroupHandler(
             )
         } else {
             // 普通成员退群（D-04）
-            conversationService.leaveGroup(req, session.userId)
+            // D-79/H18: 事务包裹确保 member 删除 + memberCount 原子性
+            lockManager.withLock(convId) {
+                transactionTemplate.execute {
+                    runBlocking {
+                        conversationService.leaveGroup(req, session.userId)
+                    }
+                }
+            }
 
             // 推送 MEMBER_LEFT 给剩余成员（排除退群者自己）
             val payload = MemberLeftPayload.newBuilder()

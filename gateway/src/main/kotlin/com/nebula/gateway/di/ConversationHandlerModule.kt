@@ -22,7 +22,7 @@ val conversationHandlerModule = module {
     single { ListConversationsHandler(get()) }                        // ConversationService
     single { GroupMembersHandler(get()) }                             // ConversationService
     single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
-    single { CreateGroupHandler(get(), get(), get()) }               // ConversationService + LockManager + PushService
+    single { CreateGroupHandler(get(), get(), get(), get()) }               // ConversationService + LockManager + TxTemplate + PushService
     single { InviteMemberHandler(get(), get(), get(), get(), get()) } // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
     single { LeaveGroupHandler(get(), get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
     single { KickMemberHandler(get(), get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
