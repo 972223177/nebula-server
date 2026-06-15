@@ -3,6 +3,7 @@ package com.nebula.server.server
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.config.buildSslContext
 import com.nebula.gateway.service.ChatService
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Server
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder
 import java.util.concurrent.TimeUnit
@@ -24,7 +25,8 @@ import java.util.concurrent.TimeUnit
  */
 class ChatServer(private val config: ApplicationConfig) {
 
-    /** gRPC Server 实例，start() 后非 null，stop() 后置 null */
+    /** gRPC Server 实例，start() 后非 null，stop() 后置 null。使用 @Volatile 保证 Shutdown Hook 线程可见性（CQ-11）。 */
+    @Volatile
     private var server: Server? = null
 
     /**
@@ -72,8 +74,7 @@ class ChatServer(private val config: ApplicationConfig) {
         sslContext?.let { builder.sslContext(it) }
 
         server = builder.build().start()
-        println("[Nebula] gRPC server started on port ${config.server.port}" +
-                if (config.ssl.enabled) " (SSL enabled)" else "")
+        logger.info { "gRPC 服务已启动，端口: ${config.server.port}" + if (config.ssl.enabled) " (SSL 已启用)" else "" }
     }
 
     /**
@@ -94,5 +95,9 @@ class ChatServer(private val config: ApplicationConfig) {
      */
     fun blockUntilShutdown() {
         server?.awaitTermination()
+    }
+
+    companion object {
+        private val logger = KotlinLogging.logger {}
     }
 }

@@ -35,6 +35,39 @@ class RateLimitInterceptor(
     /** 每用户信号量映射 — userId/IP → Semaphore(permitsPerUser) */
     private val userSemaphores = ConcurrentHashMap<String, Semaphore>()
 
+    /**
+     * 定时清理不活跃的信号量条目（CQ-11）。
+     *
+     * 每 10 分钟扫描一次，移除所有 permit 已全部归还的条目，
+     * 防止长期运行中 userSemaphores 因 IP 变化或过期用户无限增长导致 OOM。
+     * 使用守护线程，不阻止 JVM 正常退出。
+     */
+    init {
+        Thread {
+            while (true) {
+                try {
+                    Thread.sleep(CLEANUP_INTERVAL_MS)
+                    val before = userSemaphores.size
+                    // 仅移除所有 permit 都可用的条目（用户完全无请求时安全移除）
+                    userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
+                    val after = userSemaphores.size
+                    if (before != after) {
+                        log.debug { "RateLimiter 清理完成: $before → $after 个信号量" }
+                    }
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                } catch (e: Exception) {
+                    log.warn(e) { "RateLimiter 清理异常" }
+                }
+            }
+        }.apply {
+            isDaemon = true
+            name = "rate-limit-cleanup"
+            start()
+        }
+    }
+
     /** 注册 IP 限流器 — 每小时每 IP 最多 5 次注册（D-02） */
     private val registerLimiter = RegisterRateLimiter()
 
@@ -141,5 +174,8 @@ class RateLimitInterceptor(
 
         /** 限流响应消息 */
         private const val RATE_LIMITED_MSG = "rate limit exceeded"
+
+        /** 信号量清理间隔（毫秒），每 10 分钟扫描一次不活跃条目（CQ-11） */
+        private const val CLEANUP_INTERVAL_MS = 10 * 60 * 1000L
     }
 }

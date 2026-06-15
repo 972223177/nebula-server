@@ -1,9 +1,30 @@
 <configuration>
+    <!-- CQ-10: 审计日志文件 Appender — 仅 AUDIT_LOGIN Marker 事件写入 audit.log -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] - %msg%n</pattern>
+        </encoder>
+        <!-- 仅接受 AUDIT_LOGIN Marker 标记的日志事件 -->
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <evaluator class="ch.qos.logback.classic.boolex.OnMarkerEvaluator">
+                <marker>AUDIT_LOGIN</marker>
+            </evaluator>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+    </appender>
+
     <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
     </appender>
 
     <root level="INFO">
         <appender-ref ref="JSON"/>
+        <appender-ref ref="AUDIT_FILE"/>
     </root>
 </configuration>
