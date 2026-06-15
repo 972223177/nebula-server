@@ -3,13 +3,12 @@ package com.nebula.gateway.handler.friend
 import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendRequestsReq
 import com.nebula.chat.friend.FriendRequestsResp
-import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
+import com.nebula.gateway.testutil.sessionContext
 import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -21,8 +20,6 @@ import kotlin.test.assertTrue
  * 覆盖场景：
  * - 正常查询待处理申请 → 返回 FriendRequestsResp 含完整字段
  * - 空列表 → 返回空 FriendRequestsResp
- *
- * Session 注入方式：使用 withContext(SessionKey(session)) 包裹 handle() 调用。
  */
 class FriendRequestsHandlerTest {
 
@@ -42,7 +39,7 @@ class FriendRequestsHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun queryShouldReturnFullFriendRequestFields() = runTest {
+    fun queryShouldReturnFullFriendRequestFields() = runTest(sessionContext(session)) {
         // Given: 当前用户有两条 pending 的好友申请
         val expectedResp = FriendRequestsResp.newBuilder()
             .addRequests(FriendRequestItem.newBuilder()
@@ -70,9 +67,7 @@ class FriendRequestsHandlerTest {
         val req = FriendRequestsReq.getDefaultInstance()
 
         // When: 执行查询
-        val result = withContext(SessionKey(session)) {
-            handler.handle(req)
-        }
+        val result = handler.handle(req)
 
         // Then: 验证返回两条申请
         assertEquals(2, result.requestsCount)
@@ -102,7 +97,7 @@ class FriendRequestsHandlerTest {
     // ═══════════════════════════════════════════════════════════
 
     @Test
-    fun requestsEmptyShouldReturnEmptyResp() = runTest {
+    fun requestsEmptyShouldReturnEmptyResp() = runTest(sessionContext(session)) {
         // Given: 当前用户没有 pending 的好友申请
         val expectedResp = FriendRequestsResp.getDefaultInstance()
 
@@ -111,9 +106,7 @@ class FriendRequestsHandlerTest {
         val req = FriendRequestsReq.getDefaultInstance()
 
         // When: 执行查询
-        val result = withContext(SessionKey(session)) {
-            handler.handle(req)
-        }
+        val result = handler.handle(req)
 
         // Then: 返回空列表
         assertEquals(0, result.requestsCount)
