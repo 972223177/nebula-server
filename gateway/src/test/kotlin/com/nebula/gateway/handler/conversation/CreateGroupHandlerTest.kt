@@ -53,6 +53,7 @@ class CreateGroupHandlerTest {
         handler = CreateGroupHandler(
             conversationService,
             lockManager,
+            mockk(),
             pushService
         )
     }

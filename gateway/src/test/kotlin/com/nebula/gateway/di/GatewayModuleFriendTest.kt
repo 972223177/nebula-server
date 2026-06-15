@@ -39,8 +39,8 @@ class GatewayModuleFriendTest : HandlerRegistryTestBase() {
         single { FriendRequestsHandler(friendService) }
         single { FriendListHandler(friendService) }
         single { FriendDeleteHandler(friendService) }
-        single { FriendAddHandler(friendService, pushService, get()) }
-        single { FriendAcceptHandler(friendService, pushService, get()) }
+        single { FriendAddHandler(friendService, pushService, get(), get(), get()) }
+        single { FriendAcceptHandler(friendService, pushService, get(), get(), get()) }
     }
 
     @Test

@@ -58,7 +58,9 @@ class FriendAcceptHandlerTest {
         handler = FriendAcceptHandler(
             friendService,
             pushService,
-            lockManager
+            lockManager,
+            mockk(),
+            mockk()
         )
     }
 

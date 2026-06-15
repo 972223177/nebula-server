@@ -39,7 +39,7 @@ class GatewayModuleConversationTest : HandlerRegistryTestBase() {
         single { ListConversationsHandler(conversationService) }
         single { GroupMembersHandler(conversationService) }
         single { EditGroupHandler(conversationService, pushService) }
-        single { CreateGroupHandler(conversationService, get(), pushService) }
+        single { CreateGroupHandler(conversationService, get(), get(), pushService) }
         single { InviteMemberHandler(conversationService, get(), get(), pushService, get()) }
         single { LeaveGroupHandler(conversationService, get(), get(), pushService, get()) }
         single { KickMemberHandler(conversationService, get(), get(), pushService, get()) }

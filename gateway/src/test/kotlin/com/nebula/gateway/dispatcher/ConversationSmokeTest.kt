@@ -164,7 +164,7 @@ class ConversationSmokeTest {
         )
 
         val dispatcher = singleHandlerDispatcher(
-            CreateGroupHandler(conversationService, mockLockManager(), pushService),
+            CreateGroupHandler(conversationService, mockLockManager(), mockk(), pushService),
             CreateGroupReq::class, CreateGroupResp::class
         )
 
@@ -183,7 +183,7 @@ class ConversationSmokeTest {
         coEvery { conversationService.createGroup(any(), any()) } throws ConversationException(BizCode.INVALID_PARAM)
 
         val dispatcher = singleHandlerDispatcher(
-            CreateGroupHandler(conversationService, mockLockManager(), pushService),
+            CreateGroupHandler(conversationService, mockLockManager(), mockk(), pushService),
             CreateGroupReq::class, CreateGroupResp::class
         )
 
@@ -196,7 +196,7 @@ class ConversationSmokeTest {
     @Test
     fun createGroupExceedsLimitShouldReturnGroupFull() = runTest {
         val dispatcher = singleHandlerDispatcher(
-            CreateGroupHandler(conversationService, mockLockManager(), pushService),
+            CreateGroupHandler(conversationService, mockLockManager(), mockk(), pushService),
             CreateGroupReq::class, CreateGroupResp::class
         )
 
@@ -424,7 +424,7 @@ class ConversationSmokeTest {
 
         // 预创建所有 Handler
         val createHandler = CreateGroupHandler(
-            conversationService, lockManager, pushService
+            conversationService, lockManager, mockk(), pushService
         )
         val membersHandler = GroupMembersHandler(conversationService)
         val editHandler = EditGroupHandler(conversationService, pushService)
