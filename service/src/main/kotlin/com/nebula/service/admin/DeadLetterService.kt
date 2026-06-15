@@ -129,7 +129,7 @@ class DeadLetterService(
                     deadLetterRepository.save(item)
                 }
 
-                // 重新写入 Redis Stream
+                // 重新写入 Redis Stream（M09: payload 从 DeadLetterEntity 恢复为 Base64）
                 val streamFields = mapOf(
                     "msg_id" to (item.msgId?.toString() ?: ""),
                     "conversation_id" to item.conversationId,
@@ -139,7 +139,7 @@ class DeadLetterService(
                     "client_message_id" to (item.clientMsgId ?: ""),
                     "client_ts" to item.clientTs.toString(),
                     "server_ts" to System.currentTimeMillis().toString(),
-                    "payload" to ""
+                    "payload" to (item.payload?.let { java.util.Base64.getEncoder().encodeToString(it) } ?: "")
                 )
                 withContext(Dispatchers.IO) {
                     messageQueueRepository.enqueue(streamFields)
@@ -192,7 +192,7 @@ class DeadLetterService(
                 deadLetterRepository.save(entity)
             }
 
-            // 重新写入 Redis Stream
+            // 重新写入 Redis Stream（M10: payload 从 DeadLetterEntity 恢复为 Base64）
             val streamFields = mapOf(
                 "msg_id" to (entity.msgId?.toString() ?: ""),
                 "conversation_id" to entity.conversationId,
@@ -202,7 +202,7 @@ class DeadLetterService(
                 "client_message_id" to (entity.clientMsgId ?: ""),
                 "client_ts" to entity.clientTs.toString(),
                 "server_ts" to System.currentTimeMillis().toString(),
-                "payload" to ""
+                "payload" to (entity.payload?.let { java.util.Base64.getEncoder().encodeToString(it) } ?: "")
             )
             withContext(Dispatchers.IO) {
                 messageQueueRepository.enqueue(streamFields)
@@ -236,10 +236,12 @@ class DeadLetterService(
             if (status.isNullOrBlank()) {
                 deadLetterRepository.findAll(pageable)
             } else {
+                // M15: 使用 countByStatus 获取精确的过滤后总数，而非未过滤的 findAll().totalElements
                 deadLetterRepository.findByStatusOrderByCreatedAtAsc(status, pageable)
                     .let { items ->
-                        // 构造 Page 对象
-                        val total = deadLetterRepository.findAll(pageable).totalElements
+                        val total = withContext(Dispatchers.IO) {
+                            deadLetterRepository.countByStatus(status)
+                        }
                         org.springframework.data.domain.PageImpl(items, pageable, total)
                     }
             }
@@ -250,22 +252,18 @@ class DeadLetterService(
      * 标记失败次数超过阈值的死信为永久失败。
      *
      * 由 compensate() 在每次补偿完成后自动调用。
+     * M16: 使用 findByStatusAndFailCountGreaterThanEqual 替代原有的 findByStatusAndFailCountLessThan(status, 0) 死查询。
      * 捕获 OptimisticLockException 跳过并发冲突记录。
      */
     suspend fun markPermanentFailed() {
+        // M16: failCount >= MAX_COMPENSATE_RETRIES 才标记永久失败，修复 failCount < 0 死查询
         val expiredItems = withContext(Dispatchers.IO) {
-            deadLetterRepository.findByStatusAndFailCountLessThan(
-                STATUS_RETRYING, 0, Pageable.ofSize(BATCH_SIZE)
+            deadLetterRepository.findByStatusAndFailCountGreaterThanEqual(
+                STATUS_RETRYING, MAX_COMPENSATE_RETRIES, Pageable.ofSize(BATCH_SIZE)
             )
         }
-        // 由于 find 条件限制，改用另一种方式：查所有 retrying 中 failCount >= MAX 的
-        // 通过 findAll + 内存过滤（数据量不大）
-        val allRetrying = withContext(Dispatchers.IO) {
-            deadLetterRepository.findByStatusOrderByCreatedAtAsc(STATUS_RETRYING, Pageable.unpaged())
-        }
-        val toMarkFailed = allRetrying.filter { it.failCount >= MAX_COMPENSATE_RETRIES }
 
-        for (item in toMarkFailed) {
+        for (item in expiredItems) {
             try {
                 item.status = STATUS_PERMANENT_FAILED
                 withContext(Dispatchers.IO) {

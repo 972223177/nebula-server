@@ -4,13 +4,19 @@ import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.MessageWriteRepository
+import com.nebula.service.admin.DeadLetterService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.EntityManagerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.springframework.dao.DataIntegrityViolationException
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 /**
  * 消息写入路径实现（DB-03, D-11）。
@@ -28,11 +34,17 @@ class MessageRepositoryImpl(
     private val messageQueue: MessageQueueRepository,
     private val jpaMessageRepo: MessageRepository,
     private val emf: EntityManagerFactory
-) : MessageWriteRepository {
+) : MessageWriteRepository, KoinComponent {
+
+    /** M11: 通过 Koin 延迟注入 DeadLetterService，避免 Repository 层与 Gateway 层的初始化循环依赖 */
+    private val deadLetterService: DeadLetterService by inject()
 
     private val logger = KotlinLogging.logger {}
     @Volatile
     private var stopped = false
+
+    /** D-85/M19: 类级 CoroutineScope，stop() 时 cancel 所有子协程 */
+    private val scope = CoroutineScope(Dispatchers.IO + Job())
 
     /**
      * 将消息入队到 Redis Stream。
@@ -50,6 +62,7 @@ class MessageRepositoryImpl(
             entity.clientMessageId?.let { put("clientMessageId", it) }
             put("clientTs", entity.clientTs.toString())
             put("serverTs", entity.serverTs.toString())
+            entity.payload?.let { put("payload", java.util.Base64.getEncoder().encodeToString(it)) }
         }
         val result = messageQueue.enqueue(map)
         return result ?: throw RuntimeException("Failed to enqueue message to Redis Stream")
@@ -85,8 +98,30 @@ class MessageRepositoryImpl(
             entries.forEach { messageQueue.acknowledge(it.id) }
             return messages.size
         } catch (e: DataIntegrityViolationException) {
-            logger.warn(e) { "唯一索引冲突，跳过本次刷写（去重失败消息将被死信表捕获）" }
-            // D-72: 唯一索引冲突可能由去重失败消息导致，跳过并记录日志，10-04 补充死信入库
+            logger.warn(e) { "唯一索引冲突，为冲突消息创建死信记录" }
+            // M11: UK 冲突时为每条消息创建死信记录，而非静默跳过
+            entries.forEach { entry ->
+                val parsed = parseToEntity(entry)
+                if (parsed != null) {
+                    try {
+                        runBlocking {
+                            deadLetterService.create(
+                                conversationId = parsed.conversationId,
+                                senderUid = parsed.senderUid,
+                                messageType = parsed.messageType,
+                                content = parsed.content,
+                                payload = parsed.payload,
+                                clientMsgId = parsed.clientMessageId,
+                                clientTs = parsed.clientTs,
+                                failReason = "UK 冲突: client_msg_id=${parsed.clientMessageId}"
+                            )
+                        }
+                    } catch (dlEx: Exception) {
+                        logger.error(dlEx) { "创建死信记录失败: clientMsgId=${parsed.clientMessageId}" }
+                    }
+                }
+            }
+            // 仍然 XACK 避免 Redis 中重复消费
             entries.forEach { messageQueue.acknowledge(it.id) }
             return 0
         } catch (e: Exception) {
@@ -113,7 +148,7 @@ class MessageRepositoryImpl(
      * 在后台协程中每 500ms 消费 Redis Stream 中的积压消息，触发批量刷入 MySQL。
      */
     fun startFlushTimer() {
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             while (!stopped) {
                 delay(500)
                 flushBatch()
@@ -126,6 +161,8 @@ class MessageRepositoryImpl(
      */
     fun stop() {
         stopped = true
+        // D-85/M19: cancel 所有子协程，防止泄漏
+        scope.cancel()
     }
 
     /**
@@ -146,6 +183,8 @@ class MessageRepositoryImpl(
             serverTs = body["serverTs"]?.toLongOrNull() ?: return null
         ).apply {
             id = body["id"]?.toLongOrNull()
+            // M11: 解析 payload 字段（Base64 编码），用于死信记录恢复
+            payload = body["payload"]?.let { java.util.Base64.getDecoder().decode(it) }
         }
     }
 }

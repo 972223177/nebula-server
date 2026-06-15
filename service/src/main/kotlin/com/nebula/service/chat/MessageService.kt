@@ -128,7 +128,7 @@ class MessageService(
             "client_message_id" to req.clientMessageId,
             "client_ts" to req.clientTs.toString(),
             "server_ts" to now.toString(),
-            "payload" to ""
+            "payload" to (if (req.payload.size() > 0) java.util.Base64.getEncoder().encodeToString(req.payload.toByteArray()) else "")
         )
         withContext(Dispatchers.IO) {
             messageQueueRepository.enqueue(streamFields)
