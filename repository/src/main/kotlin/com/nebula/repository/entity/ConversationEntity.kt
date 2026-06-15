@@ -12,7 +12,7 @@ import java.time.LocalDateTime
 @Entity
 @Table(name = "conversations")
 class ConversationEntity(
-    /** 会话类型：0=私聊, 2=群聊 */
+    /** 会话类型：1=私聊, 2=群聊（与 V1__init_schema.sql COMMENT 一致，CQ-12） */
     @Column(nullable = false)
     var type: Int,
 

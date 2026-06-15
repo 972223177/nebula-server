@@ -8,7 +8,6 @@ import com.nebula.chat.message.PullMessagesResp
 import com.nebula.chat.message.ReadReportReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ChatException
-import com.nebula.common.exception.MessageException
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.service.sequence.SeqService
 import com.nebula.repository.entity.ConversationEntity
@@ -48,7 +47,8 @@ class MessageService(
         /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
         /** 私聊类型常量 */
-        private const val CONV_TYPE_PRIVATE = 0
+        /** 私聊会话类型常量（CQ-12: 1=私聊，与 SQL DDL 一致） */
+        private const val CONV_TYPE_PRIVATE = 1
         /** 群聊类型常量 */
         private const val CONV_TYPE_GROUP = 2
     }
@@ -172,7 +172,7 @@ class MessageService(
             conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
         }
         if (member == null || member.deleted == 1) {
-            throw MessageException(BizCode.NOT_MEMBER, "用户不是会话成员")
+            throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
         }
 
         val limit = req.limit.coerceIn(1, 100)
@@ -208,7 +208,7 @@ class MessageService(
             conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
         }
         if (member == null || member.deleted == 1) {
-            throw MessageException(BizCode.NOT_MEMBER, "用户不是会话成员")
+            throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
         }
 
         // 更新已读回执
@@ -249,7 +249,7 @@ class MessageService(
      */
     private fun MessageEntity.toChatMessage(): ChatMessage {
         val builder = ChatMessage.newBuilder()
-            .setMsgId(id!!)
+            .setMsgId(requireNotNull(id) { "MessageEntity.id 不应为null" })
             .setConversationId(conversationId)
             .setSenderUid(senderUid)
             .setMessageTypeValue(messageType)

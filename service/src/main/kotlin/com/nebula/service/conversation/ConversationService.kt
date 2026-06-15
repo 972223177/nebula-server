@@ -42,7 +42,8 @@ class ConversationService(
         /** 群聊最大成员数 */
         private const val MAX_MEMBERS = 200
         /** 私聊会话类型常量 */
-        private const val CONV_TYPE_PRIVATE = 0
+        /** 私聊会话类型常量（CQ-12: 1=私聊，与 SQL DDL 一致） */
+        private const val CONV_TYPE_PRIVATE = 1
         /** 群聊会话类型常量 */
         private const val CONV_TYPE_GROUP = 2
         /** 群主角色标识 */
@@ -148,7 +149,7 @@ class ConversationService(
         val hasMore = conversations.size > actualLimit
         val result = if (hasMore) conversations.dropLast(1) else conversations
 
-        val convIds = result.map { it.id!! }
+        val convIds = result.map { requireNotNull(it.id) { "会话ID不能为null" } }
         val memberMap = if (convIds.isNotEmpty()) {
             withContext(Dispatchers.IO) {
                 conversationMemberRepository.findByConversationIdsAndUserId(convIds, userId)
@@ -161,7 +162,7 @@ class ConversationService(
         result.forEach { entity ->
             val member = memberMap[entity.id]
             builder.addConversations(ConversationBrief.newBuilder()
-                .setConversationId(entity.id!!)
+                .setConversationId(requireNotNull(entity.id) { "会话ID不能为null" })
                 .setType(if (entity.type == CONV_TYPE_PRIVATE) "private" else "group")
                 .setName(entity.name)
                 .setAvatarUrl(entity.avatar)

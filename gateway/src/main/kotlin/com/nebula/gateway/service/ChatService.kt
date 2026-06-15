@@ -254,7 +254,7 @@ class ChatService(
                 } catch (e: Exception) {
                     // D-75: 投递失败，跟踪重试次数
                     val key = envelopeKey(envelope)
-                    val retryCount = retryCountMap.merge(key, 1) { old, _ -> old + 1 }!!
+                    val retryCount = requireNotNull(retryCountMap.merge(key, 1) { old, _ -> old + 1 }) { "merge 结果不能为null" }
                     logger.warn(e) { "投递失败（第 $retryCount 次），envelopeKey=$key" }
                     if (retryCount >= MAX_PENDING_RETRIES) {
                         retryCountMap.remove(key)

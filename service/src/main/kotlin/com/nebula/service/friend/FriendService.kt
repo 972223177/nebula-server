@@ -46,8 +46,8 @@ class FriendService(
 ) {
 
     companion object {
-        /** 私聊会话类型常量 */
-        private const val CONV_TYPE_PRIVATE = 0
+        /** 私聊会话类型常量（CQ-12: 1=私聊，与 SQL DDL 一致） */
+        private const val CONV_TYPE_PRIVATE = 1
 
         /**
          * 构造私聊会话 ID，格式 `private:smaller:larger`（D-43）。

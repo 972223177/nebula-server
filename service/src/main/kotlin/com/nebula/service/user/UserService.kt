@@ -89,7 +89,7 @@ class UserService(
 
         withContext(Dispatchers.IO) { userRepository.save(user) }
 
-        return user.id!!
+        return requireNotNull(user.id) { "用户ID不能为null" }
     }
 
     /**
@@ -117,7 +117,7 @@ class UserService(
             throw UserException(BizCode.AUTH_FAILED)
         }
 
-        return user.id!!
+        return requireNotNull(user.id) { "用户ID不能为null" }
     }
 
     /**
@@ -154,7 +154,7 @@ class UserService(
         val builder = SearchUserResp.newBuilder()
         result.forEach { entity ->
             builder.addUsers(UserBrief.newBuilder()
-                .setUid(entity.id!!)
+                .setUid(requireNotNull(entity.id) { "用户ID不能为null" })
                 .setUsername(entity.username)
                 .setDisplayName(entity.nickname)
                 .setAvatarUrl(entity.avatar)
@@ -180,7 +180,7 @@ class UserService(
             ?: throw UserException(BizCode.USER_NOT_FOUND)
 
         return GetProfileResp.newBuilder()
-            .setUid(user.id!!)
+            .setUid(requireNotNull(user.id) { "用户ID不能为null" })
             .setUsername(user.username)
             .setDisplayName(user.nickname)
             .setAvatarUrl(user.avatar)
@@ -209,7 +209,7 @@ class UserService(
             val user = users[uid]
             if (user != null) {
                 builder.addUsers(UserBrief.newBuilder()
-                    .setUid(user.id!!)
+                    .setUid(requireNotNull(user.id) { "用户ID不能为null" })
                     .setUsername(user.username)
                     .setDisplayName(user.nickname)
                     .setAvatarUrl(user.avatar)

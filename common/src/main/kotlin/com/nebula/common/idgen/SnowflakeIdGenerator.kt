@@ -18,12 +18,15 @@ import kotlinx.coroutines.sync.withLock
  *
  * @param workerId 工作节点 ID（0~1023），分布式下每实例必须唯一
  * @param epoch 自定义纪元起点（毫秒时间戳），默认 2023-11-14T21:33:20.000Z
+ * @param clock 时钟抽象（CQ-14/T01），默认 SystemClock，测试可注入 FakeClock 替代反射
  */
 class SnowflakeIdGenerator(
     /** 工作节点 ID（0~1023），分布式下每实例必须唯一，ID 冲突会导致跨节点消息乱序 */
     val workerId: Long,
     /** 自定义纪元起点（毫秒时间戳），前移基准时间以延长 41 bit 时间戳可用年限 */
-    val epoch: Long = 1700000000000L
+    val epoch: Long = 1700000000000L,
+    /** 时钟抽象，测试可注入 FakeClock 替代反射 */
+    private val clock: Clock = SystemClock()
 ) {
 
     companion object {
@@ -65,7 +68,7 @@ class SnowflakeIdGenerator(
      * @return 64 位长整型 ID
      */
     suspend fun nextId(): Long = mutex.withLock {
-        var timestamp = currentTimeMillis()
+        var timestamp = clock.millis()
 
         // 检测时钟回拨 —— 若系统时间倒退则抛异常，防止 ID 重复
         if (timestamp < lastTimestamp) {
@@ -103,19 +106,11 @@ class SnowflakeIdGenerator(
      * @return 越过 lastTimestamp 后的当前毫秒时间戳
      */
     private fun waitNextMillis(lastTimestamp: Long): Long {
-        var timestamp = currentTimeMillis()
+        var timestamp = clock.millis()
         while (timestamp <= lastTimestamp) {
-            timestamp = currentTimeMillis()
+            timestamp = clock.millis()
         }
         return timestamp
     }
 
-    /**
-     * 获取当前系统毫秒时间戳。
-     *
-     * 抽象为独立方法便于单元测试时注入模拟时钟，生产环境使用 System.currentTimeMillis()。
-     *
-     * @return 当前系统毫秒时间戳
-     */
-    private fun currentTimeMillis(): Long = System.currentTimeMillis()
-}
+    // currentTimeMillis() 已被 Clock 接口替代（CQ-14/T01），保留方法签名注释以避免遗忘
