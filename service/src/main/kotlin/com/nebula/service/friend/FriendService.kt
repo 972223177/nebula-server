@@ -17,6 +17,7 @@ import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.FriendRequestEntity
 import com.nebula.repository.entity.FriendshipEntity
+import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.repository.ConversationMemberRepository
@@ -24,6 +25,7 @@ import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendRequestRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.repository.repository.UserRepository
+import com.nebula.repository.repository.findByIdOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
@@ -80,7 +82,7 @@ class FriendService(
         val existingFriendship = withContext(Dispatchers.IO) {
             friendshipRepository.findByUserIdAndFriendId(smaller, larger)
         }
-        if (existingFriendship != null && existingFriendship.deleted == 0) {
+        if (existingFriendship != null && existingFriendship.isActive) {
             throw FriendException(BizCode.ALREADY_FRIEND)
         }
 
@@ -102,7 +104,7 @@ class FriendService(
                 userId = smaller,
                 friendId = larger
             )
-            if (friendship.deleted == 1) {
+            if (!friendship.isActive) {
                 friendship.deleted = 0
             }
             // D-80/H15: saveAndFlush 立即触发 UK 检查，在事务内检测重复
@@ -110,7 +112,7 @@ class FriendService(
 
             // 创建私聊会话（如果不存在）
             var conv = withContext(Dispatchers.IO) {
-                conversationRepository.findById(convId).orElse(null)
+                conversationRepository.findByIdOrNull(convId)
             }
             if (conv == null) {
                 conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
@@ -208,7 +210,7 @@ class FriendService(
         if (friendship == null) {
             friendship = FriendshipEntity(userId = smaller, friendId = larger)
         }
-        if (friendship.deleted == 1) {
+        if (!friendship.isActive) {
             friendship.deleted = 0
         }
         withContext(Dispatchers.IO) { friendshipRepository.save(friendship) }
@@ -285,7 +287,7 @@ class FriendService(
         val friendship = withContext(Dispatchers.IO) {
             friendshipRepository.findByUserIdAndFriendId(smaller, larger)
         }
-        if (friendship == null || friendship.deleted == 1) {
+        if (friendship == null || !friendship.isActive) {
             throw FriendException(BizCode.FRIEND_NOT_FOUND)
         }
 

@@ -12,6 +12,7 @@ import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.service.sequence.SeqService
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.MessageEntity
+import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
@@ -84,13 +85,13 @@ class MessageService(
         val member = withContext(Dispatchers.IO) {
             conversationMemberRepository.findByConversationIdAndUserId(conversationId, senderUid)
         }
-        if (member == null || member.deleted == 1) {
+        if (member == null || !member.isActive) {
             throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
         }
 
         // Step 3: 私聊会话检查好友关系（D-56）
         val conversation = withContext(Dispatchers.IO) {
-            conversationRepository.findById(conversationId).orElse(null)
+            conversationRepository.findByIdOrNull(conversationId)
         } ?: throw ChatException(BizCode.CONV_NOT_FOUND)
 
         if (conversation.type == CONV_TYPE_PRIVATE) {
@@ -171,7 +172,7 @@ class MessageService(
         val member = withContext(Dispatchers.IO) {
             conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
         }
-        if (member == null || member.deleted == 1) {
+        if (member == null || !member.isActive) {
             throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
         }
 
@@ -207,7 +208,7 @@ class MessageService(
         val member = withContext(Dispatchers.IO) {
             conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
         }
-        if (member == null || member.deleted == 1) {
+        if (member == null || !member.isActive) {
             throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
         }
 
@@ -239,7 +240,7 @@ class MessageService(
         val friendship = withContext(Dispatchers.IO) {
             friendshipRepository.findByUserIdAndFriendId(smaller, larger)
         }
-        return friendship != null && friendship.deleted == 0
+        return friendship != null && friendship.isActive
     }
 
     /**

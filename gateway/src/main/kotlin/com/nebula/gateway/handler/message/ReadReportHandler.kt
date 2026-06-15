@@ -67,9 +67,7 @@ class ReadReportHandler(
         redis.del("conversation:${req.conversationId}:unread:${session.userId}")
 
         // D-27: 获取会话并判断类型
-        val conversation = withContext(Dispatchers.IO) {
-            conversationRepository.findById(req.conversationId).orElse(null)
-        } ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
+        val conversation = conversationRepository.findByIdOrNull(req.conversationId) ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
         val isPrivate = conversation.type == PRIVATE_TYPE
 
         // D-23: 私聊场景推送已读回执给原发送者
