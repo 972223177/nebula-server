@@ -1,7 +1,8 @@
 ---
 phase: 11
-status: planned
+status: completed
 date: 2026-06-15
+completed_date: 2026-06-15
 ---
 # Phase 11: Code Quality & Production Hardening — 执行计划
 
@@ -13,10 +14,10 @@ date: 2026-06-15
 
 | Plan | 名称 | Wave | 问题数 | CQ 覆盖 | 状态 |
 |------|------|------|--------|---------|------|
-| 11-01 | 安全与生产加固 | 1 | 13 | CQ-02, CQ-05, CQ-09, CQ-10, CQ-11 | Pending |
-| 11-02 | 数据一致性与竞态修复 | 1 | 11 | CQ-03, CQ-04 | Pending |
-| 11-03 | 数据完整性与错误处理 | 2 | 30 | CQ-01, CQ-06, CQ-07, CQ-08, CQ-11, CQ-13 | Pending |
-| 11-04 | 代码质量与测试加固 | 3 | 27 | CQ-10, CQ-12, CQ-14, CQ-15 | Pending |
+| 11-01 | 安全与生产加固 | 1 | 13 | CQ-02, CQ-05, CQ-09, CQ-10, CQ-11 | ✅ Completed |
+| 11-02 | 数据一致性与竞态修复 | 1 | 11 | CQ-03, CQ-04 | ✅ Completed |
+| 11-03 | 数据完整性与错误处理 | 2 | 30 | CQ-01, CQ-06, CQ-07, CQ-08, CQ-11, CQ-13 | ✅ Completed |
+| 11-04 | 代码质量与测试加固 | 3 | 27 | CQ-10, CQ-12, CQ-14, CQ-15 | ✅ Completed |
 | **合计** | | | **81** | 15 个 CQ 需求 | |
 
 ## Wave 分组
