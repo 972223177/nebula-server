@@ -4,9 +4,11 @@ import com.nebula.chat.user.LoginReq
 import com.nebula.chat.user.LoginResp
 import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
+import com.nebula.common.log.AuditMarkers
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.service.user.UserService
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.UUID
 
 /**
@@ -33,14 +35,24 @@ class LoginHandler(
             val token = req.token
             val existingSession = sessionRegistry.validate(token)
             if (existingSession != null) {
+                // CQ-10: Token 重连审计日志
+                logger.info(AuditMarkers.LOGIN) { "user_login | uid=${existingSession.userId} | method=token | success=true | device=${req.deviceType}" }
                 return buildLoginResp(existingSession.userId, existingSession.token, req)
             }
         }
 
-        // 场景 2: 密码登录 — 委托 UserService
-        val userId = userService.loginByPassword(req)
-        val token = UUID.randomUUID().toString()
-        return buildLoginResp(userId, token, req)
+        // 场景 2: 密码登录 — 委托 UserService（CQ-10: 审计日志记录成功/失败）
+        return try {
+            val userId = userService.loginByPassword(req)
+            val token = UUID.randomUUID().toString()
+            // CQ-10: 密码登录成功审计日志
+            logger.info(AuditMarkers.LOGIN) { "user_login | uid=$userId | method=password | success=true | device=${req.deviceType}" }
+            buildLoginResp(userId, token, req)
+        } catch (e: UserException) {
+            // CQ-10: 密码登录失败审计日志
+            logger.warn(AuditMarkers.LOGIN) { "user_login | uid=unknown | method=password | success=false | reason=${e.bizCode.name}" }
+            throw e
+        }
     }
 
     /**
@@ -60,5 +72,9 @@ class LoginHandler(
             .setDeviceType(req.deviceType)
             .setDeviceId(req.deviceId)
             .build()
+    }
+
+    companion object {
+        private val logger = KotlinLogging.logger {}
     }
 }
