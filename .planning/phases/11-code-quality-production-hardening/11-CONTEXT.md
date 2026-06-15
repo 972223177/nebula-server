@@ -15,7 +15,7 @@ status: contexted
 
 | 需求 | 内容 | 严重性 | Plan |
 |------|------|--------|------|
-| CQ-01 | 跨模块死代码清理（SendMessageStep 链 7 文件 + SequenceOverflowException + Dispatcher.scope） | HIGH | 11-03 |
+| CQ-01 | 跨模块死代码清理（SendMessageStep 链 7 文件 + SequenceOverflowException + Dispatcher.scope）[已清除：Dispatcher.scope 字段在 Phase 11 执行后被删除，协程生命周期管理由 ChatService.scope 承载] | HIGH | 11-03 |
 | CQ-02 | 生产安全加固（Redis 认证 + SSL + DatabaseConfig 密码泄露 + 环境变量注入） | HIGH | 11-01 |
 | CQ-03 | 服务层事务保护（ConversationService/FriendService 跨 Repository 写入） | HIGH | 11-02 |
 | CQ-04 | 数据一致性与竞态修复（好友双向、SeqService、memberCount 原子） | HIGH | 11-02 |

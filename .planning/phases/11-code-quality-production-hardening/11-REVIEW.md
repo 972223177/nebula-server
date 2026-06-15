@@ -110,7 +110,7 @@ summary: "全量代码审查：85 个问题（24 HIGH / 36 MEDIUM / 25 LOW）跨
 | L14 | CQ-15 | 4+ 文件 | 多处 | `withContext(IO) { conversationRepository.findById().orElse(null) }` 重复 9 次 → 提取 `findByIdOrNull()` | 11-04 |
 | L15 | CQ-15 | 5+ 文件 | 多处 | `friendship.deleted == 0/1` 重复 5+ 次 → 提取 `isActive()` 属性 | 11-04 |
 | L16 | CQ-15 | `gateway/.../send/DedupStep.kt` | 13-15 | 废弃构造函数参数标记 `@Suppress("UNUSED_PARAMETER")` | 11-04 |
-| L17 | CQ-15 | `gateway/.../dispatcher/Dispatcher.kt` | 48 | `private val scope` 标记 `@Suppress("unused")` | 11-04 |
+| L17 | CQ-15 | `gateway/.../dispatcher/Dispatcher.kt` | 48 | `private val scope` **已删除**（死代码字段，ChatService.scope 承担全局协程生命周期管理，Dispatcher 无需自有 scope） | 11-04 |
 | L18 | CQ-15 | `common/.../exception/SendMessageException.kt` | 全文 | 死代码异常类（与 CQ-01 一起清理） | 11-04 |
 | L19 | CQ-15 | `common/.../exception/ChatException.kt` + `MessageException.kt` | 全文 | 同一 Service 分裂使用两个异常类 | 11-04 |
 | L20 | CQ-12 | `repository/.../entity/ConversationEntity.kt` | 17 | type 字段在 KDoc 和 SQL 中值矛盾 | 11-04 |

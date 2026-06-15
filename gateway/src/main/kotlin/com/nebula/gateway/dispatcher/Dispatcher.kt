@@ -8,13 +8,9 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.interceptor.Interceptor
 import com.google.protobuf.ByteString
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 
 /**
- * 请求分发器 — Pipeline 编排入口（D-02, D-14, D-15）。
+ * 请求分发器 — Pipeline 编排入口（D-14, D-15）。
  *
  * 职责：
  * - 接收 Envelope Request，根据 method 查找 Handler
@@ -23,8 +19,6 @@ import kotlinx.coroutines.SupervisorJob
  * - 序列化结果为 Response 返回
  *
  * 设计决策引用：
- * - D-02: CoroutineScope(Dispatchers.IO + SupervisorJob) 全局单作用域
- * - D-04: CoroutineExceptionHandler 兜底防止 JVM 崩溃
  * - D-14: 返回完整 Response proto，不直接操作 StreamObserver
  * - D-15: dispatch() 签名：suspend fun dispatch(envelopeRequest: Request): Response
  *
@@ -37,20 +31,6 @@ class Dispatcher(
     private val interceptors: List<Interceptor>,
     private val protoCodec: ProtoCodec = ProtoCodec
 ) {
-
-    /**
-     * 全局 Dispatcher 作用域 — ChatServer 级别生命周期。
-     *
-     * [SupervisorJob] 隔离单个 Handler 异常，[CoroutineExceptionHandler] 兜底防止 JVM 崩溃。
-     * 使用 `warn` 级别避免与 ExceptionInterceptor 的 `error` 日志重复。
-     */
-    private val scope = CoroutineScope(
-        Dispatchers.IO +
-        SupervisorJob() +
-        CoroutineExceptionHandler { _, e ->
-            logger.warn(e) { "Unhandled exception in dispatcher scope (already handled by ExceptionInterceptor)" }
-        }
-    )
 
     /**
      * 分发请求并返回响应。
