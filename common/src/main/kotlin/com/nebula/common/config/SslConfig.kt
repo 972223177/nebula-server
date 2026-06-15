@@ -29,8 +29,24 @@ data class SslConfig(
  */
 fun SslConfig.buildSslContext(): SslContext? {
     if (!enabled) return null
+
+    // CQ-09: 证书文件预校验，启动阶段快速失败而非运行时 NPE
     val certChain = File(certChainPath)
+    require(certChain.exists()) {
+        "SSL 证书链文件不存在: $certChainPath"
+    }
+    require(certChain.canRead()) {
+        "SSL 证书链文件不可读: $certChainPath"
+    }
+
     val privateKey = File(privateKeyPath)
+    require(privateKey.exists()) {
+        "SSL 私钥文件不存在: $privateKeyPath"
+    }
+    require(privateKey.canRead()) {
+        "SSL 私钥文件不可读: $privateKeyPath"
+    }
+
     return GrpcSslContexts
         .forServer(certChain, privateKey)
         .sslProvider(SslProvider.OPENSSL)

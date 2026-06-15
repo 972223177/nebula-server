@@ -43,10 +43,12 @@ class RepositoryModuleInitializer : ModuleInitializer, KoinComponent {
         // 初始化 JPA + Flyway
         val jpaConfig = JpaConfig(dataSourceProvider)
 
-        // 初始化 Redis 客户端
+        // 初始化 Redis 客户端（D-77: TLS 和密码由配置注入）
         val redisConfig = RedisConfig(
             host = config.redis.host,
-            port = config.redis.port
+            port = config.redis.port,
+            password = config.redis.password,
+            ssl = config.redis.ssl
         )
 
         // 获取各 JPA Repository 代理

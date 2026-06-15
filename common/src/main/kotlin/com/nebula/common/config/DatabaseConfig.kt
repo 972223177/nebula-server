@@ -27,5 +27,7 @@ data class DatabaseConfig(
     /** 连接最大存活毫秒数（不论是否活跃），强制周期性重建，避免长时间连接的资源泄漏 */
     val maxLifetime: Long,
     /** 连接泄漏检测阈值，连接借出超过此时长未归还则告警，用于排查未关闭的 Statement / Connection */
-    val leakDetectionThreshold: Long
+    val leakDetectionThreshold: Long,
+    /** 是否启用 MySQL SSL 连接（D-77），默认 false。生产环境应设为 true 并配置 VERIFY_CA */
+    val sslEnabled: Boolean = false
 )
