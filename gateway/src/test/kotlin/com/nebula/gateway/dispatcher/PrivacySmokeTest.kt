@@ -5,21 +5,17 @@ import com.nebula.chat.user.GetPrivacyReq
 import com.nebula.chat.user.GetPrivacyResp
 import com.nebula.chat.user.SetPrivacyReq
 import com.nebula.common.BizCode
-import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
-import com.nebula.gateway.testutil.buildTestDispatcher
 import com.nebula.gateway.testutil.dispatchAs
-import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.gateway.testutil.singleHandlerDispatcher
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -29,15 +25,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Privacy 集成冒烟测试。
+ * Privacy 集成冒烟测试 — 精简版。
  *
- * 通过 Dispatcher 测试完整的 request→dispatch→response 链路，
- * 覆盖 SetPrivacyHandler 和 GetPrivacyHandler 两个 Handler 的端到端行为。
- *
- * 使用 [TestHelper] 提供的工具函数简化测试构建：
- * - [handlerEntry] 替代手写 ProtoCodec 逻辑
- * - [dispatchAs] 替代 `withContext + SessionKey + dispatch + requestEnvelope` 模式
- * - [buildTestDispatcher] 替代手写 Interceptor Pipeline
+ * 只保留端到端的 setPrivacy → getPrivacy 读写一致性验证测试，
+ * 单个 Handler 冒烟测试已移至对应 HandlerTest 中覆盖。
  */
 class PrivacySmokeTest {
 
@@ -61,121 +52,8 @@ class PrivacySmokeTest {
         sessionRegistry = mockk()
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // 辅助：构建单 Handler Dispatcher（使用 TestHelper.singleHandlerDispatcher）
-    // ═══════════════════════════════════════════════════════════
-
     // ===================================================================
-    // 1. user/setPrivacy — 设置在线状态可见性
-    // ===================================================================
-
-    @Test
-    fun setPrivacyShouldHideStatusAndReturn200() = runTest {
-        // Given
-        coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
-        coEvery { onlineStatusRepo.setHidden(1001L) } returns Unit
-
-        val dispatcher = singleHandlerDispatcher(
-            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo),
-            SetPrivacyReq::class, Response::class
-        )
-
-        // When
-        val response = dispatcher.dispatchAs("user/setPrivacy",
-            SetPrivacyReq.newBuilder().setHideOnlineStatus(true).build())
-
-        // Then
-        assertEquals(BizCode.OK.code, response.code, "设置隐藏状态应返回 200")
-        assertEquals("user/setPrivacy", response.method, "method 应正确回显")
-        coVerify(exactly = 1) { userPrivacyService.setHideOnlineStatus(any(), any()) }
-        coVerify(exactly = 1) { onlineStatusRepo.setHidden(1001L) }
-    }
-
-    @Test
-    fun setPrivacyShouldShowStatusAndReturn200() = runTest {
-        // Given
-        coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
-        coEvery { onlineStatusRepo.setOnline(1001L) } returns Unit
-
-        val dispatcher = singleHandlerDispatcher(
-            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo),
-            SetPrivacyReq::class, Response::class
-        )
-
-        // When
-        val response = dispatcher.dispatchAs("user/setPrivacy",
-            SetPrivacyReq.newBuilder().setHideOnlineStatus(false).build())
-
-        // Then
-        assertEquals(BizCode.OK.code, response.code, "设置可见应返回 200")
-        coVerify(exactly = 1) { userPrivacyService.setHideOnlineStatus(any(), any()) }
-        coVerify(exactly = 1) { onlineStatusRepo.setOnline(1001L) }
-    }
-
-    // ===================================================================
-    // 2. user/getPrivacy — 读取在线状态可见性
-    // ===================================================================
-
-    @Test
-    fun getPrivacyShouldReturnTrueForHidden() = runTest {
-        // Given
-        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
-
-        val dispatcher = singleHandlerDispatcher(
-            GetPrivacyHandler(userPrivacyService),
-            GetPrivacyReq::class, GetPrivacyResp::class
-        )
-
-        // When
-        val response = dispatcher.dispatchAs("user/getPrivacy",
-            GetPrivacyReq.getDefaultInstance())
-
-        // Then
-        assertEquals(BizCode.OK.code, response.code, "读取隐私设置应返回 200")
-        val resp = GetPrivacyResp.parseFrom(response.result)
-        assertTrue(resp.hideOnlineStatus, "隐藏状态应为 true")
-    }
-
-    @Test
-    fun getPrivacyShouldReturnFalseForVisible() = runTest {
-        // Given
-        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
-
-        val dispatcher = singleHandlerDispatcher(
-            GetPrivacyHandler(userPrivacyService),
-            GetPrivacyReq::class, GetPrivacyResp::class
-        )
-
-        // When
-        val response = dispatcher.dispatchAs("user/getPrivacy",
-            GetPrivacyReq.getDefaultInstance())
-
-        // Then
-        assertEquals(BizCode.OK.code, response.code, "读取隐私设置应返回 200")
-        assertFalse(GetPrivacyResp.parseFrom(response.result).hideOnlineStatus, "可见状态应为 false")
-    }
-
-    @Test
-    fun getPrivacyDefaultShouldReturnFalse() = runTest {
-        // Given: 未设置过隐私，默认返回 false
-        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
-
-        val dispatcher = singleHandlerDispatcher(
-            GetPrivacyHandler(userPrivacyService),
-            GetPrivacyReq::class, GetPrivacyResp::class
-        )
-
-        // When
-        val response = dispatcher.dispatchAs("user/getPrivacy",
-            GetPrivacyReq.getDefaultInstance())
-
-        // Then
-        assertEquals(BizCode.OK.code, response.code, "默认状态应返回 200")
-        assertFalse(GetPrivacyResp.parseFrom(response.result).hideOnlineStatus, "默认应为可见")
-    }
-
-    // ===================================================================
-    // 3. 联合冒烟：setPrivacy → getPrivacy 验证读写一致性
+    // 联合冒烟：setPrivacy → getPrivacy 验证读写一致性
     // ===================================================================
 
     @Test

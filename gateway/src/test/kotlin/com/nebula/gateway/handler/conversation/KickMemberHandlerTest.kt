@@ -10,23 +10,16 @@ import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
 import com.nebula.gateway.testutil.mockTransactionTemplate
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import io.mockk.runs
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -45,8 +38,6 @@ import kotlin.test.assertNotNull
 class KickMemberHandlerTest {
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationRepository: ConversationRepository
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
     private lateinit var handler: KickMemberHandler
 
@@ -55,8 +46,6 @@ class KickMemberHandlerTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationRepository = mockk()
-        conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
 
         val lockManager = mockLockManager()
@@ -67,7 +56,7 @@ class KickMemberHandlerTest {
             lockManager,
             transactionTemplate,
             pushService,
-            conversationMemberRepository
+            mockk() // conversationMemberRepository 在 handle() 中未被直接调用
         )
     }
 
@@ -108,20 +97,6 @@ class KickMemberHandlerTest {
     fun kickOwnerShouldThrowGroupPermDenied() = runTest {
         coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val ownerMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "owner" }
-        val ownerTargetMember = ConversationMemberEntity("conv-001", 2001L).apply { role = "owner" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns ownerMember
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
-        } returns ownerTargetMember
-
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
             .setUid(2001L)
@@ -152,16 +127,6 @@ class KickMemberHandlerTest {
     fun nonOwnerKickShouldThrowGroupPermDenied() = runTest {
         coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_PERM_DENIED)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val member = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns member
-
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
             .setUid(2001L)
@@ -176,19 +141,6 @@ class KickMemberHandlerTest {
     @Test
     fun targetNonMemberShouldThrowNotMember() = runTest {
         coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
-
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val ownerMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "owner" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns ownerMember
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 2001L)
-        } returns null
 
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")
@@ -219,12 +171,6 @@ class KickMemberHandlerTest {
     @Test
     fun kickDissolvedGroupShouldThrowGroupDissolved() = runTest {
         coEvery { conversationService.kickMember(any(), any()) } throws ConversationException(BizCode.GROUP_DISSOLVED)
-
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 1; memberCount = 5
-        }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
 
         val req = KickMemberReq.newBuilder()
             .setConversationId("conv-001")

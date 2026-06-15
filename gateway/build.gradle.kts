@@ -12,8 +12,17 @@ kotlin {
     jvmToolchain(21)
 }
 
+tasks.register<Test>("koinDiTest") {
+    useJUnitPlatform {
+        includeTags("koin-di")
+    }
+    forkEvery = 0
+}
+
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("koin-di")
+    }
     maxParallelForks = 2
     // 每 50 个测试类复用一个 JVM fork，兼顾隔离与性能
     forkEvery = 50

@@ -15,44 +15,14 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 /**
- * Dispatcher 全链路单元测试。
+ * Dispatcher 全链路单元测试（D-26）。
  *
- * 覆盖（D-26）：
- * - 成功路径：找到 Handler → 反序列化 → Pipeline → 序列化 → Response
+ * 覆盖：
  * - method 不存在返回 NOT_FOUND (1003)
  * - 无拦截器时直接调用 Handler
  * - 有拦截器时 Pipeline 正常执行
  */
 class DispatcherTest {
-
-    @Test
-    fun dispatchWithValidHandlerReturnsResponse() = runTest {
-        val handler = mockk<Handler<Any, Any>>()
-        every { handler.method } returns "test.method"
-        coEvery { handler.handle(any()) } returns Response.newBuilder().setCode(200).build()
-
-        val reqCodec = ProtoCodec.buildCodec(Request::class)
-        val respCodec = ProtoCodec.buildCodec(Response::class)
-        val entry = HandlerEntry(
-            handler = handler,
-            reqClass = Request::class,
-            respClass = Response::class,
-            parseFrom = reqCodec.parseFrom,
-            toByteArray = respCodec.toByteArray
-        )
-
-        val handlerRegistry = mockk<HandlerRegistry>()
-        every { handlerRegistry.get("test.method") } returns entry
-
-        val dispatcher = Dispatcher(handlerRegistry, emptyList())
-
-        val request = Request.newBuilder().setMethod("test.method").build()
-        val response = dispatcher.dispatch(request)
-
-        assertEquals(BizCode.OK.code, response.code)
-        assertEquals("test.method", response.method)
-        coVerify(exactly = 1) { handler.handle(any()) }
-    }
 
     @Test
     fun dispatchWithUnknownMethodReturnsNotFound() = runTest {

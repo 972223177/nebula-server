@@ -84,11 +84,12 @@ class ConversationLockManagerTest {
     }
 
     @Test
-    fun withLockShouldSupportNestedCallsOnSameConversationId() = runTest {
-        // 相同 conversationId 的嵌套调用应正常工作（已持有锁时再次进入不阻塞）
-        val result = lockManager.withLock("conv-001") {
-            "done"
-        }
-        assertEquals("done", result)
+    fun withLockShouldSupportSequentialCallsOnSameConversationId() = runTest {
+        // Kotlin Mutex.withLock 不可重入，嵌套调用会死锁
+        // 此测试验证同一 conversationId 的独立调用是可重入的
+        val result1 = lockManager.withLock("conv-001") { "first" }
+        val result2 = lockManager.withLock("conv-001") { "second" }
+        assertEquals("first", result1)
+        assertEquals("second", result2)
     }
 }

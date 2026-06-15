@@ -8,6 +8,7 @@ import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
+import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.conversation.CreateGroupResult
 import io.mockk.coEvery
@@ -49,11 +50,12 @@ class CreateGroupHandlerTest {
         pushService = mockk(relaxed = true)
 
         val lockManager = mockLockManager()
+        val transactionTemplate = mockTransactionTemplate()
 
         handler = CreateGroupHandler(
             conversationService,
             lockManager,
-            mockk(),
+            transactionTemplate,
             pushService
         )
     }

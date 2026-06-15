@@ -2,6 +2,8 @@ package com.nebula.gateway.handler.chat.send
 
 import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.message.ChatMessage
+import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
@@ -21,6 +23,7 @@ import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -32,6 +35,8 @@ import kotlin.test.assertTrue
  *
  * 覆盖场景：
  * - 正常发送 → MessageService 返回 SendMessageResult，返回 SendMessageResp
+ * - Step 链 SendMessageException → 直接传播（D-09）
+ * - 非预期异常 → 包装为 BizException(INTERNAL_ERROR)（REVIEW-HIGH-2）
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandlerTest {

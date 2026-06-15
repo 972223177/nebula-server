@@ -13,19 +13,15 @@ import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import io.mockk.runs
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -42,7 +38,6 @@ import kotlin.test.assertNotNull
 class LeaveGroupHandlerTest {
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationRepository: ConversationRepository
     private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
     private lateinit var handler: LeaveGroupHandler
@@ -52,7 +47,6 @@ class LeaveGroupHandlerTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationRepository = mockk()
         conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
 
@@ -72,19 +66,11 @@ class LeaveGroupHandlerTest {
     fun ownerLeaveShouldDissolveAndPushGroupDissolved() = runTest {
         coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
+        // Handle 直接查询当前用户成员信息，判断角色
         val ownerMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "owner" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
         } returns ownerMember
-        coEvery {
-            conversationMemberRepository.softDeleteAllByConversationId("conv-001")
-        } just runs
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
 
         val req = LeaveGroupReq.newBuilder()
             .setConversationId("conv-001")
@@ -108,19 +94,10 @@ class LeaveGroupHandlerTest {
     fun memberLeaveShouldSoftDeleteAndPushMemberLeft() = runTest {
         coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
         val normalMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
         } returns normalMember
-        coEvery {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId("conv-001", 1001L)
-        } just runs
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
 
         val req = LeaveGroupReq.newBuilder()
             .setConversationId("conv-001")
@@ -145,12 +122,7 @@ class LeaveGroupHandlerTest {
     fun leaveNonMemberShouldThrowNotMember() = runTest {
         coEvery { conversationService.leaveGroup(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        // 当前用户不在群中
+        // 当前用户不在群中 → 进入 else 分支 → leaveGroup 抛出
         every {
             conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
         } returns null
@@ -167,7 +139,9 @@ class LeaveGroupHandlerTest {
 
     @Test
     fun leaveConvNotFoundShouldThrowConvNotFound() = runTest {
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-missing", 1001L) } returns null
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-missing", 1001L)
+        } returns null
         coEvery { conversationService.leaveGroup(any(), any()) } throws ConversationException(BizCode.CONV_NOT_FOUND)
 
         val req = LeaveGroupReq.newBuilder()
@@ -183,14 +157,10 @@ class LeaveGroupHandlerTest {
     @Test
     fun leaveDissolvedGroupShouldThrowGroupDissolved() = runTest {
         val normalMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-        every { conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L) } returns normalMember
+        every {
+            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
+        } returns normalMember
         coEvery { conversationService.leaveGroup(any(), any()) } throws ConversationException(BizCode.GROUP_DISSOLVED)
-
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 1; memberCount = 0
-        }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
 
         val req = LeaveGroupReq.newBuilder()
             .setConversationId("conv-001")
