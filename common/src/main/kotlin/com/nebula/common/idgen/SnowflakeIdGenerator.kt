@@ -113,4 +113,5 @@ class SnowflakeIdGenerator(
         return timestamp
     }
 
-    // currentTimeMillis() 已被 Clock 接口替代（CQ-14/T01），保留方法签名注释以避免遗忘
+    // currentTimeMillis() 已被 Clock 接口替代（CQ-14/T01）
+}

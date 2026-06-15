@@ -122,22 +122,37 @@ fun main() {
         }
 
         conversations.forEach { conv ->
+            val convId = requireNotNull(conv.id) { "会话ID不能为null" }
             val msgCount = withContext(Dispatchers.IO) {
-                msgRepo.countByConversationId(conv.id)
+                msgRepo.countByConversationId(convId)
             }
             val nextSeq = msgCount + 1L
 
             val members = withContext(Dispatchers.IO) {
-                memberRepo.findByConversationId(conv.id)
+                memberRepo.findByConversationId(convId)
             }
 
             members.forEach { member ->
-                val restored = seqService.tryRestoreSeq(conv.id, member.userId, nextSeq)
+                val restored = seqService.tryRestoreSeq(convId, member.userId, nextSeq)
                 if (restored) restoredCount++
             }
         }
 
         logger.info { "序列号恢复完成: $restoredCount 个 Key 已初始化（共 ${conversations.size} 个会话）" }
+    }
+
+    // M11: 注入死信创建回调 — 跨模块桥接 Service 层 DeadLetterService 到 Repository 层 MessageRepositoryImpl
+    koin.get<MessageRepositoryImpl>().onDeadLetter = { convId, senderUid, msgType, content, payload, clientMsgId, clientTs, reason ->
+        koin.get<DeadLetterService>().create(
+            conversationId = convId,
+            senderUid = senderUid,
+            messageType = msgType,
+            content = content,
+            payload = payload,
+            clientMsgId = clientMsgId,
+            clientTs = clientTs,
+            failReason = reason
+        )
     }
 
     // Step 5: 通过 HandlerCollector 模式统一注册所有 Handler 到 HandlerRegistry

@@ -63,7 +63,7 @@ class SendMessageHandler(
         val senderUid = session.userId
 
         // M17/M20: 去重检查 — 相同 clientMessageId 重复发送时返回幂等 ACK
-        if (req.hasClientMessageId() && req.clientMessageId.isNotEmpty()) {
+        if (req.clientMessageId.isNotEmpty()) {
             val isNew = messageQueueRepository.checkAndSetDedup(req.clientMessageId, senderUid)
             if (!isNew) {
                 logger.info { "检测到重复消息: clientMessageId=${req.clientMessageId}, senderUid=$senderUid" }
@@ -71,7 +71,6 @@ class SendMessageHandler(
                     .setMsgId(0L)
                     .setServerTs(System.currentTimeMillis())
                     .setSeq(0L)
-                    .setDuplicate(true)
                     .build()
             }
         }

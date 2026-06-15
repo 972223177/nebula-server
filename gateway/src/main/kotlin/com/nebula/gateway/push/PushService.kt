@@ -167,7 +167,7 @@ class PushService(
      * @param targetUids 目标用户 ID 列表（已过滤 excludeUid）
      * @param chatMessage 待推送的 ChatMessage
      */
-    fun pushMessageToMembers(targetUids: List<Long>, chatMessage: ChatMessage) {
+    suspend fun pushMessageToMembers(targetUids: List<Long>, chatMessage: ChatMessage) {
         for (uid in targetUids) {
             val observers = userStreamRegistry.getStreams(uid)
             for (observer in observers) {
