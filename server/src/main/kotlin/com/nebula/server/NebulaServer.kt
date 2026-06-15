@@ -17,14 +17,21 @@ import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.init.repositoryInitModule
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.impl.MessageRepositoryImpl
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
 import com.nebula.service.admin.DeadLetterService
+import com.nebula.service.sequence.SeqService
 import com.zaxxer.hikari.HikariDataSource
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.api.StatefulRedisConnection
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import javax.sql.DataSource
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -97,6 +104,41 @@ fun main() {
 
     // 确保所有 eager singles 实例化
     koin.createEagerInstances()
+
+    // D-81/H21: 从 MySQL 恢复 Redis 序列号
+    // SeqService 序列号基于 Redis INCR，若 Redis 重启会丢失所有序列号。
+    // 启动时从 MySQL 消息计数恢复：nextSeq = COUNT(*) + 1，使用 SETNX 避免覆盖已有 Key。
+    runBlocking {
+        val seqService = koin.get<SeqService>()
+        val convRepo = koin.get<ConversationRepository>()
+        val msgRepo = koin.get<MessageRepository>()
+        val memberRepo = koin.get<ConversationMemberRepository>()
+
+        logger.info { "开始从 MySQL 恢复 Redis 序列号..." }
+        var restoredCount = 0
+
+        val conversations = withContext(Dispatchers.IO) {
+            convRepo.findAll()
+        }
+
+        conversations.forEach { conv ->
+            val msgCount = withContext(Dispatchers.IO) {
+                msgRepo.countByConversationId(conv.id)
+            }
+            val nextSeq = msgCount + 1L
+
+            val members = withContext(Dispatchers.IO) {
+                memberRepo.findByConversationId(conv.id)
+            }
+
+            members.forEach { member ->
+                val restored = seqService.tryRestoreSeq(conv.id, member.userId, nextSeq)
+                if (restored) restoredCount++
+            }
+        }
+
+        logger.info { "序列号恢复完成: $restoredCount 个 Key 已初始化（共 ${conversations.size} 个会话）" }
+    }
 
     // Step 5: 通过 HandlerCollector 模式统一注册所有 Handler 到 HandlerRegistry
     val registry = koin.get<HandlerRegistry>()

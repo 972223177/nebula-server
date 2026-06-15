@@ -89,4 +89,20 @@ class SeqService(
         }
         return value.toLongOrNull() ?: 0L
     }
+
+    /**
+     * 尝试从数据库恢复 Redis 序列号（D-81, H21）。
+     *
+     * 使用 SETNX 仅在 Key 不存在时设置，避免覆盖 Redis 中已有的序列号。
+     * 在服务启动时调用，确保 Redis 重启后序列号从 MySQL 消息计数恢复。
+     *
+     * @param convId 会话 ID
+     * @param uid 用户 ID
+     * @param nextSeq 从数据库计算的起始序列号
+     * @return true 表示 Key 不存在且已设置，false 表示 Key 已存在（未被覆盖）
+     */
+    suspend fun tryRestoreSeq(convId: String, uid: Long, nextSeq: Long): Boolean {
+        val redisKey = key(convId, uid)
+        return redis.setnx(redisKey, nextSeq.toString())
+    }
 }
