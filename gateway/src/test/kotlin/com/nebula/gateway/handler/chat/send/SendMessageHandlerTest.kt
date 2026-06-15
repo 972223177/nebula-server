@@ -7,7 +7,9 @@ import com.nebula.common.exception.BizException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
+import com.nebula.gateway.testutil.sessionContext
 import com.nebula.repository.entity.ConversationEntity
+import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.service.chat.MessageService
 import com.nebula.service.chat.SendMessageResult
@@ -58,7 +60,10 @@ class SendMessageHandlerTest {
         connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-        handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, mockk(), connection, scope)
+        val messageQueueRepository = mockk<MessageQueueRepository>(relaxed = true)
+        coEvery { messageQueueRepository.checkAndSetDedup(any(), any()) } returns true
+
+        handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, messageQueueRepository, connection, scope)
     }
 
     @Test
@@ -92,5 +97,55 @@ class SendMessageHandlerTest {
         assertNotNull(resp)
         assertEquals(50001L, resp.msgId, "应返回 MessageService 设置的 msgId")
         assertTrue(resp.serverTs > 0, "应返回服务端时间戳")
+    }
+
+    /**
+     * Step 链中 BizException → 直接传播
+     * D-09 要求 Step 链异常不吞没，直接传播给 Dispatcher
+     */
+    @Test
+    fun stepChainBizExceptionShouldPropagate() = runTest(sessionContext()) {
+        coEvery {
+            messageService.sendMessage(any(), any())
+        } throws BizException(BizCode.SEND_FAILED, "发送失败")
+
+        val req = SendMessageReq.newBuilder()
+            .setConversationId("conv-001")
+            .setContent("Hello")
+            .setClientMessageId("msg-001")
+            .build()
+
+        val exception = assertFailsWith<BizException> {
+            withContext(SessionKey(session)) {
+                handler.handle(req)
+            }
+        }
+        assertEquals(BizCode.SEND_FAILED, exception.bizCode)
+        assertEquals("发送失败", exception.message)
+    }
+
+    /**
+     * 非预期异常（RuntimeException）→ 包装为 BizException(INTERNAL_ERROR)
+     * REVIEW-HIGH-2 安全要求 — Step 链 try-catch 包裹非预期异常
+     */
+    @Test
+    fun unexpectedExceptionShouldBeWrappedAsInternalError() = runTest(sessionContext()) {
+        coEvery {
+            messageService.sendMessage(any(), any())
+        } throws RuntimeException("Redis connection timeout")
+
+        val req = SendMessageReq.newBuilder()
+            .setConversationId("conv-001")
+            .setContent("Hello")
+            .setClientMessageId("msg-002")
+            .build()
+
+        val exception = assertFailsWith<BizException> {
+            withContext(SessionKey(session)) {
+                handler.handle(req)
+            }
+        }
+        assertEquals(BizCode.INTERNAL_ERROR, exception.bizCode)
+        assertTrue(exception.message!!.contains("Redis connection timeout"))
     }
 }
