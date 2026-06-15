@@ -223,13 +223,13 @@ class UserService(
     /**
      * BCrypt 密码验证（D-03）。
      *
-     * 提取为 open 方法方便单元测试覆写。
+     * MockK 原生支持 mock final 方法，无需 open。
      *
      * @param rawPassword 明文密码
      * @param storedHash 数据库中存储的 BCrypt 哈希
      * @return 是否匹配
      */
-    open fun verifyPassword(rawPassword: String, storedHash: String): Boolean {
+    fun verifyPassword(rawPassword: String, storedHash: String): Boolean {
         val encoder = BCryptPasswordEncoder(BCRYPT_COST)
         return encoder.matches(rawPassword, storedHash)
     }
