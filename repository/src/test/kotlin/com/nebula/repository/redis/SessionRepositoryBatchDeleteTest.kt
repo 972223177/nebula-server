@@ -1,25 +1,23 @@
-package com.nebula.gateway.service
+package com.nebula.repository.redis
 
-import com.nebula.repository.redis.SessionRepository
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.async.RedisAsyncCommands
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.runBlocking
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 /**
- * SessionRepository.batchDelete 的单元测试（Plan 9-1）。
+ * SessionRepository.batchDelete 的单元测试。
  *
  * 验证 Redis pipeline 批量删除方法的正确性：
  * - 正常批量删除场景
  * - 空列表边界情况
  * - autoFlush 异常恢复
  */
-class ReconnectCleanupTest {
+class SessionRepositoryBatchDeleteTest {
 
     /** 创建 mock StatefulRedisConnection */
     private fun createMockConnection(): StatefulRedisConnection<String, String> {
@@ -65,10 +63,9 @@ class ReconnectCleanupTest {
         val repo = SessionRepository(connection)
         val keys = listOf("session:token:abc")
 
-        assertThrows(RuntimeException::class.java) {
-            runBlocking {
-                repo.batchDelete(keys)
-            }
+        // 在 runTest 协程中直接调用 batchDelete，使用 kotlin.test.assertFailsWith 捕获异常
+        assertFailsWith<RuntimeException> {
+            repo.batchDelete(keys)
         }
 
         // 即使异常，autoFlush 也恢复为 true（finally 块保证）
