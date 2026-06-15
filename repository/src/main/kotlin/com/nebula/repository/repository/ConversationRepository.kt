@@ -3,6 +3,7 @@ package com.nebula.repository.repository
 import com.nebula.repository.entity.ConversationEntity
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.LocalDateTime
@@ -37,4 +38,26 @@ interface ConversationRepository : JpaRepository<ConversationEntity, String> {
         @Param("cursor") cursor: LocalDateTime?,
         pageable: Pageable
     ): List<ConversationEntity>
+
+    /**
+     * 原子更新会话成员计数（D-82, H22）。
+     *
+     * 单条 UPDATE 语句保证数据库侧原子性，替代非原子的 loadCount → set → save 模式。
+     * 由 Handler 层的事务包裹（TransactionTemplate）保证与成员写入在同一事务内。
+     *
+     * @param conversationId 会话 ID
+     * @param delta 成员计数变化量（+1 表示新增成员，-1 表示移除成员）
+     * @return 受影响的行数（0 表示会话不存在）
+     */
+    @Modifying
+    @Query("""
+        UPDATE ConversationEntity c
+        SET c.memberCount = c.memberCount + :delta,
+            c.updatedAt = CURRENT_TIMESTAMP
+        WHERE c.id = :convId
+    """)
+    fun incrementMemberCount(
+        @Param("convId") conversationId: String,
+        @Param("delta") delta: Int
+    ): Int
 }
