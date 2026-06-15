@@ -10,10 +10,6 @@ import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
 import com.nebula.gateway.testutil.mockTransactionTemplate
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -23,7 +19,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -42,8 +37,6 @@ import kotlin.test.assertNotNull
 class InviteMemberHandlerTest {
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationRepository: ConversationRepository
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
     private lateinit var handler: InviteMemberHandler
 
@@ -52,8 +45,6 @@ class InviteMemberHandlerTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationRepository = mockk()
-        conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
 
         val lockManager = mockLockManager()
@@ -64,30 +55,13 @@ class InviteMemberHandlerTest {
             lockManager,
             transactionTemplate,
             pushService,
-            conversationMemberRepository
+            mockk() // conversationMemberRepository 在 handle() 中未被直接调用
         )
     }
 
     @Test
     fun inviteShouldReturnOkCode() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } returns listOf(2001L, 3001L)
-
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val inviterMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns inviterMember
-        // 新邀请的 uids 不在群中
-        every {
-            conversationMemberRepository.findByConversationIdAndUserIds("conv-001", listOf(2001L, 3001L))
-        } returns emptyList()
-        every { conversationMemberRepository.countActiveByConversationId("conv-001") } returns 5L
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
 
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
@@ -103,21 +77,7 @@ class InviteMemberHandlerTest {
     fun groupFullShouldThrowGroupFull() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.GROUP_FULL)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 195
-        }
-        val inviterMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-        // 邀请 10 人，保证超出上限（当前 195 + 10 = 205 > 200）
         val invite10Uids = (2001L..2010L).toList()
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns inviterMember
-        every {
-            conversationMemberRepository.findByConversationIdAndUserIds("conv-001", invite10Uids)
-        } returns emptyList()
-        every { conversationMemberRepository.countActiveByConversationId("conv-001") } returns 195L
 
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
@@ -134,21 +94,6 @@ class InviteMemberHandlerTest {
     fun alreadyInGroupShouldThrowAlreadyInGroup() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.ALREADY_IN_GROUP)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val inviterMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-        val existingMember = ConversationMemberEntity("conv-001", 2001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns inviterMember
-        // 被邀请者已在群中
-        every {
-            conversationMemberRepository.findByConversationIdAndUserIds("conv-001", listOf(2001L))
-        } returns listOf(existingMember)
-
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
             .addUids(2001L)
@@ -163,16 +108,6 @@ class InviteMemberHandlerTest {
     @Test
     fun inviterNonMemberShouldThrowNotMember() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.NOT_MEMBER)
-
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        // 邀请者不在群中
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns null
 
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
@@ -218,27 +153,6 @@ class InviteMemberHandlerTest {
     fun partialExistingMembersShouldAddNewOnly() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } returns listOf(2001L, 4001L, 5001L)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val inviterMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-        // 3001L 已在群中
-        val existingMember = ConversationMemberEntity("conv-001", 3001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns inviterMember
-        // 邀请 4 人（2001, 3001, 4001, 5001），其中 3001 已在群中
-        every {
-            conversationMemberRepository.findByConversationIdAndUserIds(
-                "conv-001", listOf(2001L, 3001L, 4001L, 5001L)
-            )
-        } returns listOf(existingMember)
-        every { conversationMemberRepository.countActiveByConversationId("conv-001") } returns 5L
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
-
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
             .addAllUids(listOf(2001L, 3001L, 4001L, 5001L))
@@ -263,12 +177,6 @@ class InviteMemberHandlerTest {
     fun inviteDissolvedGroupShouldThrowGroupDissolved() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } throws ConversationException(BizCode.GROUP_DISSOLVED)
 
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 1; memberCount = 5
-        }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")
             .addUids(2001L)
@@ -283,22 +191,6 @@ class InviteMemberHandlerTest {
     @Test
     fun memberJoinedShouldPushToExistingMembers() = runTest {
         coEvery { conversationService.inviteMember(any(), any()) } returns listOf(2001L, 3001L)
-
-        val convEntity = ConversationEntity(type = 2).apply {
-            id = "conv-001"; status = 0; memberCount = 5
-        }
-        val inviterMember = ConversationMemberEntity("conv-001", 1001L).apply { role = "member" }
-
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
-        every {
-            conversationMemberRepository.findByConversationIdAndUserId("conv-001", 1001L)
-        } returns inviterMember
-        every {
-            conversationMemberRepository.findByConversationIdAndUserIds("conv-001", listOf(2001L, 3001L))
-        } returns emptyList()
-        every { conversationMemberRepository.countActiveByConversationId("conv-001") } returns 5L
-        every { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        every { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
 
         val req = InviteMemberReq.newBuilder()
             .setConversationId("conv-001")

@@ -3,6 +3,7 @@ package com.nebula.gateway.handler.chat.send
 import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.chat.SendMessageResp
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
@@ -75,22 +76,31 @@ class SendMessageHandler(
             }
         }
 
-        // Step 1: 委托 MessageService 处理核心业务逻辑
-        val result = messageService.sendMessage(req, senderUid)
+        return try {
+            // Step 1: 委托 MessageService 处理核心业务逻辑
+            val result = messageService.sendMessage(req, senderUid)
 
-        // Step 2: 构建响应（含服务端分配的 seq）
-        val response = SendMessageResp.newBuilder()
-            .setMsgId(result.msgId)
-            .setServerTs(result.serverTs)
-            .setSeq(result.seq)
-            .build()
+            // Step 2: 构建响应（含服务端分配的 seq）
+            val response = SendMessageResp.newBuilder()
+                .setMsgId(result.msgId)
+                .setServerTs(result.serverTs)
+                .setSeq(result.seq)
+                .build()
 
-        // Step 3: 异步 fire-and-forget：未读计数 + 推送
-        scope.launch {
-            asyncUnreadAndPush(result)
+            // Step 3: 异步 fire-and-forget：未读计数 + 推送
+            scope.launch {
+                asyncUnreadAndPush(result)
+            }
+
+            response
+        } catch (e: BizException) {
+            // D-09: Step 链业务异常直接传播，不吞没
+            throw e
+        } catch (e: Exception) {
+            // REVIEW-HIGH-2: 非预期异常包装为 INTERNAL_ERROR，避免泄漏内部细节
+            logger.error(e) { "Unexpected error in chat/send, senderUid=$senderUid" }
+            throw BizException(BizCode.INTERNAL_ERROR, "Unexpected error: ${e.message}")
         }
-
-        return response
     }
 
     /**

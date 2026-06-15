@@ -2,7 +2,6 @@ package com.nebula.gateway.di
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.admin.DeadLetterCompensator
-import com.nebula.gateway.delivery.DeliveryHandlerCollector
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.delivery.RedisDeliveryTracker
 import com.nebula.gateway.handler.admin.AdminHandlerCollector
@@ -31,8 +30,7 @@ import kotlin.test.assertNotNull
 /**
  * MessageReliabilityModule Koin 装配测试（Phase 10）。
  *
- * 验证 messageReliabilityModule 中所有 9 个组件均可正确解析。
- * 遵循 GatewayModuleTest 模式，每个测试方法独立容器。
+ * 单容器 + 多断言模式：一次 startKoin，所有解析验证在同一个 Koin 容器中完成。
  */
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
 class MessageReliabilityModuleTest {
@@ -60,57 +58,30 @@ class MessageReliabilityModuleTest {
         stopKoin()
     }
 
+    /**
+     * 验证 messageReliabilityModule 中所有组件均可正确解析。
+     *
+     * 单容器启动，避免 7 次重复 startKoin 的开销。
+     */
     @Test
-    fun messageReliabilityModuleShouldResolveSeqService() {
+    fun messageReliabilityModuleShouldResolveAllComponents() {
         startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val service = GlobalContext.get().get<SeqService>()
-        assertNotNull(service)
+        val koin = GlobalContext.get()
+
+        assertNotNull(koin.get<SeqService>())
+        assertNotNull(koin.get<RedisDeliveryTracker>())
+        assertNotNull(koin.get<DeliveryTrackingService>())
+        assertNotNull(koin.get<DeadLetterService>())
+        assertNotNull(koin.get<DeadLetterCompensator>())
+        assertNotNull(koin.get<DeadLetterQueryHandler>())
+        assertNotNull(koin.get<RetryDeadLetterHandler>())
     }
 
+    /**
+     * 验证 AdminHandlerCollector 可从已解析的 Handler 构造。
+     */
     @Test
-    fun messageReliabilityModuleShouldResolveRedisDeliveryTracker() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val tracker = GlobalContext.get().get<RedisDeliveryTracker>()
-        assertNotNull(tracker)
-    }
-
-    @Test
-    fun messageReliabilityModuleShouldResolveDeliveryTrackingService() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val service = GlobalContext.get().get<DeliveryTrackingService>()
-        assertNotNull(service)
-    }
-
-    @Test
-    fun messageReliabilityModuleShouldResolveDeadLetterService() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val service = GlobalContext.get().get<DeadLetterService>()
-        assertNotNull(service)
-    }
-
-    @Test
-    fun messageReliabilityModuleShouldResolveDeadLetterCompensator() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val compensator = GlobalContext.get().get<DeadLetterCompensator>()
-        assertNotNull(compensator)
-    }
-
-    @Test
-    fun messageReliabilityModuleShouldResolveDeadLetterQueryHandler() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val handler = GlobalContext.get().get<DeadLetterQueryHandler>()
-        assertNotNull(handler)
-    }
-
-    @Test
-    fun messageReliabilityModuleShouldResolveRetryDeadLetterHandler() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val handler = GlobalContext.get().get<RetryDeadLetterHandler>()
-        assertNotNull(handler)
-    }
-
-    @Test
-    fun messageReliabilityModuleShouldResolveAdminHandlerCollector() {
+    fun messageReliabilityModuleShouldConstructAdminHandlerCollector() {
         startKoin { modules(messageReliabilityModule, buildExternalModule()) }
         val deadLetterQueryHandler = GlobalContext.get().get<DeadLetterQueryHandler>()
         val retryDeadLetterHandler = GlobalContext.get().get<RetryDeadLetterHandler>()

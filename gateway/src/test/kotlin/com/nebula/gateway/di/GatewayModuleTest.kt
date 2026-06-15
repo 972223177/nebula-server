@@ -4,7 +4,9 @@ import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
+import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
@@ -16,11 +18,14 @@ import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
 import com.nebula.gateway.handler.friend.FriendDeleteHandler
+import com.nebula.gateway.handler.friend.FriendHandlerCollector
 import com.nebula.gateway.handler.friend.FriendListHandler
 import com.nebula.gateway.handler.friend.FriendRejectHandler
 import com.nebula.gateway.handler.friend.FriendRequestsHandler
+import com.nebula.gateway.handler.message.MessageSeqHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
+import com.nebula.gateway.handler.system.SystemHandlerCollector
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
 import com.nebula.gateway.handler.user.GetPrivacyHandler
@@ -29,6 +34,7 @@ import com.nebula.gateway.handler.user.LoginHandler
 import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
+import com.nebula.gateway.handler.user.UserHandlerCollector
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
@@ -282,5 +288,128 @@ class GatewayModuleTest {
         assertNotNull(registry.get("friend/delete"))
         assertNotNull(registry.get("friend/add"))
         assertNotNull(registry.get("friend/accept"))
+    }
+
+    // ===================== 领域专项验证测试 =====================
+
+    /**
+     * 验证 Chat 领域 Handler Collector 注册全部 4 个 method 名称。
+     */
+    @Test
+    fun chatHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val collector = ChatHandlerCollector(
+            GlobalContext.get().get<SendMessageHandler>(),
+            GlobalContext.get().get<PullMessagesHandler>(),
+            GlobalContext.get().get<ReadReportHandler>(),
+            GlobalContext.get().get<MessageSeqHandler>()
+        )
+        collector.registerAll(registry)
+        assertNotNull(registry.get("chat/send"))
+        assertNotNull(registry.get("message/pull"))
+        assertNotNull(registry.get("message/read"))
+        assertNotNull(registry.get("message/seq"))
+    }
+
+    /**
+     * 验证 Conversation 领域 Handler Collector 注册全部 7 个 method 名称。
+     */
+    @Test
+    fun conversationHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val collector = ConversationHandlerCollector(
+            GlobalContext.get().get<ListConversationsHandler>(),
+            GlobalContext.get().get<GroupMembersHandler>(),
+            GlobalContext.get().get<EditGroupHandler>(),
+            GlobalContext.get().get<CreateGroupHandler>(),
+            GlobalContext.get().get<InviteMemberHandler>(),
+            GlobalContext.get().get<LeaveGroupHandler>(),
+            GlobalContext.get().get<KickMemberHandler>()
+        )
+        collector.registerAll(registry)
+        assertNotNull(registry.get("conversation/list"))
+        assertNotNull(registry.get("conversation/group_members"))
+        assertNotNull(registry.get("conversation/edit_group_info"))
+        assertNotNull(registry.get("conversation/create_group"))
+        assertNotNull(registry.get("conversation/invite_member"))
+        assertNotNull(registry.get("conversation/leave_group"))
+        assertNotNull(registry.get("conversation/kick_member"))
+    }
+
+    /**
+     * 验证 Friend 领域 Handler Collector 注册全部 6 个 method 名称。
+     */
+    @Test
+    fun friendHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val collector = FriendHandlerCollector(
+            GlobalContext.get().get<FriendRejectHandler>(),
+            GlobalContext.get().get<FriendRequestsHandler>(),
+            GlobalContext.get().get<FriendListHandler>(),
+            GlobalContext.get().get<FriendDeleteHandler>(),
+            GlobalContext.get().get<FriendAddHandler>(),
+            GlobalContext.get().get<FriendAcceptHandler>()
+        )
+        collector.registerAll(registry)
+        assertNotNull(registry.get("friend/reject"))
+        assertNotNull(registry.get("friend/requests"))
+        assertNotNull(registry.get("friend/list"))
+        assertNotNull(registry.get("friend/delete"))
+        assertNotNull(registry.get("friend/add"))
+        assertNotNull(registry.get("friend/accept"))
+    }
+
+    /**
+     * 验证 System 领域 Handler Collector 注册 ping method 名称。
+     */
+    @Test
+    fun systemHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val pingHandler = GlobalContext.get().get<PingHandler>()
+        val collector = SystemHandlerCollector(pingHandler)
+        collector.registerAll(registry)
+        assertNotNull(registry.get("system/ping"))
+    }
+
+    /**
+     * 验证 User 领域 Handler Collector 注册全部 8 个 method 名称。
+     */
+    @Test
+    fun userHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val collector = UserHandlerCollector(
+            GlobalContext.get().get<LoginHandler>(),
+            GlobalContext.get().get<RegisterHandler>(),
+            GlobalContext.get().get<SearchUserHandler>(),
+            GlobalContext.get().get<GetProfileHandler>(),
+            GlobalContext.get().get<BatchGetUserHandler>(),
+            GlobalContext.get().get<BatchGetStatusHandler>(),
+            GlobalContext.get().get<SetPrivacyHandler>(),
+            GlobalContext.get().get<GetPrivacyHandler>()
+        )
+        collector.registerAll(registry)
+        assertNotNull(registry.get("user/login"))
+        assertNotNull(registry.get("user/register"))
+        assertNotNull(registry.get("user/search"))
+        assertNotNull(registry.get("user/getProfile"))
+        assertNotNull(registry.get("user/batchGet"))
+        assertNotNull(registry.get("user/batchGetStatus"))
+        assertNotNull(registry.get("user/setPrivacy"))
+        assertNotNull(registry.get("user/getPrivacy"))
     }
 }

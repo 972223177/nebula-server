@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: Phase 1-10 Complete / Phase 11 Code Quality
-status: Phase 10 complete
-last_updated: "2026-06-15T00:00:00.000Z"
+milestone_name: v1.0 Complete — All 11 Phases Done
+status: Phase 11 complete (v1.0 production-ready)
+last_updated: "2026-06-15T12:00:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 10
-  total_plans: 45
-  completed_plans: 45
-  percent: 91
+  completed_phases: 11
+  total_plans: 49
+  completed_plans: 49
+  percent: 100
 ---
 
 # State: Nebula Chat Server
@@ -19,9 +19,9 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** Phase 11 — Code Quality & Production Hardening  
+**Current focus:** v1.0 Complete — All 11 phases done  
 **Phase count:** 11  
-**Requirements:** 85 v1 requirements mapped (70 original + 15 CQ new)
+**Requirements:** 85 v1 requirements — 78/81 CQ issues resolved, 3 test items deferred (needs embedded Redis)
 
 ## Phase Status
 
@@ -37,17 +37,21 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 8 — Friend & Online Status | Complete | 2026-06-13 | 2026-06-13 |
 | 9 — Reconnection | Complete | 2026-06-13 | 2026-06-13 |
 | 10 — Message Reliability | Complete | 2026-06-13 | 2026-06-14 |
-| 11 — Code Quality & Production Hardening | Pending | — | — |
+| 11 — Code Quality & Production Hardening | Complete | 2026-06-15 | 2026-06-15 |
 
 ## Next Actions
 
-1. `/nx-discuss 11` — 开始阶段 11（Code Quality & Production Hardening）讨论
-2. 阶段 11 基于 2026-06-15 全量代码审查结果：85 个问题（18 HIGH / 36 MEDIUM / 31 LOW）跨越 5 个模块
+v1.0 已发布。后续可考虑：
+1. 嵌入式 Redis 测试基础设施 → 补全 T04/T05/T06 延期测试
+2. 生产环境部署文档与运维手册
+3. v1.1 功能规划
 
 ## Recent Events
 
 | Date | Task | Impact |
 |------|------|--------|
+| 2026-06-15 | Phase 11 完成 | 4 Plan：11-01 安全加固、11-02 数据一致性、11-03 数据完整性、11-04 代码质量。14 commit，78/81 CQ 问题关闭 |
+| 2026-06-15 | nx-verify 11 | 四层验证 PARTIAL：3 个非阻塞 gap（路径声明差异、STATE.md 未同步、3 个测试延期） |
 | 2026-06-15 | 全量代码审查 | 5 并行 subagent 审查 common/repository/service/gateway/server 模块，发现 85 个问题（18 HIGH / 36 MEDIUM / 31 LOW）。生成综合问题清单，作为 Phase 11 需求基线 |
 
 ## Quick Tasks Completed
@@ -85,6 +89,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 8 | ✅ (25 threats, 0 open) | ✅ (100% coverage) | ✅ (L1-L4 passed, 22/25 L1) |
 | 9 | ✅ (14 threats, 0 open, R-09-02 fixed) | ✅ (88% coverage, partial) | ✅ (L1-L4 passed, 257/257 tests) |
 | 10 | ✅ (23 threats, 0 open) | — | ✅ |
+| 11 | — (refactoring phase, no new threats) | — | ✅ (nx-verify: PARTIAL, 3 non-blocking gaps) |
 
 ## Quick Tasks Completed
 
@@ -93,4 +98,4 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-14 after Phase 10 security audit (nx-secure)*
+*Last updated: 2026-06-15 after Phase 11 verification (nx-verify)*
