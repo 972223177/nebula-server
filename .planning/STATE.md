@@ -41,6 +41,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 12 — Module Dependency Isolation | Complete | 2026-06-16 | 2026-06-16 |
 | 13 — Code Review Cleanup | Complete | 2026-06-16 | 2026-06-16 |
 | 14 — 遗留问题修复 | Complete | 2026-06-16 | 2026-06-16 |
+| 15 — 测试覆盖缺口闭合 | In Discussion | 2026-06-16 | — |
 
 ## Next Actions
 
@@ -108,4 +109,4 @@ v1.1 已发布。后续可考虑：
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-16 after Phase 13 Code Review Cleanup*
+*Last updated: 2026-06-16 after Phase 15 Context Created*
