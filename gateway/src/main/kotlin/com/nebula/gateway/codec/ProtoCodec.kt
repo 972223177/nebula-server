@@ -73,15 +73,17 @@ object ProtoCodec {
      * 从 HandlerEntry 中反序列化请求参数。
      *
      * 将 [ByteString] 转换为 [ByteArray] 后委托给 HandlerEntry.parseFrom。
+     * 空载荷时调用 parseFrom(ByteArray(0)) 返回 Proto 默认实例，
+     * 而非直接返回 ByteArray，避免 Handler 收到错误类型的 ClassCastException。
      *
      * @param entry Handler 注册条目
      * @param params Proto bytes 格式的请求参数
      * @return 反序列化后的请求对象
      */
     fun deserialize(entry: HandlerEntry, params: ByteString): Any {
-        // 空/空字节检查，避免 toByteArray() 在空 ByteString 上异常
+        // 空载荷返回 Proto 默认实例，而非 ByteArray
         if (params.isEmpty) {
-            return ByteArray(0)
+            return entry.parseFrom(ByteArray(0))
         }
         return entry.parseFrom(params.toByteArray())
     }
