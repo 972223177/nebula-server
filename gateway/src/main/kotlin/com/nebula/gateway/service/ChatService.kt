@@ -78,7 +78,16 @@ class ChatService(
     private val friendshipRepository: FriendshipRepository,
     private val pushService: PushService,
     private val privacyRepository: PrivacyRepository,
-    private val deadLetterService: DeadLetterService
+    private val deadLetterService: DeadLetterService,
+    /**
+     * 协程作用域 — 用于桥接 gRPC 回调线程与协程。
+     *
+     * gRPC 的 StreamObserver.onNext() 在 gRPC worker 线程调用，而 Dispatcher.dispatch() 是 suspend 函数。
+     * 通过此作用域启动协程执行异步操作。
+     *
+     * 可注入以支持测试：测试中传入 TestScope，确保所有 fire-and-forget 协程在 runTest 返回时完成。
+     */
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : BindableService {
 
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
@@ -86,14 +95,6 @@ class ChatService(
 
     /** 标记 eviction callback 是否已注册，使用 AtomicBoolean 确保 check-then-act 的原子性 */
     private val evictionCallbackRegistered = AtomicBoolean(false)
-
-    /**
-     * ChatService 协程作用域 — 用于桥接 gRPC 回调线程与协程。
-     *
-     * gRPC 的 StreamObserver.onNext() 在 gRPC worker 线程调用，而 Dispatcher.dispatch() 是 suspend 函数。
-     * 通过此作用域启动协程执行异步操作。
-     */
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun bindService(): ServerServiceDefinition {
         // 构造 BIDI_STREAMING MethodDescriptor

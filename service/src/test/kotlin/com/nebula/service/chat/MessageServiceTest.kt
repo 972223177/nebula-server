@@ -63,9 +63,9 @@ class MessageServiceTest {
     private fun groupConversation(): ConversationEntity =
         ConversationEntity(type = 2, name = "测试群").apply { id = conversationId }
 
-    /** 构造私聊会话实体 */
+    /** 构造私聊会话实体（CQ-12: type=1 为私聊） */
     private fun privateConversation(): ConversationEntity =
-        ConversationEntity(type = 0, name = "").apply { id = "private:1:2" }
+        ConversationEntity(type = 1, name = "").apply { id = "private:1:2" }
 
     /** 构造活跃成员实体 */
     private fun activeMember(convId: String = conversationId, uid: Long = senderUid): ConversationMemberEntity =

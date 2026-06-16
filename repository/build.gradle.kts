@@ -16,6 +16,12 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
+    // Docker 29.x requires minimum API version 1.44, but docker-java defaults to 1.32
+    // Ref: https://github.com/testcontainers/testcontainers-java/issues/11212
+    systemProperty("api.version", "1.44")
+    // 若 Docker Hub 不可达（如某些网络环境），可通过环境变量禁用 Ryuk：
+    //   TESTCONTAINERS_RYUK_DISABLED=true ./gradlew :repository:test
+    // 更好的方案：在 Docker Desktop 中配置 registry mirror（Settings → Docker Engine）
 }
 
 dependencies {

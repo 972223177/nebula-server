@@ -292,15 +292,14 @@ class ConversationServiceTest {
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid) } returns ownerMemberEntity
         // memberUid1 已是活跃成员
-        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
-        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 2L
-        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationMemberRepository.findByConversationIdAndUserIds(convId, listOf(memberUid1)) } returns listOf(memberEntity1)
+        coEvery { conversationRepository.incrementMemberCount(convId, 0) } returns 0
 
         val invited = service.inviteMember(req, operatorUid)
 
         // 应跳过 memberUid1，不加入 newMemberUids
         assertTrue(invited.isEmpty())
-        coVerify(exactly = 1) { conversationRepository.save(any()) }
+        coVerify(exactly = 1) { conversationRepository.incrementMemberCount(convId, 0) }
     }
 
     /** 恢复已软删除的成员 */
@@ -318,10 +317,9 @@ class ConversationServiceTest {
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid) } returns ownerMemberEntity
         // 成员已存在但 deleted=1
-        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns softDeletedMember
+        coEvery { conversationMemberRepository.findByConversationIdAndUserIds(convId, listOf(memberUid1)) } returns listOf(softDeletedMember)
         coEvery { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 2L
-        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationRepository.incrementMemberCount(convId, 1) } returns 1
 
         val invited = service.inviteMember(req, operatorUid)
 
@@ -342,10 +340,9 @@ class ConversationServiceTest {
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid) } returns ownerMemberEntity
         // 新成员不在群中
-        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, newUid) } returns null
+        coEvery { conversationMemberRepository.findByConversationIdAndUserIds(convId, listOf(newUid)) } returns emptyList()
         coEvery { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 3L
-        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationRepository.incrementMemberCount(convId, 1) } returns 1
 
         val invited = service.inviteMember(req, operatorUid)
 
@@ -366,14 +363,13 @@ class ConversationServiceTest {
 
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid) } returns ownerMemberEntity
-        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, newUid) } returns null
+        coEvery { conversationMemberRepository.findByConversationIdAndUserIds(convId, listOf(newUid)) } returns emptyList()
         coEvery { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 3L
-        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationRepository.incrementMemberCount(convId, 1) } returns 1
 
         service.inviteMember(req, operatorUid)
 
-        coVerify { conversationRepository.save(match<ConversationEntity> { it.memberCount == 3 }) }
+        coVerify { conversationRepository.incrementMemberCount(convId, 1) }
     }
 
     // =========================================================================
@@ -429,15 +425,14 @@ class ConversationServiceTest {
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
         coEvery { conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1) } just Runs
-        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 1L
-        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationRepository.incrementMemberCount(convId, -1) } returns 1
 
         service.leaveGroup(req, memberUid1)
 
         coVerify(exactly = 1) {
             conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1)
         }
-        coVerify { conversationRepository.save(match<ConversationEntity> { it.memberCount == 1 }) }
+        coVerify { conversationRepository.incrementMemberCount(convId, -1) }
     }
 
     // =========================================================================
@@ -525,8 +520,7 @@ class ConversationServiceTest {
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid) } returns ownerMemberEntity
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
         coEvery { conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1) } just Runs
-        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 1L
-        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationRepository.incrementMemberCount(convId, -1) } returns 1
 
         val kickedUid = service.kickMember(req, operatorUid)
 
@@ -534,7 +528,7 @@ class ConversationServiceTest {
         coVerify(exactly = 1) {
             conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1)
         }
-        coVerify { conversationRepository.save(match<ConversationEntity> { it.memberCount == 1 }) }
+        coVerify { conversationRepository.incrementMemberCount(convId, -1) }
     }
 
     // =========================================================================
