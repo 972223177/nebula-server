@@ -31,6 +31,7 @@ import java.time.LocalDateTime
 import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -728,5 +729,187 @@ class ConversationServiceTest {
         // Then: 验证协程调度层执行完成且无异常抛出
         coVerify(atLeast = 5) { conversationRepository.incrementMemberCount(convId, 1) }
         coVerify(atLeast = 5) { conversationRepository.incrementMemberCount(convId, -1) }
+    }
+
+    // =========================================================================
+    // dissolveGroup（P0-06）
+    // =========================================================================
+
+    /** 正常解散群组：标记 status=已解散 + 软删除所有成员 */
+    @Test
+    fun dissolveGroupShouldDeleteMembersAndSetConversationInactive() = runTest {
+        // 模拟未被解散的群组会话
+        val activeConv = ConversationEntity(type = 2, name = "测试群", memberCount = 3).apply {
+            id = convId
+            status = 0 // 活跃状态
+            createdAt = now
+            updatedAt = now
+        }
+        coEvery { conversationRepository.findById(convId) } returns Optional.of(activeConv)
+        coEvery { conversationRepository.save(any<ConversationEntity>()) } answers { firstArg() }
+        coEvery { conversationMemberRepository.softDeleteAllByConversationId(convId) } just Runs
+
+        service.dissolveGroup(convId)
+
+        // 验证会话状态已更新为已解散
+        assertEquals(1, activeConv.status, "会话状态应标记为已解散")
+        coVerify(exactly = 1) { conversationRepository.save(match { it.status == 1 }) }
+        // 验证软删除所有成员
+        coVerify(exactly = 1) {
+            conversationMemberRepository.softDeleteAllByConversationId(convId)
+        }
+    }
+
+    /** 解散已解散的群组时抛出 GROUP_DISSOLVED */
+    @Test
+    fun dissolveGroupShouldThrowWhenAlreadyDissolved() = runTest {
+        val dissolvedConv = ConversationEntity(type = 2, name = "测试群", memberCount = 3).apply {
+            id = convId
+            status = 1 // 已解散
+            createdAt = now
+            updatedAt = now
+        }
+        coEvery { conversationRepository.findById(convId) } returns Optional.of(dissolvedConv)
+
+        val ex = assertThrows<ConversationException> {
+            service.dissolveGroup(convId)
+        }
+        assertEquals(BizCode.GROUP_DISSOLVED, ex.bizCode)
+    }
+
+    /** 不存在的群组解散时抛出 CONV_NOT_FOUND */
+    @Test
+    fun dissolveGroupShouldThrowWhenConvNotFound() = runTest {
+        coEvery { conversationRepository.findById("non-existent") } returns Optional.empty()
+
+        val ex = assertThrows<ConversationException> {
+            service.dissolveGroup("non-existent")
+        }
+        assertEquals(BizCode.CONV_NOT_FOUND, ex.bizCode)
+    }
+
+    // =========================================================================
+    // getConversation / getConversationMembers / getMemberRole（P1-08）
+    // =========================================================================
+
+    /** getConversation 正常路径：返回 ConversationInfo */
+    @Test
+    fun getConversationShouldReturnConversation() = runTest {
+        coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
+
+        val result = service.getConversation(convId)
+
+        assertNotNull(result, "应返回 ConversationInfo")
+        assertEquals(convId, result.id)
+        assertEquals(2, result.type, "群聊类型应为 2")
+    }
+
+    /** getConversation 不存在的会话返回 null */
+    @Test
+    fun getConversationShouldReturnNullWhenNotFound() = runTest {
+        coEvery { conversationRepository.findById("non-existent") } returns Optional.empty()
+
+        val result = service.getConversation("non-existent")
+
+        assertNull(result, "不存在的会话应返回 null")
+    }
+
+    /** getConversationMembers 正常路径：返回成员列表 */
+    @Test
+    fun getConversationMembersShouldReturnMembers() = runTest {
+        coEvery { conversationMemberRepository.findByConversationId(convId) } returns listOf(
+            ownerMemberEntity, memberEntity1
+        )
+
+        val result = service.getConversationMembers(convId)
+
+        assertEquals(2, result.size, "应返回 2 个成员")
+        assertEquals(ownerUid, result[0].userId)
+        assertEquals("owner", result[0].role)
+        assertEquals(memberUid1, result[1].userId)
+        assertEquals("member", result[1].role)
+    }
+
+    /** getConversationMembers 空成员返回空列表 */
+    @Test
+    fun getConversationMembersShouldReturnEmptyWhenNoMembers() = runTest {
+        coEvery { conversationMemberRepository.findByConversationId(convId) } returns emptyList()
+
+        val result = service.getConversationMembers(convId)
+
+        assertTrue(result.isEmpty(), "无成员时应返回空列表")
+    }
+
+    /** getMemberRole 正常路径：返回成员角色 */
+    @Test
+    fun getMemberRoleShouldReturnRole() = runTest {
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, ownerUid) } returns ownerMemberEntity
+
+        val result = service.getMemberRole(convId, ownerUid)
+
+        assertNotNull(result, "应返回成员信息")
+        assertEquals(ownerUid, result.userId)
+        assertEquals("owner", result.role)
+    }
+
+    /** getMemberRole 不存在的成员返回 null */
+    @Test
+    fun getMemberRoleShouldReturnNullWhenMemberNotFound() = runTest {
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, 9999L) } returns null
+
+        val result = service.getMemberRole(convId, 9999L)
+
+        assertNull(result, "不存在的成员应返回 null")
+    }
+
+    // =========================================================================
+    // leaveGroup memberCount==1 自动解散（P1-11）
+    // =========================================================================
+
+    /** 最后成员退群时自动解散群组（memberCount == 1L） */
+    @Test
+    fun leaveGroupShouldDissolveWhenLastMember() = runTest {
+        val req = LeaveGroupReq.newBuilder().setConversationId(convId).build()
+
+        coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
+        // 只有 1 个活跃成员 → 触发解散分支
+        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 1L
+        coEvery { conversationRepository.delete(any<ConversationEntity>()) } just Runs
+        coEvery { conversationMemberRepository.delete(any<ConversationMemberEntity>()) } just Runs
+
+        service.leaveGroup(req, memberUid1)
+
+        coVerify(exactly = 1) {
+            conversationRepository.delete(groupConversation)
+            conversationMemberRepository.delete(memberEntity1)
+        }
+    }
+
+    /** 多成员场景不退群时不触发解散（memberCount > 1L） */
+    @Test
+    fun leaveGroupShouldNotDissolveWhenMultipleMembers() = runTest {
+        val req = LeaveGroupReq.newBuilder().setConversationId(convId).build()
+
+        coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
+        // 多余 1 个活跃成员 → 进入软删除分支
+        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 2L
+        // memberEntity1.role = "member"（不是 owner）→ 继续执行软删除
+        coEvery { conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1) } just Runs
+        coEvery { conversationRepository.incrementMemberCount(convId, -1) } returns 1
+
+        service.leaveGroup(req, memberUid1)
+
+        // 验证走的是软删除路径而非解散路径
+        coVerify(exactly = 1) {
+            conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1)
+            conversationRepository.incrementMemberCount(convId, -1)
+        }
+        // 验证未触发解散
+        coVerify(exactly = 0) {
+            conversationRepository.delete(any<ConversationEntity>())
+            conversationMemberRepository.delete(any<ConversationMemberEntity>())
+        }
     }
 }
