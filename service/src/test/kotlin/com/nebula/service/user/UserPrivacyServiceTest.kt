@@ -117,4 +117,23 @@ class UserPrivacyServiceTest {
         assertFalse(resp.hideOnlineStatus)
         coVerify(exactly = 1) { privacyRepository.getHideOnlineStatus(userId) }
     }
+
+    // ─── batchGetHideOnlineStatus（P1-09）───
+
+    /**
+     * batchGetHideOnlineStatus 传入多个用户 ID 时，返回其中隐藏了在线状态的用户集合。
+     */
+    @Test
+    fun batchGetHideOnlineStatusShouldReturnFilteredSet() = runTest {
+        val userIds = listOf(1L, 2L, 3L)
+        coEvery { privacyRepository.batchGetHideOnlineStatus(userIds) } returns setOf(1L)
+
+        val result = service.batchGetHideOnlineStatus(userIds)
+
+        assertTrue(result.contains(1L), "用户 1 隐藏状态应被返回")
+        assertFalse(result.contains(2L), "用户 2 应不在隐藏集合中")
+        assertFalse(result.contains(3L), "用户 3 应不在隐藏集合中")
+        assertTrue(result.size == 1, "应返回 1 个隐藏用户")
+        coVerify(exactly = 1) { privacyRepository.batchGetHideOnlineStatus(userIds) }
+    }
 }

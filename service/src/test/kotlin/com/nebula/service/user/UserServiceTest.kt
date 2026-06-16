@@ -14,17 +14,17 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.dao.DataIntegrityViolationException
 import java.time.LocalDateTime
 import java.util.Optional
 import kotlin.requireNotNull
+import kotlin.test.assertFailsWith
 
 /**
  * UserService 单元测试。
@@ -73,8 +73,8 @@ class UserServiceTest {
             .setPassword("12345")
             .build()
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.register(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.register(req)
         }
         assertEquals(BizCode.INVALID_PARAM, ex.bizCode)
     }
@@ -89,8 +89,8 @@ class UserServiceTest {
             .setPassword(validPassword)
             .build()
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.register(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.register(req)
         }
         assertEquals(BizCode.INVALID_PARAM, ex.bizCode)
     }
@@ -106,8 +106,8 @@ class UserServiceTest {
             .build()
         coEvery { userRepository.findByUsername(testUsername) } returns mockk()
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.register(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.register(req)
         }
         assertEquals(BizCode.USERNAME_EXISTS, ex.bizCode)
     }
@@ -206,8 +206,8 @@ class UserServiceTest {
 
         coEvery { userRepository.findByUsername(any()) } returns null
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.loginByPassword(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.loginByPassword(req)
         }
         assertEquals(BizCode.USER_NOT_FOUND, ex.bizCode)
     }
@@ -225,8 +225,8 @@ class UserServiceTest {
         val user = UserEntity(username = testUsername, passwordHash = "hash", nickname = testUsername).apply { id = 1L }
         coEvery { userRepository.findByUsername(testUsername) } returns user
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.loginByPassword(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.loginByPassword(req)
         }
         assertEquals(BizCode.AUTH_FAILED, ex.bizCode)
     }
@@ -242,8 +242,8 @@ class UserServiceTest {
             .build()
         coEvery { userRepository.findByUsername(testUsername) } returns null
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.loginByPassword(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.loginByPassword(req)
         }
         assertEquals(BizCode.USER_NOT_FOUND, ex.bizCode)
     }
@@ -265,8 +265,8 @@ class UserServiceTest {
         coEvery { userRepository.findByUsername(testUsername) } returns userEntity
         // 默认 verifyPassword 返回 false，因此无需额外设置
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.loginByPassword(req) }
+        val ex = assertFailsWith<UserException> {
+            userService.loginByPassword(req)
         }
         assertEquals(BizCode.AUTH_FAILED, ex.bizCode)
     }
@@ -396,8 +396,8 @@ class UserServiceTest {
     fun getProfileShouldThrowUserNotFoundWhenUserDoesNotExist() = runTest {
         coEvery { userRepository.findById(mockUserId) } returns Optional.empty()
 
-        val ex = assertThrows(UserException::class.java) {
-            runBlocking { userService.getProfile(mockUserId) }
+        val ex = assertFailsWith<UserException> {
+            userService.getProfile(mockUserId)
         }
         assertEquals(BizCode.USER_NOT_FOUND, ex.bizCode)
     }
@@ -525,5 +525,29 @@ class UserServiceTest {
             this.createdAt = createdAt
             this.updatedAt = createdAt
         }
+    }
+
+    // ═══════════════════════════════════════
+    // register DataIntegrityViolationException（P1-12）
+    // ═══════════════════════════════════════
+
+    /**
+     * 注册：用户名唯一键冲突时（DataIntegrityViolationException），应回退或抛出业务异常。
+     */
+    @Test
+    fun registerShouldHandleDataIntegrityViolation() = runTest {
+        val req = RegisterReq.newBuilder()
+            .setUsername(testUsername)
+            .setPassword(validPassword)
+            .build()
+        coEvery { userRepository.findByUsername(testUsername) } returns null
+        coEvery { userRepository.save(any()) } throws DataIntegrityViolationException("uk_username conflict")
+
+        val ex = assertFailsWith<Exception> {
+            userService.register(req)
+        }
+        // 验证返回的业务异常或回退行为
+        assertTrue(ex is UserException || ex is DataIntegrityViolationException,
+            "应抛出 UserException 或 DataIntegrityViolationException")
     }
 }

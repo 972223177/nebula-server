@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -316,4 +317,36 @@ class SeqServiceTest {
      * 当前单元测试通过 mock RedisCoroutinesCommands 覆盖了所有代码分支，
      * 但并发语义和 Redis 协议行为仍需集成测试验证。
      */
+    // ═══════════════════════════════════════════════════════════════════════
+    // recoverSequences — Redis 重启恢复（P1-01）
+    // ═══════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun recoverSequencesShouldRestoreFromRedis() = runTest {
+        val mysqlCount = 42L
+        coEvery { redis.setnx(any(), any()) } returns true
+        coEvery { redis.expire(any(), any<Long>()) } returns true
+
+        val seq = seqService.recoverSequences(
+            conversationSupplier = { listOf(Pair("conv-1", 0)) },
+            msgCountByConv = { mysqlCount },
+            memberSupplier = { listOf(50001L) }
+        )
+
+        assertTrue(seq > 0, "应成功恢复至少一个序列号")
+        coVerify(atLeast = 1) { redis.setnx(any(), any()) }
+    }
+
+    @Test
+    fun recoverSequencesShouldHandleRedisFailure() = runTest {
+        coEvery { redis.setnx(any(), any()) } throws RuntimeException("Redis down")
+
+        assertFailsWith<RuntimeException> {
+            seqService.recoverSequences(
+                conversationSupplier = { listOf(Pair("conv-fail", 0)) },
+                msgCountByConv = { 10L },
+                memberSupplier = { listOf(50002L) }
+            )
+        }
+    }
 }
