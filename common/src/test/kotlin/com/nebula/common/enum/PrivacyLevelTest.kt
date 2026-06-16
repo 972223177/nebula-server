@@ -17,31 +17,31 @@ class PrivacyLevelTest {
     // ─── fromCode() 正向映射 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(0) — 返回 PUBLIC`() {
+    fun fromCode0ReturnsPublic() {
         assertEquals(PrivacyLevel.PUBLIC, PrivacyLevel.fromCode(0))
     }
 
     @Test
-    fun `fromCode(1) — 返回 FRIENDS_ONLY`() {
+    fun fromCode1ReturnsFriendsOnly() {
         assertEquals(PrivacyLevel.FRIENDS_ONLY, PrivacyLevel.fromCode(1))
     }
 
     @Test
-    fun `fromCode(2) — 返回 PRIVATE`() {
+    fun fromCode2ReturnsPrivate() {
         assertEquals(PrivacyLevel.PRIVATE, PrivacyLevel.fromCode(2))
     }
 
     // ─── fromCode() 异常路径 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(-1) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCodeNegOneThrowsException() {
         assertThrows<NoSuchElementException> {
             PrivacyLevel.fromCode(-1)
         }
     }
 
     @Test
-    fun `fromCode(999) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCode999ThrowsException() {
         assertThrows<NoSuchElementException> {
             PrivacyLevel.fromCode(999)
         }
@@ -50,12 +50,12 @@ class PrivacyLevelTest {
     // ─── 枚举完整性 ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `entries 包含三个枚举值`() {
+    fun entriesHasThreeValues() {
         assertEquals(3, PrivacyLevel.entries.size)
     }
 
     @Test
-    fun `entries 包含 PUBLIC、FRIENDS_ONLY 和 PRIVATE`() {
+    fun entriesContainsPublicFriendsOnlyAndPrivate() {
         val all = PrivacyLevel.entries
         assertEquals(
             setOf(PrivacyLevel.PUBLIC, PrivacyLevel.FRIENDS_ONLY, PrivacyLevel.PRIVATE),

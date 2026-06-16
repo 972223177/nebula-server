@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 /**
@@ -138,7 +139,10 @@ class ChatServiceReconnectIntegrationTest {
 
     /**
      * 通过反射调用 ChatStreamObserver 的 suspend 方法 activateDelivery()。
-     * 使用 suspendCoroutine 等待协程完成，避免 CountDownLatch 阻塞 runTest 的事件循环。
+     * 使用 suspendCoroutine 等待协程完成，同时处理函数未挂起（同步返回）的情况：
+     * - 若 invoke 返回 COROUTINE_SUSPENDED，函数已挂起，Continuation 会在完成后被恢复
+     * - 若 invoke 返回 Unit（或其他非 COROUTINE_SUSPENDED 值），函数同步执行完毕，
+     *   须手动 resume Continuation 以避免测试永久挂起
      */
     private suspend fun callActivateDelivery(observer: Any) {
         suspendCoroutine<Unit> { cont ->
@@ -146,7 +150,12 @@ class ChatServiceReconnectIntegrationTest {
                 "activateDelivery",
                 Continuation::class.java
             ).apply { isAccessible = true }
-            method.invoke(observer, cont)
+            val result = method.invoke(observer, cont)
+            // 函数未挂起（同步完成），手动恢复 Continuation
+            if (result != kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+                @Suppress("UNCHECKED_CAST")
+                cont.resume(result as Unit)
+            }
         }
     }
 
@@ -158,19 +167,28 @@ class ChatServiceReconnectIntegrationTest {
         return constructor.newInstance(chatService, responseObserver)
     }
 
-    /** 反射调用 handleLoginSuccess（suspend 方法），在协程中执行 */
+    /**
+     * 通过反射调用 handleLoginSuccess（suspend 方法），在协程中执行。
+     *
+     * suspend 函数的 JVM 签名为 handleLoginSuccess(Response, StreamObserver, Continuation) -> Object。
+     * 同时处理函数未挂起（同步返回）的情况：
+     * - 若 invoke 返回 COROUTINE_SUSPENDED，函数已挂起，Continuation 会在完成后被恢复
+     * - 若 invoke 返回 Unit（或其他非 COROUTINE_SUSPENDED 值），函数同步执行完毕，
+     *   须手动 resume Continuation 以避免测试永久挂起
+     */
     private suspend fun callHandleLoginSuccess(observer: Any, response: Response) {
-        // 在协程上下文中，通过反射调用 handleLoginSuccess
-        // suspend 函数的 JVM 签名：handleLoginSuccess(Response, StreamObserver, Continuation) -> Object
         val method = ChatService::class.java.getDeclaredMethod(
             "handleLoginSuccess",
             Response::class.java,
             StreamObserver::class.java,
             Continuation::class.java
         ).apply { isAccessible = true }
-        // 使用 suspendCoroutine 等待协程完成
         suspendCoroutine<Any?> { cont ->
-            method.invoke(chatService, response, observer, cont)
+            val result = method.invoke(chatService, response, observer, cont)
+            // 函数未挂起（同步完成），手动恢复 Continuation
+            if (result != kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
+                cont.resume(result)
+            }
         }
     }
 

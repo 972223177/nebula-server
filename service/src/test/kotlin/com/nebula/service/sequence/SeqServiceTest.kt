@@ -62,7 +62,7 @@ class SeqServiceTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `nextSeq 首次调用返回 1`() = runTest {
+    fun nextSeqFirstCallReturnsOne() = runTest {
         // Given: Key 不存在（get 返回 null），INCR 后返回 1
         val convId = "conv-1"
         val uid = 1001L
@@ -81,7 +81,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `nextSeq 正常递增`() = runTest {
+    fun nextSeqNormalIncrement() = runTest {
         // Given: 当前值为 42，INCR 后变为 43
         val convId = "conv-normal"
         val uid = 2001L
@@ -98,7 +98,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `nextSeq incr 返回 null 时返回 0`() = runTest {
+    fun nextSeqIncrReturnsNullFallbackZero() = runTest {
         // Given: INCR 异常返回 null（Redis 连接失败等极端情况）
         val convId = "conv-null"
         val uid = 3001L
@@ -119,7 +119,7 @@ class SeqServiceTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `nextSeq 序列号接近溢出阈值时重置为 1`() = runTest {
+    fun nextSeqOverflowResetsToOne() = runTest {
         // Given: 当前值已达 MAX_SEQ_THRESHOLD（Long.MAX_VALUE - 10000），应触发重置
         val convId = "conv-overflow"
         val uid = 4001L
@@ -139,7 +139,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `nextSeq 序列号低于阈值时不触发重置`() = runTest {
+    fun nextSeqBelowThresholdNoReset() = runTest {
         // Given: 当前值远低于溢出阈值
         val convId = "conv-safe"
         val uid = 5001L
@@ -157,7 +157,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `nextSeq 当前值为非数字时不触发重置`() = runTest {
+    fun nextSeqNonNumericValueNoReset() = runTest {
         // Given: get 返回非数字字符串（Redis 数据损坏）
         val convId = "conv-corrupt"
         val uid = 6001L
@@ -179,7 +179,7 @@ class SeqServiceTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `currentSeq 正常查询返回序列号`() = runTest {
+    fun currentSeqNormalQueryReturnsValue() = runTest {
         // Given: Key 存在且值为 42
         val convId = "conv-curr"
         val uid = 7001L
@@ -195,7 +195,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `currentSeq Key 不存在时返回 0`() = runTest {
+    fun currentSeqKeyNotExistsReturnsZero() = runTest {
         // Given: Key 不存在
         val convId = "conv-missing"
         val uid = 8001L
@@ -211,7 +211,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `currentSeq 值无效时返回 0`() = runTest {
+    fun currentSeqInvalidValueReturnsZero() = runTest {
         // Given: 值为非数字字符串（数据损坏）
         val convId = "conv-bad-value"
         val uid = 9001L
@@ -231,7 +231,7 @@ class SeqServiceTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `tryRestoreSeq Key 不存在时 SETNX 返回 true`() = runTest {
+    fun tryRestoreSeqKeyNotExistsSetnxReturnsTrue() = runTest {
         // Given: Key 不存在，SETNX 应成功
         val convId = "conv-restore-new"
         val uid = 10001L
@@ -248,7 +248,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `tryRestoreSeq Key 已存在时 SETNX 返回 false`() = runTest {
+    fun tryRestoreSeqKeyExistsSetnxReturnsFalse() = runTest {
         // Given: Key 已存在，SETNX 应失败
         val convId = "conv-restore-exists"
         val uid = 20001L
@@ -265,7 +265,7 @@ class SeqServiceTest {
     }
 
     @Test
-    fun `tryRestoreSeq SETNX 返回 null 时兜底 false`() = runTest {
+    fun tryRestoreSeqSetnxNullFallbackFalse() = runTest {
         // Given: SETNX 返回 null（Redis 连接异常等极端情况）
         val convId = "conv-restore-null"
         val uid = 30001L
@@ -286,7 +286,7 @@ class SeqServiceTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `Redis Key 格式正确`() = runTest {
+    fun redisKeyFormatCorrect() = runTest {
         // Given: 不同 convId 和 uid 应生成不同的 Key
         coEvery { redis.get(any()) } returns null
         coEvery { redis.incr(any()) } returns 1L

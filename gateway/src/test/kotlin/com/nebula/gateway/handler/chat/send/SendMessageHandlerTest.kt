@@ -20,9 +20,11 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -64,6 +66,14 @@ class SendMessageHandlerTest {
         coEvery { messageQueueRepository.checkAndSetDedup(any(), any()) } returns true
 
         handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, messageQueueRepository, connection, scope)
+    }
+
+    /**
+     * 取消 CoroutineScope，释放 Dispatchers.Default 线程，避免非守护线程阻止 JVM 退出。
+     */
+    @AfterEach
+    fun tearDown() {
+        scope.cancel()
     }
 
     @Test

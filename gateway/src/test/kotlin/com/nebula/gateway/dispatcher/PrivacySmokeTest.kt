@@ -17,7 +17,12 @@ import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertFalse
@@ -43,6 +48,9 @@ class PrivacySmokeTest {
     /** 测试用户 */
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
 
+    /** fire-and-forget 推送专用协程作用域 */
+    private val pushScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     @BeforeEach
     fun setUp() {
         userPrivacyService = mockk()
@@ -50,6 +58,14 @@ class PrivacySmokeTest {
         pushService = mockk(relaxed = true)
         friendshipRepo = mockk(relaxed = true)
         sessionRegistry = mockk()
+    }
+
+    /**
+     * 取消协程作用域，释放调度器线程，避免非守护线程阻止 JVM 退出。
+     */
+    @AfterEach
+    fun tearDown() {
+        pushScope.cancel()
     }
 
     // ===================================================================
@@ -63,7 +79,7 @@ class PrivacySmokeTest {
         coEvery { onlineStatusRepo.setHidden(1001L) } returns Unit
 
         val setDispatcher = singleHandlerDispatcher(
-            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo),
+            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo, pushScope),
             SetPrivacyReq::class, Response::class
         )
 
@@ -93,7 +109,7 @@ class PrivacySmokeTest {
         coEvery { onlineStatusRepo.setOnline(1001L) } returns Unit
 
         val setDispatcher = singleHandlerDispatcher(
-            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo),
+            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo, pushScope),
             SetPrivacyReq::class, Response::class
         )
 

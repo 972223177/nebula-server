@@ -17,19 +17,19 @@ class AuditMarkersTest {
     // ─── LOGIN Marker 基本属性 ────────────────────────────────────────────────────
 
     @Test
-    fun `LOGIN — 非空`() {
+    fun loginIsNotNull() {
         assertNotNull(AuditMarkers.LOGIN)
     }
 
     @Test
-    fun `LOGIN getName() — 返回 AUDIT_LOGIN`() {
+    fun loginGetNameReturnsAuditLogin() {
         assertEquals("AUDIT_LOGIN", AuditMarkers.LOGIN.name)
     }
 
     // ─── 单例语义 ────────────────────────────────────────────────────────────────
 
     @Test
-    fun `两次访问 LOGIN 返回同一实例`() {
+    fun loginReturnsSameInstance() {
         val marker1 = AuditMarkers.LOGIN
         val marker2 = AuditMarkers.LOGIN
         assertEquals(marker1, marker2)

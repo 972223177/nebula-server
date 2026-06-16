@@ -17,19 +17,19 @@ class ConversationTypeTest {
     // ─── fromCode() 正向映射 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(1) — 返回 PRIVATE`() {
+    fun fromCode1ReturnsPrivate() {
         assertEquals(ConversationType.PRIVATE, ConversationType.fromCode(1))
     }
 
     @Test
-    fun `fromCode(2) — 返回 GROUP`() {
+    fun fromCode2ReturnsGroup() {
         assertEquals(ConversationType.GROUP, ConversationType.fromCode(2))
     }
 
     // ─── fromCode() 异常路径 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(999) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCode999ThrowsException() {
         assertThrows<NoSuchElementException> {
             ConversationType.fromCode(999)
         }
@@ -38,12 +38,12 @@ class ConversationTypeTest {
     // ─── 枚举完整性 ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `entries 包含两个枚举值`() {
+    fun entriesHasTwoValues() {
         assertEquals(2, ConversationType.entries.size)
     }
 
     @Test
-    fun `entries 包含 PRIVATE 和 GROUP`() {
+    fun entriesContainsPrivateAndGroup() {
         val all = ConversationType.entries
         assertEquals(setOf(ConversationType.PRIVATE, ConversationType.GROUP), all.toSet())
     }

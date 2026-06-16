@@ -18,6 +18,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.koin.core.context.stopKoin
@@ -98,5 +99,7 @@ abstract class HandlerRegistryTestBase {
     @AfterEach
     fun tearDown() {
         stopKoin()
+        // 取消 CoroutineScope，释放 Dispatchers.IO 线程，避免非守护线程阻止 JVM 退出
+        scope.cancel()
     }
 }

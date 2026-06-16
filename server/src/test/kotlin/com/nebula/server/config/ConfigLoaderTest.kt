@@ -61,7 +61,7 @@ class ConfigLoaderTest {
     // ─── 1. 正常配置加载 ──────────────────────────────────────────────────────
 
     @Test
-    fun `正常配置加载成功`(@TempDir tempDir: Path) {
+    fun normalConfigLoadsSuccessfully(@TempDir tempDir: Path) {
         // Given: 一份完整的合法 HOCON 配置
         val configFile = tempDir.resolve("application.conf").toFile()
         writeHocon(configFile, validHocon())
@@ -108,7 +108,7 @@ class ConfigLoaderTest {
     // ─── 2. server.port 范围校验 ──────────────────────────────────────────────
 
     @Test
-    fun `server port 小于 1024 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun serverPortBelow1024ThrowsException(@TempDir tempDir: Path) {
         // Given: server.port = 1023（刚好越界，1024 是有效最小值）
         val hocon = validHocon().replace("server.port = 8080", "server.port = 1023")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -125,7 +125,7 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `server port 大于 65535 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun serverPortAbove65535ThrowsException(@TempDir tempDir: Path) {
         // Given: server.port = 65536（刚好越界）
         val hocon = validHocon().replace("server.port = 8080", "server.port = 65536")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -142,7 +142,7 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `server port 为 1024 边界值时加载成功`(@TempDir tempDir: Path) {
+    fun serverPortAtBoundary1024LoadsSuccessfully(@TempDir tempDir: Path) {
         // Given: server.port = 1024（合法最小值边界）
         val hocon = validHocon().replace("server.port = 8080", "server.port = 1024")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -158,7 +158,7 @@ class ConfigLoaderTest {
     // ─── 3. database.port 范围校验 ────────────────────────────────────────────
 
     @Test
-    fun `database port 为 0 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun databasePortZeroThrowsException(@TempDir tempDir: Path) {
         // Given: database.port = 0（无效端口，范围 1-65535）
         val hocon = validHocon().replace("database.port = 3306", "database.port = 0")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -175,7 +175,7 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `database port 超过 65535 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun databasePortAbove65535ThrowsException(@TempDir tempDir: Path) {
         // Given: database.port = 65536（刚好越界）
         val hocon = validHocon().replace("database.port = 3306", "database.port = 65536")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -194,7 +194,7 @@ class ConfigLoaderTest {
     // ─── 4. pool-size 范围校验 ────────────────────────────────────────────────
 
     @Test
-    fun `pool size 为 0 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun poolSizeZeroThrowsException(@TempDir tempDir: Path) {
         // Given: database.pool-size = 0（无效，范围 1-100）
         val hocon = validHocon().replace("database.pool-size = 10", "database.pool-size = 0")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -211,7 +211,7 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `pool size 超过 100 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun poolSizeAbove100ThrowsException(@TempDir tempDir: Path) {
         // Given: database.pool-size = 101（刚好越界）
         val hocon = validHocon().replace("database.pool-size = 10", "database.pool-size = 101")
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -230,7 +230,7 @@ class ConfigLoaderTest {
     // ─── 5. minIdle > poolSize ────────────────────────────────────────────────
 
     @Test
-    fun `minIdle 大于 poolSize 时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun minIdleExceedsPoolSizeThrowsException(@TempDir tempDir: Path) {
         // Given: pool-size = 5, min-idle = 10（minIdle 不能超过 poolSize）
         val hocon = validHocon()
             .replace("database.pool-size = 10", "database.pool-size = 5")
@@ -251,7 +251,7 @@ class ConfigLoaderTest {
     // ─── 6. SSL 配置默认值 ────────────────────────────────────────────────────
 
     @Test
-    fun `SSL enabled 为 false 时各字段正确传递`(@TempDir tempDir: Path) {
+    fun sslDisabledConfigFieldsCorrect(@TempDir tempDir: Path) {
         // Given: SSL 禁用配置
         val hocon = validHocon()
         val configFile = tempDir.resolve("application.conf").toFile()
@@ -267,7 +267,7 @@ class ConfigLoaderTest {
     }
 
     @Test
-    fun `database 和 redis 可选字段默认值正确`(@TempDir tempDir: Path) {
+    fun databaseAndRedisOptionalDefaultsCorrect(@TempDir tempDir: Path) {
         // Given: 不包含 database.ssl 和 redis.password、redis.ssl 的配置
         val hocon = """
             server.port = 8080

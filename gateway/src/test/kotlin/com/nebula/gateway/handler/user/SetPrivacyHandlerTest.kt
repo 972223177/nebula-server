@@ -12,8 +12,13 @@ import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -35,6 +40,9 @@ class SetPrivacyHandlerTest {
     private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var handler: SetPrivacyHandler
 
+    /** fire-and-forget 推送专用协程作用域 */
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
 
     @BeforeEach
@@ -43,7 +51,7 @@ class SetPrivacyHandlerTest {
         onlineStatusRepository = mockk()
         pushService = mockk()
         friendshipRepository = mockk(relaxed = true)
-        handler = SetPrivacyHandler(userPrivacyService, onlineStatusRepository, pushService, friendshipRepository)
+        handler = SetPrivacyHandler(userPrivacyService, onlineStatusRepository, pushService, friendshipRepository, scope)
 
         // UserPrivacyService 默认返回成功（handler 先委托 service，再执行自有逻辑）
         coEvery { userPrivacyService.setHideOnlineStatus(any(), any<SetPrivacyReq>()) } returns Unit
@@ -76,5 +84,13 @@ class SetPrivacyHandlerTest {
         coVerify(exactly = 1) { userPrivacyService.setHideOnlineStatus(any(), any<SetPrivacyReq>()) }
         coVerify(exactly = 1) { onlineStatusRepository.setOnline(1001L) }
         assertEquals(BizCode.OK.code, result.code)
+    }
+
+    /**
+     * 取消协程作用域，释放调度器线程，避免非守护线程阻止 JVM 退出。
+     */
+    @AfterEach
+    fun tearDown() {
+        scope.cancel()
     }
 }

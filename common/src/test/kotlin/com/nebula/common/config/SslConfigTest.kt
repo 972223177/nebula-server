@@ -22,7 +22,7 @@ class SslConfigTest {
     // ─── 1. enabled=false 时跳过 SSL 构建 ──────────────────────────────────────
 
     @Test
-    fun `enabled 为 false 时返回 null`() {
+    fun whenDisabledReturnsNull() {
         // Given: 禁用 SSL，路径不存在的文件（但由于 enabled=false 不会被访问）
         val config = SslConfig(
             enabled = false,
@@ -40,7 +40,7 @@ class SslConfigTest {
     // ─── 2. 证书链文件存在性校验 ──────────────────────────────────────────────
 
     @Test
-    fun `证书链文件不存在时抛 IllegalArgumentException`() {
+    fun certChainFileNotExistsThrowsException() {
         // Given: 启用 SSL，但证书链文件路径指向不存在的文件
         val config = SslConfig(
             enabled = true,
@@ -61,7 +61,7 @@ class SslConfigTest {
     // ─── 3. 证书链文件可读性校验 ──────────────────────────────────────────────
 
     @Test
-    fun `证书链文件不可读时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun certChainFileUnreadableThrowsException(@TempDir tempDir: Path) {
         // Given: 创建证书链临时文件并设为不可读
         val certFile = tempDir.resolve("unreadable-cert.pem").toFile()
         certFile.writeText("fake certificate content")
@@ -96,7 +96,7 @@ class SslConfigTest {
     // ─── 4. 私钥文件存在性校验 ────────────────────────────────────────────────
 
     @Test
-    fun `私钥文件不存在时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun privateKeyFileNotExistsThrowsException(@TempDir tempDir: Path) {
         // Given: 证书链文件存在且可读，但私钥文件不存在
         val certFile = tempDir.resolve("valid-cert.pem").toFile()
         certFile.writeText("fake certificate content")
@@ -120,7 +120,7 @@ class SslConfigTest {
     // ─── 5. 私钥文件可读性校验 ────────────────────────────────────────────────
 
     @Test
-    fun `私钥文件不可读时抛 IllegalArgumentException`(@TempDir tempDir: Path) {
+    fun privateKeyFileUnreadableThrowsException(@TempDir tempDir: Path) {
         // Given: 证书链文件存在且可读，私钥文件存在但不可读
         val certFile = tempDir.resolve("valid-cert.pem").toFile()
         certFile.writeText("fake certificate content")

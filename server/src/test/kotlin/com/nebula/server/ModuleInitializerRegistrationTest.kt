@@ -53,7 +53,7 @@ class ModuleInitializerRegistrationTest {
      * [GlobalContext.getAll]<[ModuleInitializer]> 能返回两个实例。
      */
     @Test
-    fun `both ModuleInitializers are discoverable via getAll`() {
+    fun bothModuleInitializersAreDiscoverableViaGetAll() {
         startKoin {
             modules(commonInitModule, repositoryInitModule, buildMockModule())
         }
@@ -80,7 +80,7 @@ class ModuleInitializerRegistrationTest {
      * [ModuleInitializer] 类型 + 限定符解析具体实例。
      */
     @Test
-    fun `each ModuleInitializer is resolvable by interface type with qualifier`() {
+    fun eachModuleInitializerIsResolvableByInterfaceTypeWithQualifier() {
         startKoin {
             modules(commonInitModule, repositoryInitModule, buildMockModule())
         }
@@ -104,7 +104,7 @@ class ModuleInitializerRegistrationTest {
      * "common" 排在 "repository" 之前。
      */
     @Test
-    fun `topologicalSort places common before repository`() {
+    fun topologicalSortPlacesCommonBeforeRepository() {
         startKoin {
             modules(commonInitModule, repositoryInitModule, buildMockModule())
         }
@@ -130,7 +130,7 @@ class ModuleInitializerRegistrationTest {
      * 与原始 [ModuleInitializerRegistrationTest] 中的顺序无关。
      */
     @Test
-    fun `topologicalSort is idempotent and produces valid order`() {
+    fun topologicalSortIsIdempotentAndProducesValidOrder() {
         startKoin {
             modules(commonInitModule, repositoryInitModule, buildMockModule())
         }
