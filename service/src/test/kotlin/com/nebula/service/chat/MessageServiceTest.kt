@@ -306,6 +306,7 @@ class MessageServiceTest {
             conversationMemberRepository.findByConversationIdAndUserId(conversationId, senderUid)
             conversationRepository.findById(conversationId)
             idGenerator.nextId()
+            seqService.nextSeq(conversationId, senderUid)
             messageQueueRepository.enqueue(any())
             conversationRepository.save(conv)
         }
@@ -347,6 +348,7 @@ class MessageServiceTest {
         coVerify(exactly = 1) {
             friendshipRepository.findByUserIdAndFriendId(1, 2)
             idGenerator.nextId()
+            seqService.nextSeq(privateConvId, senderUid)
             messageQueueRepository.enqueue(any())
             conversationRepository.save(conv)
         }
