@@ -56,7 +56,7 @@ class LeaveGroupHandler(
             lockManager.withLock(convId) {
                 transactionTemplate.execute {
                     runBlocking {
-                        conversationService.leaveGroup(req, session.userId)
+                        conversationService.dissolveGroup(convId)
                     }
                 }
             }

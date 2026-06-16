@@ -100,7 +100,7 @@ class MessageQueueRepository(
     /**
      * 去重检测：SETNX + 设置 TTL（D-72）。
      *
-     * 使用 Redis SETNX 原子操作检测 clientMessageId 是否已存在。
+     * 使用 Redis SET NX EX 原子操作检测 clientMessageId 是否已存在。
      * 如果键不存在（首次发送），设置值为 senderUid 并返回 true。
      * 如果键已存在（重复消息），返回 false。
      * 连接异常时 fail-open 返回 true，由 MySQL 唯一索引作为最终去重保障。
@@ -112,11 +112,12 @@ class MessageQueueRepository(
     suspend fun checkAndSetDedup(clientMsgId: String, senderUid: Long): Boolean {
         val key = "$DEDUP_KEY_PREFIX$clientMsgId"
         return try {
-            val result = redis.setnx(key, senderUid.toString())
-            if (result == true) {
-                redis.expire(key, DEDUP_TTL_SECONDS)
-            }
-            result ?: true // null 时 fail-open，MySQL 唯一索引作为兜底
+            val result = redis.set(
+                key,
+                senderUid.toString(),
+                SetArgs.Builder.nx().ex(DEDUP_TTL_SECONDS)
+            )
+            result == "OK" // "OK" 表示首次设置成功（无重复），null 表示键已存在（重复）
         } catch (e: Exception) {
             true // 连接异常时 fail-open，MySQL 唯一索引作为兜底（D-72）
         }

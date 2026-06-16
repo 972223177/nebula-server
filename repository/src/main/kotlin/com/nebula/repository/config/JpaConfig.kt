@@ -1,6 +1,7 @@
 package com.nebula.repository.config
 
 import com.nebula.common.datasource.DataSourceProvider
+import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.flywaydb.core.Flyway
 import org.hibernate.cfg.AvailableSettings
@@ -47,6 +48,9 @@ class JpaConfig(
         emfBean.getObject() ?: error("EntityManagerFactory 未初始化")
     }
 
+    /** 复用 EntityManager 实例，避免每次 getRepository 创建后不关闭导致的连接泄漏 */
+    private lateinit var entityManager: EntityManager
+
     /**
      * 获取 Spring Data JPA Repository 代理。
      *
@@ -54,8 +58,10 @@ class JpaConfig(
      * @return Repository 代理实例
      */
     fun <T> getRepository(repositoryInterface: Class<T>): T {
-        val em = entityManagerFactory.createEntityManager()
-        val factory = JpaRepositoryFactory(em)
+        if (!::entityManager.isInitialized) {
+            entityManager = entityManagerFactory.createEntityManager()
+        }
+        val factory = JpaRepositoryFactory(entityManager)
         return factory.getRepository(repositoryInterface)
     }
 
@@ -72,6 +78,15 @@ class JpaConfig(
         val transactionManager = JpaTransactionManager(entityManagerFactory)
         transactionManager.afterPropertiesSet()
         return TransactionTemplate(transactionManager)
+    }
+
+    /**
+     * 关闭复用的 EntityManager（应用关闭时调用）。
+     */
+    fun close() {
+        if (::entityManager.isInitialized) {
+            entityManager.close()
+        }
     }
 }
 

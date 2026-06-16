@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.nebula.common.BizCode
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -25,7 +26,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * 职责：
  * - 已认证请求按 userId 限流，每用户最大并发 20 个请求
  * - 未认证请求按来源 IP 限流（当前骨架占位，返回 "unknown"）
- * - 超限请求返回 429（rate limit exceeded）
+ * - 超限请求返回 BizCode.RATE_LIMITED（rate limit exceeded）
  *
  * 当前阶段（Phase 4）实现为基于 Semaphore 的简单并发限流，提供基础保护。
  * TODO: Phase 11 替换为令牌桶算法（如 Bucket4j），支持更精细的速率限制。
@@ -93,7 +94,7 @@ class RateLimitInterceptor(
             if (!registerLimiter.tryAcquire(ip)) {
                 log.warn { "Register rate limit exceeded for ip=$ip" }
                 return Response.newBuilder()
-                    .setCode(RATE_LIMITED_CODE)
+                    .setCode(BizCode.RATE_LIMITED.code)
                     .setMsg("register rate limit exceeded")
                     .build()
             }
@@ -111,7 +112,7 @@ class RateLimitInterceptor(
         if (!acquired) {
             log.warn { "Rate limit exceeded for key=$limitKey, method=${request.method}" }
             return Response.newBuilder()
-                .setCode(RATE_LIMITED_CODE)
+                .setCode(BizCode.RATE_LIMITED.code)
                 .setMsg(RATE_LIMITED_MSG)
                 .build()
         }
@@ -183,9 +184,6 @@ class RateLimitInterceptor(
 
         /** 获取信号量的超时时间（毫秒） */
         private const val DEFAULT_ACQUIRE_TIMEOUT_MS = 100L
-
-        /** 限流响应状态码 */
-        private const val RATE_LIMITED_CODE = 429
 
         /** 限流响应消息 */
         private const val RATE_LIMITED_MSG = "rate limit exceeded"

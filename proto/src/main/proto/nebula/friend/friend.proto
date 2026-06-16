@@ -45,6 +45,8 @@ message FriendListReq {
 // 好友列表响应
 message FriendListResp {
   repeated FriendBrief friends = 1;   // 好友简要信息列表
+  int64 next_cursor = 2;              // 下一页游标，无更多时为 0（D-46）
+  bool has_more = 3;                  // 是否还有更多数据
 }
 
 // 好友简要信息

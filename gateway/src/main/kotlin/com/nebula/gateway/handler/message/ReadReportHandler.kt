@@ -59,7 +59,11 @@ class ReadReportHandler(
         messageService.readReport(req, session.userId)
 
         // D-28: 删除 Redis 未读计数键（gateway 层 Redis 操作）
-        redis.del("conversation:${req.conversationId}:unread:${session.userId}")
+        try {
+            redis.del("conversation:${req.conversationId}:unread:${session.userId}")
+        } catch (e: Exception) {
+            logger.warn(e) { "清除读上报 Redis Key 失败: conversation:${req.conversationId}:unread:${session.userId}" }
+        }
 
         // D-27: 获取会话并判断类型
         val conversation = conversationService.getConversation(req.conversationId) ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")

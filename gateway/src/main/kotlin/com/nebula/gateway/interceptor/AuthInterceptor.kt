@@ -49,6 +49,13 @@ open class AuthInterceptor(
                 .setMsg(BizCode.TOKEN_INVALID.msg)
                 .build()
 
+        // 认证成功后刷新 Session TTL，防止活跃用户被强制下线（失败不影响主流程）
+        try {
+            sessionRegistry.refreshTtl(token)
+        } catch (e: Exception) {
+            logger.warn(e) { "Session refreshTtl failed for token=${token.take(8)}..." }
+        }
+
         // D-03: 注入 Session 到 CoroutineContext
         return withContext(SessionKey(session)) {
             chain.proceed(request)

@@ -27,6 +27,6 @@ interface FriendshipRepository : JpaRepository<FriendshipEntity, Long> {
      * @param pageable 分页参数（pageSize 由 limit 决定）
      * @return 好友列表，按 id DESC 排序
      */
-    @Query("SELECT f FROM FriendshipEntity f WHERE (f.userId = :userId OR f.friendId = :userId) AND f.deleted = 0 AND f.id > :cursor ORDER BY f.id DESC")
+    @Query("SELECT f FROM FriendshipEntity f WHERE (f.userId = :userId OR f.friendId = :userId) AND f.deleted = 0 AND f.id < :cursor ORDER BY f.id DESC")
     fun findFriendsByUserId(userId: Long, cursor: Long, pageable: Pageable): List<FriendshipEntity>
 }

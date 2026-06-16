@@ -79,6 +79,10 @@ object ProtoCodec {
      * @return 反序列化后的请求对象
      */
     fun deserialize(entry: HandlerEntry, params: ByteString): Any {
+        // 空/空字节检查，避免 toByteArray() 在空 ByteString 上异常
+        if (params.isEmpty) {
+            return ByteArray(0)
+        }
         return entry.parseFrom(params.toByteArray())
     }
 

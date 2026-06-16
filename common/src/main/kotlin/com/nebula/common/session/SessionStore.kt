@@ -27,4 +27,15 @@ interface SessionStore {
 
     /** 查询指定 key 的原始数据，不存在时返回 null */
     suspend fun findRaw(key: String): String?
+
+    /**
+     * 滑动续期 Session TTL。
+     *
+     * 每次请求认证通过后应调用此方法，刷新 Session 过期时间，
+     * 避免活跃用户在固定 TTL 到期后被强制下线。
+     *
+     * @param token Session 令牌
+     * @param ttlSeconds 续期 TTL 秒数，默认 7 天
+     */
+    suspend fun refreshTtl(token: String, ttlSeconds: Long = 604800L)
 }
