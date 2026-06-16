@@ -59,6 +59,7 @@ v1.1 已发布。后续可考虑：
 
 | Date | Task | Impact |
 |------|------|--------|
+| 2026-06-16 | fix-gateway-server-tests | 修复 server,gateway 模块 16 个测试文件编译（--team 多专家），适配 Phase 12 api→implementation 依赖隔离 |
 | 2026-06-16 | fix-repo-gateway-test-imports | 修复 gateway 测试编译错误：11 个测试文件同步重构后的 API 变更（Handler 构造参数、Repository→Service 迁移、DI 注册） |
 | 2026-06-13 | Phase 8 安全审计 | 完成 08-SECURITY.md：识别 25 个威胁（STRIDE 六类全覆盖），mitigate 12 个，accept 9 个，threats_open=0 |
 | 2026-06-14 | Phase 10 Message Reliability 执行 | 4 Plan 全部完成：10-01 Proto扩展（SendMessageResp.seq、DeliveryAckPayload、MessageSeqReq/Resp、admin.proto）+ V4死信表DDL；10-02 Redis三态跟踪（sent/delivered/read）+ DeliveryAck推送 + SETNX去重下沉 + flushBatch异常处理；10-03 SeqService + MessageSeqHandler间隙检测；10-04 DeadLetterEntity/Repository/Service/Compensator + Admin API（查询/重试）+ D-75 pendingBuffer 10次失败→死信 + W2 seq统一到SeqService + W1 DI迁移 + AuthInterceptor admin/放行 |
@@ -101,4 +102,4 @@ v1.1 已发布。后续可考虑：
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-16 after Phase 12 (Module Dependency Isolation)*
+*Last updated: 2026-06-16 after quick(fix-gateway-server-tests)*
