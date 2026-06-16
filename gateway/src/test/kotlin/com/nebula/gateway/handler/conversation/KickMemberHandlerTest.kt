@@ -180,4 +180,14 @@ class KickMemberHandlerTest {
 
         assertEquals(BizCode.GROUP_DISSOLVED, exception.bizCode)
     }
+
+    @Test
+    fun handleShouldRequireSession() = runTest {
+        val exception = kotlin.test.assertFailsWith<com.nebula.common.exception.BizException> {
+            val req = com.nebula.chat.conversation.KickMemberReq.getDefaultInstance()
+            handler.handle(req)
+        }
+        kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
+    }
+
 }

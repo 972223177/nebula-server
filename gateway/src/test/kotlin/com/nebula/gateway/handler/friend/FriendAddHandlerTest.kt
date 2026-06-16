@@ -235,4 +235,14 @@ class FriendAddHandlerTest {
         // Then: 返回确定性的 "private:smaller:larger" 格式
         assertEquals("private:1001:2001", convId)
     }
+
+    @Test
+    fun handleShouldRequireSession() = runTest {
+        val exception = kotlin.test.assertFailsWith<com.nebula.common.exception.BizException> {
+            val req = com.nebula.chat.friend.FriendAddReq.getDefaultInstance()
+            handler.handle(req)
+        }
+        kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
+    }
+
 }

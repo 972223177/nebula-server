@@ -61,4 +61,14 @@ class GetPrivacyHandlerTest {
 
         assertFalse(result.hideOnlineStatus)
     }
+
+    @Test
+    fun handleShouldRequireSession() = runTest {
+        val exception = kotlin.test.assertFailsWith<com.nebula.common.exception.BizException> {
+            val req = com.nebula.chat.user.GetPrivacyReq.getDefaultInstance()
+            handler.handle(req)
+        }
+        kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
+    }
+
 }

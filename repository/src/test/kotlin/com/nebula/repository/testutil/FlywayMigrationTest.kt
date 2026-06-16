@@ -20,6 +20,8 @@ import kotlin.test.assertEquals
  * - V1_2__seed_users.sql —— 初始用户数据
  * - V2__phase7_conversation_schema.sql —— 会话相关表追加列
  * - V3__add_friend_request_message.sql —— 好友申请表追加消息列
+ * - V4__add_dead_letters.sql —— 创建死信表
+ * - V5__phase11_data_integrity.sql —— 唯一约束+索引
  */
 class FlywayMigrationTest : DatabaseTestBase() {
 
@@ -194,6 +196,58 @@ class FlywayMigrationTest : DatabaseTestBase() {
                 assertNotNull(actualUsername, "Seed user id=$expectedId not found")
                 assertEquals(expectedUsername, actualUsername, "Seed user id=$expectedId username mismatch")
             }
+        }
+    }
+
+    // ==================== V4/V5 迁移验证（P2-01）====================
+
+    /**
+     * 验证 V4 迁移创建了 dead_letters 表并包含正确字段结构。
+     */
+    @Test
+    fun shouldHaveDeadLettersTable() {
+        val ds = getDataSource()
+        val columns = queryColumns(ds, "dead_letters")
+
+        assertColumn(columns, "id", nullable = false)
+        assertColumn(columns, "conversation_id", nullable = false)
+        assertColumn(columns, "sender_uid", nullable = false)
+        assertColumn(columns, "message_type", nullable = false)
+        assertColumn(columns, "content", nullable = false)
+        assertColumn(columns, "fail_reason", nullable = false, default = "")
+        assertColumn(columns, "fail_count", nullable = false, default = "0")
+        assertColumn(columns, "status", nullable = false, default = "pending")
+        assertColumn(columns, "created_at", nullable = false)
+    }
+
+    /**
+     * 验证 V5 迁移添加的唯一约束：
+     * - uk_friendship_pair（函数索引 LEAST/GREATEST）
+     * - uk_from_to_status（from_uid, to_uid, status）
+     * - uk_client_msg_id（dead_letters.client_msg_id）
+     */
+    @Test
+    fun shouldHaveDataIntegrityConstraints() {
+        val ds = getDataSource()
+        val conn = ds.connection
+        conn.use { c ->
+            val stmt = c.createStatement()
+            val rs = stmt.executeQuery(
+                """
+                SELECT CONSTRAINT_NAME
+                FROM information_schema.TABLE_CONSTRAINTS
+                WHERE TABLE_SCHEMA = 'nebula_test'
+                  AND CONSTRAINT_TYPE = 'UNIQUE'
+                  AND CONSTRAINT_NAME IN ('uk_friendship_pair', 'uk_from_to_status', 'uk_client_msg_id')
+                """.trimIndent()
+            )
+            val constraints = mutableSetOf<String>()
+            while (rs.next()) {
+                constraints.add(rs.getString("CONSTRAINT_NAME"))
+            }
+            assertTrue(constraints.contains("uk_friendship_pair"), "uk_friendship_pair 唯一约束应存在")
+            assertTrue(constraints.contains("uk_from_to_status"), "uk_from_to_status 唯一约束应存在")
+            assertTrue(constraints.contains("uk_client_msg_id"), "uk_client_msg_id 唯一约束应存在")
         }
     }
 
