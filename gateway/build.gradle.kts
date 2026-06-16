@@ -63,6 +63,7 @@ dependencies {
     testImplementation(libs.koin.test)
     testImplementation(libs.koin.test.junit5)
     testImplementation(libs.mockk)
+    testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.protobuf.java)
     testImplementation(libs.junit.jupiter.api)

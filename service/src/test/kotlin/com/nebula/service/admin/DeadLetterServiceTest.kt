@@ -83,20 +83,16 @@ class DeadLetterServiceTest {
     }
 
     /**
-     * mock markPermanentFailed 中的两个内部查询调用。
-     * 第一个 findByStatusAndFailCountLessThan("retrying", 0, ...) 的结果被忽略（代码中有注释说明改用其他方式），
-     * 第二个 findByStatusOrderByCreatedAtAsc 是实际使用的查询。
+     * mock markPermanentFailed 中的核心查询 — M16 修复后使用 findByStatusAndFailCountGreaterThanEqual
+     * 替代原有的 findByStatusAndFailCountLessThan(status, 0) 死查询。
      *
-     * @param retryingItems findByStatusOrderByCreatedAtAsc 的返回结果
+     * @param retryingItems failCount >= 5 的 retrying 死信记录
      */
     private fun mockMarkPermanentFailed(retryingItems: List<DeadLetterEntity> = emptyList()) {
         coEvery {
-            deadLetterRepository.findByStatusAndFailCountLessThan(
-                "retrying", 0, Pageable.ofSize(100)
+            deadLetterRepository.findByStatusAndFailCountGreaterThanEqual(
+                "retrying", 5, Pageable.ofSize(100)
             )
-        } returns emptyList()
-        coEvery {
-            deadLetterRepository.findByStatusOrderByCreatedAtAsc("retrying", Pageable.unpaged())
         } returns retryingItems
     }
 
@@ -368,6 +364,7 @@ class DeadLetterServiceTest {
         coEvery {
             deadLetterRepository.findByStatusOrderByCreatedAtAsc("pending", pageable)
         } returns items
+        coEvery { deadLetterRepository.countByStatus("pending") } returns 1
         coEvery { deadLetterRepository.findAll(pageable) } returns page
 
         val result = deadLetterService.query(1, 20, "pending")
@@ -414,19 +411,14 @@ class DeadLetterServiceTest {
     }
 
     /**
-     * markPermanentFailed：failCount < 5 的记录应保持不变。
+     * markPermanentFailed：failCount < 5 的记录由 DB 查询层面过滤，不会返回给应用逻辑处理。
      */
     @Test
     fun markPermanentFailedShouldSkipItemsBelowThreshold() = runTest {
-        val active1 = deadLetterEntity(id = 1L, status = "retrying", failCount = 3)
-        val active2 = deadLetterEntity(id = 2L, status = "retrying", failCount = 4)
-
-        mockMarkPermanentFailed(listOf(active1, active2))
+        mockMarkPermanentFailed(emptyList())
 
         deadLetterService.markPermanentFailed()
 
-        assertEquals("retrying", active1.status)
-        assertEquals("retrying", active2.status)
         coVerify(exactly = 0) { deadLetterRepository.save(any()) }
     }
 }

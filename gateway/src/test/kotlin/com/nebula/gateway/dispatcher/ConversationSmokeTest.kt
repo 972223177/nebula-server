@@ -75,7 +75,7 @@ class ConversationSmokeTest {
 
         // 预创建所有 Handler
         val createHandler = CreateGroupHandler(
-            conversationService, lockManager, mockk(), pushService
+            conversationService, lockManager, transactionTemplate, pushService
         )
         val membersHandler = GroupMembersHandler(conversationService)
         val editHandler = EditGroupHandler(conversationService, pushService)

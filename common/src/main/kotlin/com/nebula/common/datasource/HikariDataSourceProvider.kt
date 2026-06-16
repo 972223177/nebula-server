@@ -80,6 +80,8 @@ class HikariDataSourceProvider(
                 "?sslMode=$sslMode" +
                 "&useUnicode=true" +
                 "&characterEncoding=UTF-8" +
-                "&serverTimezone=UTC"
+                "&serverTimezone=UTC" +
+                // MySQL 8+ 默认 caching_sha2_password，需允许 JDBC 驱动从服务器获取公钥进行认证
+                "&allowPublicKeyRetrieval=true"
     }
 }

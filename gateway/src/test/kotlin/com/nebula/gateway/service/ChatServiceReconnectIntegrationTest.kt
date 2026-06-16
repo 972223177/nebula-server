@@ -23,15 +23,18 @@ import io.mockk.mockk
 import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.coroutines.Continuation
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 /**
@@ -52,6 +55,7 @@ class ChatServiceReconnectIntegrationTest {
     private lateinit var sessionRegistry: SessionRegistry
     private lateinit var userStreamRegistry: UserStreamRegistry
     private lateinit var dispatcher: Dispatcher
+    private lateinit var handlerRegistry: HandlerRegistry
     private lateinit var onlineStatusRepository: OnlineStatusRepository
     private lateinit var friendshipRepository: FriendshipRepository
     private lateinit var pushService: PushService
@@ -134,7 +138,7 @@ class ChatServiceReconnectIntegrationTest {
 
     /**
      * 通过反射调用 ChatStreamObserver 的 suspend 方法 activateDelivery()。
-     * 使用 suspendCoroutine 等待协程完成，避免 CountDownLatch 阻塞 runBlocking 的事件循环。
+     * 使用 suspendCoroutine 等待协程完成，避免 CountDownLatch 阻塞 runTest 的事件循环。
      */
     private suspend fun callActivateDelivery(observer: Any) {
         suspendCoroutine<Unit> { cont ->
@@ -177,12 +181,33 @@ class ChatServiceReconnectIntegrationTest {
         method.invoke(chatService)
     }
 
+    /** 使用可供 scope 参数构造 ChatService，支持测试中注入 TestScope */
+    private fun createChatService(scope: CoroutineScope): ChatService {
+        return ChatService(
+            dispatcher = dispatcher,
+            sessionRegistry = sessionRegistry,
+            registry = handlerRegistry,
+            userStreamRegistry = userStreamRegistry,
+            onlineStatusRepository = onlineStatusRepository,
+            friendshipRepository = friendshipRepository,
+            pushService = pushService,
+            privacyRepository = privacyRepository,
+            deadLetterService = deadLetterService,
+            scope = scope
+        )
+    }
+
+    /** 使用默认 IO 作用域构造 ChatService（非 runTest 测试使用） */
+    private fun createChatService(): ChatService {
+        return createChatService(CoroutineScope(Dispatchers.IO + SupervisorJob()))
+    }
+
     @BeforeEach
     fun setUp() {
         sessionRegistry = mockk(relaxed = true)
         userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true)
         dispatcher = mockk<Dispatcher>(relaxed = true)
-        val registry = mockk<HandlerRegistry>(relaxed = true)
+        handlerRegistry = mockk<HandlerRegistry>(relaxed = true)
         onlineStatusRepository = mockk<OnlineStatusRepository>(relaxed = true)
         friendshipRepository = mockk<FriendshipRepository>(relaxed = true)
         pushService = mockk<PushService>(relaxed = true)
@@ -196,23 +221,25 @@ class ChatServiceReconnectIntegrationTest {
             capturedCallback = firstArg()
         }
 
-        chatService = ChatService(
-            dispatcher = dispatcher,
-            sessionRegistry = sessionRegistry,
-            registry = registry,
-            userStreamRegistry = userStreamRegistry,
-            onlineStatusRepository = onlineStatusRepository,
-            friendshipRepository = friendshipRepository,
-            pushService = pushService,
-            privacyRepository = privacyRepository,
-            deadLetterService = deadLetterService
-        )
+        chatService = createChatService()
 
         // 初始化反射
         chatStreamObserverClass = ChatService::class.java.declaredClasses
             .first { it.simpleName == "ChatStreamObserver" }
 
         evictionCallback = { token -> capturedCallback?.invoke(token) }
+    }
+
+    /**
+     * 测试结束后取消 ChatService 的 scope，防止 delay(60_000) 等后台协程阻塞 JVM 退出。
+     *
+     * 对于使用 runTest 的测试方法，scope 已被替换为 runTest 的 TestScope，cancel 为 no-op；
+     * 对于未使用 runTest 的测试方法，取消原始 IO 作用域。
+     */
+    @AfterEach
+    fun tearDown() {
+        val scope: CoroutineScope = getField(chatService, "scope")
+        scope.cancel()
     }
 
     // ==================== 第 1 组：deliver() 测试 ====================
@@ -275,7 +302,10 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 2 组：activateDelivery() 测试 ====================
 
     @Test
-    fun activateDeliveryShouldDeliverAllBufferedMessagesThenSetActive() = runBlocking {
+    fun activateDeliveryShouldDeliverAllBufferedMessagesThenSetActive() = runTest {
+        // 使用 runTest 的 TestScope 重建 ChatService，确保所有 fire-and-forget 协程跟随完成
+        chatService = createChatService(scope = this)
+
         // Given: pendingBuffer 有 3 条缓存消息
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -301,7 +331,10 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun activateDeliveryShouldContinueDeliveryOnIndividualMessageFailure() = runBlocking {
+    fun activateDeliveryShouldContinueDeliveryOnIndividualMessageFailure() = runTest {
+        // 使用 runTest 的 TestScope 重建 ChatService，确保所有 fire-and-forget 协程跟随完成
+        chatService = createChatService(scope = this)
+
         // Given: pendingBuffer 有 3 条消息，第 2 条 onNext 抛异常
         val observer = createChatStreamObserver(mockResponseObserver)
         val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
@@ -447,7 +480,10 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 5 组：handleLoginSuccess 分支测试 ====================
 
     @Test
-    fun handleLoginSuccessShouldSetDeliveryActiveWhenNoEvictedToken() = runBlocking {
+    fun handleLoginSuccessShouldSetDeliveryActiveWhenNoEvictedToken() = runTest {
+        // 使用 runTest 的 TestScope 重建 ChatService，确保所有 fire-and-forget 协程跟随完成
+        chatService = createChatService(scope = this)
+
         // Given: 创建 ChatStreamObserver，首次注册无旧连接被驱逐
         val observer = createChatStreamObserver(mockResponseObserver)
         coEvery { sessionRegistry.registerWithDeviceType(any()) } returns null
@@ -465,7 +501,10 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
-    fun handleLoginSuccessShouldActivateDeliveryWhenEvictedTokenExists() = runBlocking {
+    fun handleLoginSuccessShouldActivateDeliveryWhenEvictedTokenExists() = runTest {
+        // 使用 runTest 的 TestScope 重建 ChatService，确保所有 fire-and-forget 协程跟随完成
+        chatService = createChatService(scope = this)
+
         // Given: 创建 ChatStreamObserver，有旧连接被驱逐
         val oldToken = "old-token"
         val observer = createChatStreamObserver(mockResponseObserver)

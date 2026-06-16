@@ -27,6 +27,7 @@ import com.nebula.gateway.testutil.buildTestDispatcher
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.gateway.testutil.mockLockManager
+import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.service.friend.FriendAcceptResult
 import com.nebula.service.friend.FriendAddResult
 import com.nebula.service.friend.FriendService
@@ -75,11 +76,13 @@ class FriendSmokeTest {
     @Test
     fun fullFlowShouldCompleteFriendLifecycle() = runTest {
         // 预创建所有 Handler
+        val transactionTemplate = mockTransactionTemplate()
+        val friendshipRepository = mockk<com.nebula.repository.repository.FriendshipRepository>()
         val addHandler = FriendAddHandler(
-            friendService, pushService, mockLockManager(), mockk(), mockk()
+            friendService, pushService, mockLockManager(), transactionTemplate, friendshipRepository
         )
         val acceptHandler = FriendAcceptHandler(
-            friendService, pushService, mockLockManager(), mockk(), mockk()
+            friendService, pushService, mockLockManager(), transactionTemplate, friendshipRepository
         )
         val rejectHandler = FriendRejectHandler(friendService)
         val deleteHandler = FriendDeleteHandler(friendService)
