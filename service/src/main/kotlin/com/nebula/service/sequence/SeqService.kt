@@ -96,14 +96,21 @@ class SeqService(
      * 使用 SETNX 仅在 Key 不存在时设置，避免覆盖 Redis 中已有的序列号。
      * 在服务启动时调用，确保 Redis 重启后序列号从 MySQL 消息计数恢复。
      *
+     * 注意：存储值为 [nextSeq] - 1，因为 [nextSeq] 方法使用 INCR（加 1 后返回），
+     * 所以存储上一值后调用 nextSeq 自然返回正确的下一个序列号。例如：
+     * - 数据库消息数 = 5，期望下一个序列号 = 6
+     * - 传入 nextSeq = 6，存储 5
+     * - 后续 nextSeq() → INCR 5 → 返回 6 ✔
+     *
      * @param convId 会话 ID
      * @param uid 用户 ID
-     * @param nextSeq 从数据库计算的起始序列号
+     * @param nextSeq 期望的下一个序列号
      * @return true 表示 Key 不存在且已设置，false 表示 Key 已存在（未被覆盖）
      */
     suspend fun tryRestoreSeq(convId: String, uid: Long, nextSeq: Long): Boolean {
         val redisKey = key(convId, uid)
-        return redis.setnx(redisKey, nextSeq.toString()) ?: false
+        // 存储 nextSeq - 1，补偿 nextSeq() 中 INCR 的 +1 行为
+        return redis.setnx(redisKey, (nextSeq - 1).toString()) ?: false
     }
 
     /**
