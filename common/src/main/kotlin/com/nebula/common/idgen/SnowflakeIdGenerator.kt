@@ -1,6 +1,7 @@
 package com.nebula.common.idgen
 
 import com.nebula.common.exception.ClockBackwardsException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -97,19 +98,20 @@ class SnowflakeIdGenerator(
     }
 
     /**
-     * 带退避的忙等待，直到系统时间越过 [lastTimestamp]。
+     * 协程挂起等待，直到系统时间越过 [lastTimestamp]。
      *
-     * 每次检查后调用 [Thread.sleep]\(1) 退避 1ms，避免纯自旋消耗 CPU。
-     * sleep(1) 实际休眠时长可能为 2~15ms，但此方法仅在序列号耗尽时触发（每毫秒 4096 次后），
-     * 属于低概率路径，延迟可接受。高频路径（同毫秒递增序列号）不受影响。
+     * 每次检查后调用 [delay]\(1) 挂起协程 ~1ms，不阻塞线程。
+     * 与 [nextId] 的协程 [Mutex] 设计一致，避免锁持有期间阻塞线程。
+     * 此方法仅在序列号耗尽时触发（每毫秒 4096 次后），属于低概率路径，
+     * 高频路径（同毫秒递增序列号）不受影响。
      *
      * @param lastTimestamp 上次生成 ID 时记录的时间戳
      * @return 越过 lastTimestamp 后的当前毫秒时间戳
      */
-    private fun waitNextMillis(lastTimestamp: Long): Long {
+    private suspend fun waitNextMillis(lastTimestamp: Long): Long {
         var timestamp = clock.millis()
         while (timestamp <= lastTimestamp) {
-            Thread.sleep(1) // 退避 1ms，避免纯自旋消耗 CPU
+            delay(1) // 挂起协程 ~1ms，不阻塞线程
             timestamp = clock.millis()
         }
         return timestamp
