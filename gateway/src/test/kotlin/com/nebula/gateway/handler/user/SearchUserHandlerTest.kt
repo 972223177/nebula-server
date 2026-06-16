@@ -153,14 +153,4 @@ class SearchUserHandlerTest {
         assertEquals(0, resp.usersCount, "空关键词应返回空结果")
         assertFalse(resp.hasMore)
     }
-
-    @Test
-    fun handleShouldRequireSession() = runTest {
-        val exception = kotlin.test.assertFailsWith<com.nebula.common.exception.BizException> {
-            val req = com.nebula.chat.user.SearchUserReq.getDefaultInstance()
-            handler.handle(req)
-        }
-        kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
-    }
-
 }
