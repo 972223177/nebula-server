@@ -239,7 +239,7 @@ class SeqServiceTest {
         val nextSeq = 42L
         val redisKey = "seq:conv:conv-restore-new:next_seq:uid:10001"
 
-        coEvery { redis.setnx(redisKey, "42") } returns true
+        coEvery { redis.setnx(redisKey, "41") } returns true
 
         // When
         val result = seqService.tryRestoreSeq(convId, uid, nextSeq)
@@ -256,7 +256,7 @@ class SeqServiceTest {
         val nextSeq = 100L
         val redisKey = "seq:conv:conv-restore-exists:next_seq:uid:20001"
 
-        coEvery { redis.setnx(redisKey, "100") } returns false
+        coEvery { redis.setnx(redisKey, "99") } returns false
 
         // When
         val result = seqService.tryRestoreSeq(convId, uid, nextSeq)
@@ -273,7 +273,7 @@ class SeqServiceTest {
         val nextSeq = 1L
         val redisKey = "seq:conv:conv-restore-null:next_seq:uid:30001"
 
-        coEvery { redis.setnx(redisKey, "1") } returns null
+        coEvery { redis.setnx(redisKey, "0") } returns null
 
         // When
         val result = seqService.tryRestoreSeq(convId, uid, nextSeq)
