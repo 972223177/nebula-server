@@ -36,6 +36,11 @@ class LoginHandler(
             val token = req.token
             val existingSession = sessionRegistry.validate(token)
             if (existingSession != null) {
+                // GC5 (D-14-06): 验证 deviceId 一致性，防止 Token 被跨设备盗用
+                val reqDeviceId = req.deviceId
+                if (reqDeviceId.isNotBlank() && existingSession.deviceId != reqDeviceId) {
+                    throw UserException(BizCode.TOKEN_INVALID, "Token device id mismatch")
+                }
                 // CQ-10: Token 重连审计日志
                 auditLogger.info(AuditMarkers.LOGIN, "user_login | uid=${existingSession.userId} | method=token | success=true | device=${req.deviceType}")
                 return buildLoginResp(existingSession.userId, existingSession.token, req)

@@ -163,4 +163,90 @@ class LoginHandlerTest {
         // 审计日志在异常抛出前已记录（LoginHandler catch 块内），
         // 此处验证异常正常传播即表示审计日志路径覆盖
     }
+
+    // ================ GC5: deviceId 重连验证 ================
+
+    /**
+     * GC5: Token 重连时 deviceId 不匹配应返回 TOKEN_INVALID。
+     *
+     * 请求中的 deviceId 与 Session 绑定的 deviceId 不一致时，
+     * 应拒绝重连请求，防止 Token 被跨设备盗用。
+     */
+    @Test
+    fun tokenReconnectShouldFailWhenDeviceIdMismatch() = runTest {
+        val existingSession = Session(
+            userId = 1001L,
+            token = "existing-token-abc",
+            deviceType = "MOBILE",
+            deviceId = "device-001",
+            connectionId = "conn-001"
+        )
+        coEvery { sessionRegistry.validate("existing-token-abc") } returns existingSession
+
+        val req = LoginReq.newBuilder()
+            .setToken("existing-token-abc")
+            .setDeviceId("device-002") // 不同的 deviceId
+            .build()
+
+        val e = assertFailsWith<UserException> {
+            handler.handle(req)
+        }
+        assertEquals(BizCode.TOKEN_INVALID, e.bizCode, "deviceId 不匹配时应返回 TOKEN_INVALID")
+    }
+
+    /**
+     * GC5: Token 重连时无 deviceId 应兼容通过。
+     *
+     * 旧客户端不传入 deviceId 时，跳过 deviceId 校验，兼容历史版本。
+     */
+    @Test
+    fun tokenReconnectShouldPassWhenDeviceIdIsBlank() = runTest {
+        val existingSession = Session(
+            userId = 1001L,
+            token = "existing-token-abc",
+            deviceType = "MOBILE",
+            deviceId = "device-001",
+            connectionId = "conn-001"
+        )
+        coEvery { sessionRegistry.validate("existing-token-abc") } returns existingSession
+
+        val req = LoginReq.newBuilder()
+            .setToken("existing-token-abc")
+            .setDeviceId("") // 空 deviceId
+            .build()
+
+        val resp = handler.handle(req)
+
+        assertNotNull(resp)
+        assertEquals("existing-token-abc", resp.token, "空 deviceId 时应兼容通过")
+        assertEquals(1001L, resp.uid)
+    }
+
+    /**
+     * GC5: Token 重连时 deviceId 匹配应正常通过。
+     *
+     * 防止 deviceId 校验误伤正常重连场景。
+     */
+    @Test
+    fun tokenReconnectShouldPassWhenDeviceIdMatches() = runTest {
+        val existingSession = Session(
+            userId = 1001L,
+            token = "existing-token-abc",
+            deviceType = "MOBILE",
+            deviceId = "device-001",
+            connectionId = "conn-001"
+        )
+        coEvery { sessionRegistry.validate("existing-token-abc") } returns existingSession
+
+        val req = LoginReq.newBuilder()
+            .setToken("existing-token-abc")
+            .setDeviceId("device-001") // 匹配的 deviceId
+            .build()
+
+        val resp = handler.handle(req)
+
+        assertNotNull(resp)
+        assertEquals("existing-token-abc", resp.token)
+        assertEquals(1001L, resp.uid)
+    }
 }

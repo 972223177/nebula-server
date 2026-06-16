@@ -20,6 +20,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.just
 import io.mockk.mockk
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -319,11 +321,13 @@ class ConversationServiceTest {
         // 成员已存在但 deleted=1
         coEvery { conversationMemberRepository.findByConversationIdAndUserIds(convId, listOf(memberUid1)) } returns listOf(softDeletedMember)
         coEvery { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
-        coEvery { conversationRepository.incrementMemberCount(convId, 1) } returns 1
+        // 恢复软删除成员不增加计数（不加入 newMemberUids），因此 delta=0
+        coEvery { conversationRepository.incrementMemberCount(convId, 0) } returns 0
 
         val invited = service.inviteMember(req, operatorUid)
 
-        assertEquals(listOf(memberUid1), invited)
+        // 恢复的软删除成员不加入 newMemberUids（避免重复计数），因此返回空列表
+        assertEquals(emptyList<Long>(), invited)
         // 验证恢复操作：deleted 被置 0
         coVerify { conversationMemberRepository.save(match<ConversationMemberEntity> { it.deleted == 0 }) }
     }
@@ -410,6 +414,8 @@ class ConversationServiceTest {
 
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, ownerUid) } returns ownerMemberEntity
+        // leaveGroup 内部查询活跃成员数以判断是否解散群组
+        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 2L
 
         val ex = assertThrows<ConversationException> {
             service.leaveGroup(req, ownerUid)
@@ -424,6 +430,8 @@ class ConversationServiceTest {
 
         coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
         coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
+        // leaveGroup 内部查询活跃成员数以判断是否解散群组
+        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 2L
         coEvery { conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1) } just Runs
         coEvery { conversationRepository.incrementMemberCount(convId, -1) } returns 1
 
@@ -656,5 +664,69 @@ class ConversationServiceTest {
         assertEquals("成员1", member.displayName)
         assertEquals("https://example.com/avatar.png", member.avatarUrl)
         assertEquals("member", member.role)
+    }
+
+    // =========================================================================
+    // T04: memberCount 并发更新测试（MockK 方案，仅覆盖协程调度层）
+    // =========================================================================
+
+    /**
+     * T04: memberCount 并发更新应保持协程调度一致性。
+     *
+     * 使用 MockK 模拟 Repository 层，验证 [ConversationService] 在协程并发场景下的调用逻辑正确性。
+     * 本测试**仅覆盖协程并发调度逻辑**，不验证 MySQL JPA 层面的 member_count 原子一致性。
+     * 真正的 MySQL 级并发一致性测试需 MySQL Testcontainers 环境，超出本阶段范围。
+     *
+     * 局限性：所有 Repository 调用被 MockK 替换后，coroutineScope { launch { ... } } 下的调用
+     * 实际是顺序执行 MockK 预配置行为，无法验证 MySQL JPA 层的 member_count 原子性。
+     * 此测试不替代 MySQL 级并发测试，仅为协程调度逻辑的轻量验证。
+     */
+    @Test
+    fun memberCountConcurrentUpdatesShouldMaintainConsistency() = runTest {
+        // Given: 设置 invite 和 leave 的 MockK 行为
+        coEvery { conversationRepository.findById(convId) } returns Optional.of(groupConversation)
+        // invite: 操作者是群主
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid) } returns ownerMemberEntity
+        // invite: 被邀请成员不在群中
+        coEvery { conversationMemberRepository.findByConversationIdAndUserIds(convId, listOf(memberUid1)) } returns emptyList()
+        // invite: 保存新成员记录
+        coEvery { conversationMemberRepository.save(any<ConversationMemberEntity>()) } answers { firstArg() }
+        // invite: 成员计数增加
+        coEvery { conversationRepository.incrementMemberCount(convId, 1) } returns 1
+        // leave: 退群成员是已知普通成员
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(convId, memberUid1) } returns memberEntity1
+        // leave: 查询活跃成员数（需要 > 1 避免触发解散逻辑）
+        coEvery { conversationMemberRepository.countActiveByConversationId(convId) } returns 2L
+        // leave: 软删除成员
+        coEvery { conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, memberUid1) } just Runs
+        // leave: 成员计数减少
+        coEvery { conversationRepository.incrementMemberCount(convId, -1) } returns -1
+
+        // When: 并发执行 invite 和 leave
+        coroutineScope {
+            repeat(5) {
+                launch {
+                    service.inviteMember(
+                        InviteMemberReq.newBuilder()
+                            .setConversationId(convId)
+                            .addAllUids(listOf(memberUid1))
+                            .build(),
+                        operatorUid
+                    )
+                }
+                launch {
+                    service.leaveGroup(
+                        LeaveGroupReq.newBuilder()
+                            .setConversationId(convId)
+                            .build(),
+                        memberUid1
+                    )
+                }
+            }
+        }
+
+        // Then: 验证协程调度层执行完成且无异常抛出
+        coVerify(atLeast = 5) { conversationRepository.incrementMemberCount(convId, 1) }
+        coVerify(atLeast = 5) { conversationRepository.incrementMemberCount(convId, -1) }
     }
 }

@@ -7,6 +7,7 @@ import com.nebula.repository.repository.DeadLetterRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.unmockkAll
 import jakarta.persistence.OptimisticLockException
 import kotlinx.coroutines.test.runTest
@@ -17,9 +18,11 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
+import java.util.Base64
 import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -420,5 +423,74 @@ class DeadLetterServiceTest {
         deadLetterService.markPermanentFailed()
 
         coVerify(exactly = 0) { deadLetterRepository.save(any()) }
+    }
+
+    // ================ T05: compensate payload 恢复 ================
+
+    /**
+     * T05: compensate 应从 [DeadLetterEntity] 的 payload 字段恢复 Base64 编码。
+     *
+     * 验证 [DeadLetterService.compensate] 在处理带 payload 的死信记录时，
+     * 能将 DeadLetterEntity.payload（ByteArray）正确编码为 Base64 字符串写入 Redis Stream。
+     *
+     * 测试策略：
+     * 1. Mock [DeadLetterRepository.findByStatusAndFailCountLessThan] 返回 payload 非 null 的死信实体
+     * 2. 使用 [io.mockk.slot] 捕获 [MessageQueueRepository.enqueue] 的 stream fields 参数
+     * 3. 调用 [DeadLetterService.compensate]（无参）
+     * 4. 验证 slot.captured["payload"] 非空且可 Base64 解码为原始 bytes
+     */
+    @Test
+    fun compensateShouldRestorePayloadFromDeadLetterEntity() = runTest {
+        // Given: 创建带 payload 的死信实体
+        val originalPayload = "test payload data".toByteArray()
+        val entity = DeadLetterEntity(
+            conversationId = conversationId,
+            senderUid = senderUid,
+            messageType = messageType,
+            content = content,
+            payload = originalPayload,
+            clientMsgId = "cmid-001",
+            clientTs = clientTs,
+            failReason = failReason,
+            failCount = 0,
+            status = "pending"
+        ).apply {
+            id = 1L
+            msgId = 100L
+            version = 0
+        }
+
+        // Mock 查询：返回带 payload 的死信
+        coEvery {
+            deadLetterRepository.findByStatusAndFailCountLessThan("pending", 5, Pageable.ofSize(100))
+        } returns listOf(entity)
+
+        // Mock save：返回传入的实体
+        coEvery { deadLetterRepository.save(any<DeadLetterEntity>()) } answers { firstArg() }
+
+        // 使用 slot 捕获 enqueue 的参数
+        val fieldsSlot = slot<Map<String, String>>()
+        coEvery { messageQueueRepository.enqueue(capture(fieldsSlot)) } returns "stream-id"
+
+        // Mock markPermanentFailed 中的查询
+        coEvery {
+            deadLetterRepository.findByStatusAndFailCountGreaterThanEqual(
+                "retrying", 5, Pageable.ofSize(100)
+            )
+        } returns emptyList()
+
+        // When: 调用 compensate
+        val count = deadLetterService.compensate()
+
+        // Then: 补偿应成功处理 1 条死信
+        assertEquals(1, count)
+
+        // Then: payload 应被写入 stream fields
+        val capturedPayload = fieldsSlot.captured["payload"]
+        assertNotNull(capturedPayload, "stream fields 中应包含 payload 字段")
+        assertTrue(capturedPayload!!.isNotEmpty(), "payload 不应为空字符串")
+        // 直接解码，若 payload 不是合法 Base64 则测试失败
+        val decodedPayload = Base64.getDecoder().decode(capturedPayload)
+        assertTrue(originalPayload.contentEquals(decodedPayload), "Base64 解码后的 payload 应与原始 bytes 一致")
     }
 }

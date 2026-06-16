@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: v1.1 Enhancement — Code Review Cleanup
-status: Phase 13 complete (5 fixes + 11 decisions, compile verified)
-last_updated: "2026-06-16T13:00:00.000Z"
+status: Phase 14 Complete
+last_updated: "2026-06-16T21:50:00.000Z"
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 51
-  completed_plans: 51
+  total_phases: 14
+  completed_phases: 14
+  total_plans: 53
+  completed_plans: 53
   percent: 100
 ---
 
@@ -40,17 +40,19 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 11 — Code Quality & Production Hardening | Complete | 2026-06-15 | 2026-06-15 |
 | 12 — Module Dependency Isolation | Complete | 2026-06-16 | 2026-06-16 |
 | 13 — Code Review Cleanup | Complete | 2026-06-16 | 2026-06-16 |
+| 14 — 遗留问题修复 | Complete | 2026-06-16 | 2026-06-16 |
 
 ## Next Actions
 
 v1.1 已发布。后续可考虑：
-1. 嵌入式 Redis 测试基础设施 → 补全 T04/T05/T06 延期测试
+1. ~~嵌入式 Redis 测试基础设施 → 补全 T04/T05/T06 延期测试~~ ✅ 已完成
 2. v1.2 功能规划
 
 ## Recent Events
 
 | Date | Task | Impact |
 |------|------|--------|
+| 2026-06-16 | Phase 14 遗留问题修复 | 2 Plan: 14-01（RedisTestBase 基础设施 + T04/T05/T06 延期测试）、14-02（GC5 deviceId 重连验证 + S8 依赖清理）。新建 4 测试文件、修改 6 文件。`./gradlew compileKotlin compileTestKotlin` 通过。service 模块 128/130 通过（2 Docker），gateway 3 个新增 GC5 测试全部通过，server 3/3 通过。Phase 14 Complete |
 | 2026-06-16 | Phase 13 Code Review Cleanup | 处理 16 条待评估/待确认问题：5 条修复（R2 Stream字段名、GS3 私聊已读回执、R12 TOCTOU异常保护、R15 安全类型转换、GS5 死代码清理），11 条决策（降为暂不修复/v1.2）。编译验证通过 |
 | 2026-06-16 | Phase 12 Module Dependency Isolation | 所有 api→implementation，消除 gateway→repository 跨层引用。新增 10 文件（SessionStore、DeadLetterCallback、4 DTO、2 Service 类、2 Koin 模块），修改 30+ 文件。生产代码编译通过 |
 | 2026-06-15 | Phase 11 完成 | 4 Plan：11-01 安全加固、11-02 数据一致性、11-03 数据完整性、11-04 代码质量。14 commit，78/81 CQ 问题关闭 |

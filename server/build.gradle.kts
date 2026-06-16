@@ -39,12 +39,14 @@ dependencies {
     // Phase 3 新增 — 持久化层（测试依赖，生产代码通过 gateway 间接访问）
     testImplementation(project(":repository"))
     testImplementation(project(":service"))
-    implementation(libs.lettuce.core)
+    // kotlinx.coroutines: 虽 server 源码无 direct import，但协程运行时是 Kotlin 基础依赖，
+    // 保留显式声明可防止 gateway 依赖结构变化导致编译断裂（S8 保留）。
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.hibernate.core)
-    implementation(libs.spring.tx)
-    implementation(libs.hikaricp)
-    implementation(libs.spring.data.jpa)
+
+    // S8: 以下依赖仅为测试代码编译保留（KoinVerificationTest 需要 StatefulRedisConnection / TransactionTemplate 类型），
+    // 生产代码不直接使用。使用 testImplementation 而非 implementation 隔离编译作用域。
+    testImplementation(libs.lettuce.core)
+    testImplementation(libs.spring.tx)
 
     // Phase 4: Handler Framework — Koin 启动
     implementation(libs.koin.core)
