@@ -17,31 +17,31 @@ class FriendRequestStatusTest {
     // ─── fromCode() 正向映射 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(0) — 返回 PENDING`() {
+    fun fromCode0ReturnsPending() {
         assertEquals(FriendRequestStatus.PENDING, FriendRequestStatus.fromCode(0))
     }
 
     @Test
-    fun `fromCode(1) — 返回 ACCEPTED`() {
+    fun fromCode1ReturnsAccepted() {
         assertEquals(FriendRequestStatus.ACCEPTED, FriendRequestStatus.fromCode(1))
     }
 
     @Test
-    fun `fromCode(2) — 返回 REJECTED`() {
+    fun fromCode2ReturnsRejected() {
         assertEquals(FriendRequestStatus.REJECTED, FriendRequestStatus.fromCode(2))
     }
 
     // ─── fromCode() 异常路径 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(-1) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCodeNegOneThrowsException() {
         assertThrows<NoSuchElementException> {
             FriendRequestStatus.fromCode(-1)
         }
     }
 
     @Test
-    fun `fromCode(999) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCode999ThrowsException() {
         assertThrows<NoSuchElementException> {
             FriendRequestStatus.fromCode(999)
         }
@@ -50,12 +50,12 @@ class FriendRequestStatusTest {
     // ─── 枚举完整性 ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `entries 包含三个枚举值`() {
+    fun entriesHasThreeValues() {
         assertEquals(3, FriendRequestStatus.entries.size)
     }
 
     @Test
-    fun `entries 包含 PENDING、ACCEPTED 和 REJECTED`() {
+    fun entriesContainsPendingAcceptedAndRejected() {
         val all = FriendRequestStatus.entries
         assertEquals(
             setOf(FriendRequestStatus.PENDING, FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED),

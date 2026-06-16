@@ -84,7 +84,7 @@ for SRC_FILE in KEY_FILES:
             private val target = Target(mockDependency)
             
             @Test
-            fun `<方法名> — <场景>`() {
+            fun <camelCaseMethodName>() {
                 // Given: <前置条件>
                 every { mockDependency.method() } returns expectedValue
                 

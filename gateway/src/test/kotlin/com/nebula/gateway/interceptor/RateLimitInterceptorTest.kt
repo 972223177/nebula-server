@@ -7,13 +7,19 @@ import com.nebula.gateway.session.Session
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Timeout
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -25,19 +31,39 @@ import kotlin.test.assertTrue
  * - 信号量释放：请求完成后信号量被释放，后续请求可正常通行
  * - 注册限流：user/register 请求走 RegisterRateLimiter（每小时每 IP 5 次）
  * - IP 提取优先级：x-client-ip > x-forwarded-for > "unknown"
- * - 清理守护线程：init block 启动 daemon 线程
+ * - 清理协程生命周期：创建时自动启动，shutdown() 可停止
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
 class RateLimitInterceptorTest {
+
+    /** 记录所有创建的拦截器实例，在 @AfterEach 中统一 shutdown */
+    private val createdInterceptors = mutableListOf<RateLimitInterceptor>()
+
+    /** 创建拦截器并注册到清理列表 */
+    private fun createInterceptor(
+        permitsPerUser: Int = 20,
+        acquireTimeoutMs: Long = 100L,
+        scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    ): RateLimitInterceptor {
+        return RateLimitInterceptor(permitsPerUser, acquireTimeoutMs, scope).also {
+            createdInterceptors.add(it)
+        }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        createdInterceptors.forEach { it.shutdown() }
+        createdInterceptors.clear()
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // 场景 1：正常通行
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `正常通行 — 未超限时正常调用 chain proceed`() = runTest {
+    fun shouldCallChainProceedWhenWithinRateLimit() = runTest {
         // Given: 默认限流器（20 permits），一个普通请求
-        val interceptor = RateLimitInterceptor()
+        val interceptor = createInterceptor()
         val request = Request.newBuilder()
             .setMethod("user/getProfile")
             .putMetadata("x-client-ip", "192.168.1.100")
@@ -57,9 +83,9 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `正常通行 — 已认证用户按 userId 限流`() = runTest {
+    fun shouldRateLimitAuthenticatedUserByUserId() = runTest {
         // Given: 已认证用户的 Session
-        val interceptor = RateLimitInterceptor()
+        val interceptor = createInterceptor()
         val session = Session(
             userId = 1001L,
             token = "test-token",
@@ -90,9 +116,9 @@ class RateLimitInterceptorTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `限流拒绝 — 仅 1 个 permit 第二个请求返回 429`() = runTest {
+    fun shouldReturn429WhenSecondRequestExceedsSinglePermit() = runTest {
         // Given: 仅 1 个 permit，0ms 超时，使用同一 IP 确保共享信号量
-        val interceptor = RateLimitInterceptor(permitsPerUser = 1, acquireTimeoutMs = 0)
+        val interceptor = createInterceptor(permitsPerUser = 1, acquireTimeoutMs = 0)
         val ip = "10.0.0.99"
         val mockChain = mockk<Interceptor.Chain>()
 
@@ -115,9 +141,9 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `限流拒绝 — 已认证用户超限也返回 429`() = runTest {
+    fun shouldReturn429ForAuthenticatedUserWhenOverPermitLimit() = runTest {
         // Given: 已认证用户，1 个 permit，0ms 超时
-        val interceptor = RateLimitInterceptor(permitsPerUser = 1, acquireTimeoutMs = 0)
+        val interceptor = createInterceptor(permitsPerUser = 1, acquireTimeoutMs = 0)
         val session = Session(
             userId = 2001L,
             token = "token-abc",
@@ -149,9 +175,9 @@ class RateLimitInterceptorTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `信号量释放 — 请求完成后信号量可复用`() = runTest {
+    fun shouldReuseSemaphoreAfterRequestCompletes() = runTest {
         // Given: 仅 1 个 permit
-        val interceptor = RateLimitInterceptor(permitsPerUser = 1, acquireTimeoutMs = 100)
+        val interceptor = createInterceptor(permitsPerUser = 1, acquireTimeoutMs = 100)
         val ip = "172.16.0.1"
         val mockChain = mockk<Interceptor.Chain>()
 
@@ -173,9 +199,9 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `信号量释放 — chain proceed 抛异常也释放信号量`() = runTest {
+    fun shouldReleaseSemaphoreEvenWhenChainProceedThrows() = runTest {
         // Given: chain.proceed 会抛出异常
-        val interceptor = RateLimitInterceptor(permitsPerUser = 1, acquireTimeoutMs = 100)
+        val interceptor = createInterceptor(permitsPerUser = 1, acquireTimeoutMs = 100)
         val ip = "172.16.0.2"
         val mockChain = mockk<Interceptor.Chain>()
 
@@ -206,9 +232,9 @@ class RateLimitInterceptorTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `注册限流 — user register 前 5 次请求正常通行`() = runTest {
+    fun shouldAllowFirstFiveRegisterRequestsToPass() = runTest {
         // Given: RegisterRateLimiter 限流 5 次/小时/IP
-        val interceptor = RateLimitInterceptor()
+        val interceptor = createInterceptor()
         val mockChain = mockk<Interceptor.Chain>()
 
         coEvery { mockChain.proceed(any()) } returns Response.newBuilder().setCode(200).build()
@@ -229,9 +255,9 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `注册限流 — 第 6 次注册请求返回 429`() = runTest {
+    fun shouldReturn429OnSixthRegisterRequest() = runTest {
         // Given: RegisterRateLimiter 限流 5 次/小时/IP
-        val interceptor = RateLimitInterceptor()
+        val interceptor = createInterceptor()
         val mockChain = mockk<Interceptor.Chain>()
 
         coEvery { mockChain.proceed(any()) } returns Response.newBuilder().setCode(200).build()
@@ -259,9 +285,9 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `注册限流 — 不同 IP 独立计数`() = runTest {
+    fun shouldCountRegisterLimitsIndependentlyPerIp() = runTest {
         // Given: 两个不同 IP
-        val interceptor = RateLimitInterceptor()
+        val interceptor = createInterceptor()
         val mockChain = mockk<Interceptor.Chain>()
 
         coEvery { mockChain.proceed(any()) } returns Response.newBuilder().setCode(200).build()
@@ -301,8 +327,8 @@ class RateLimitInterceptorTest {
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `IP 提取 — 优先使用 x-client-ip`() {
-        val interceptor = RateLimitInterceptor()
+    fun shouldPrioritizeXClientIpForIpExtraction() {
+        val interceptor = createInterceptor()
         val request = Request.newBuilder()
             .setMethod("user/getProfile")
             .putMetadata("x-client-ip", "1.1.1.1")
@@ -320,8 +346,8 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `IP 提取 — 降级使用 x-forwarded-for`() {
-        val interceptor = RateLimitInterceptor()
+    fun shouldFallbackToXForwardedForWhenXClientIpAbsent() {
+        val interceptor = createInterceptor()
         val request = Request.newBuilder()
             .setMethod("user/getProfile")
             .putMetadata("x-forwarded-for", "10.0.0.55")
@@ -337,8 +363,8 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `IP 提取 — 无任何 metadata 时使用 unknown`() {
-        val interceptor = RateLimitInterceptor()
+    fun shouldReturnUnknownWhenNoIpMetadataPresent() {
+        val interceptor = createInterceptor()
         val request = Request.newBuilder()
             .setMethod("user/getProfile")
             .build()
@@ -353,20 +379,41 @@ class RateLimitInterceptorTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 场景 6：清理守护线程
+    // 场景 6：清理协程生命周期
     // ═══════════════════════════════════════════════════════════════════════
 
     @Test
-    fun `清理守护线程 — init block 启动名为 rate-limit-cleanup 的 daemon 线程`() {
-        // Given: 创建 RateLimitInterceptor 实例（触发 init block）
-        RateLimitInterceptor()
+    fun shouldAutoStartCleanupCoroutineAndStopAfterShutdown() = runTest {
+        // Given: 显式创建 scheduler，避免 cast 获取；StandardTestDispatcher 为手动控制模型
+        val scheduler = TestCoroutineScheduler()
+        val testDispatcher = StandardTestDispatcher(scheduler)
+        val testScope = CoroutineScope(testDispatcher + SupervisorJob())
 
-        // When: 查找清理线程
-        val cleanupThread = Thread.getAllStackTraces().keys
-            .find { it.name == "rate-limit-cleanup" }
+        // When: 创建拦截器（清理协程在 testScope 上启动）
+        val interceptor = createInterceptor(scope = testScope)
 
-        // Then: 线程存在且为守护线程
-        assertNotNull(cleanupThread, "应存在名为 rate-limit-cleanup 的清理线程")
-        assertTrue(cleanupThread!!.isDaemon, "清理线程应为守护线程")
+        // Then: 清理协程已启动（在 testScope 中有活跃子协程）
+        assertTrue(testScope.coroutineContext[Job]!!.children.count() > 0, "清理协程应已启动")
+
+        // When: 调用 shutdown
+        interceptor.shutdown()
+
+        // 推进 testScope 的调度器，让取消生效
+        scheduler.advanceUntilIdle()
+
+        // Then: 清理协程已取消
+        val job = testScope.coroutineContext[Job]!!
+        assertTrue(job.children.count() == 0 || job.children.all { it.isCompleted },
+            "清理协程应已被取消")
+    }
+
+    @Test
+    fun shouldBeIdempotentOnRepeatedShutdownCalls() = runTest {
+        // Given: 已创建并 shutdown 的拦截器
+        val interceptor = createInterceptor()
+        interceptor.shutdown()
+
+        // When + Then: 再次 shutdown 不抛异常
+        interceptor.shutdown() // 应无异常
     }
 }

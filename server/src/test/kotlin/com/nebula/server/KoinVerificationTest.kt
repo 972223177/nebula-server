@@ -28,6 +28,7 @@ import com.nebula.repository.repository.UserRepository
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -69,6 +70,10 @@ class KoinVerificationTest {
 
     @AfterEach
     fun tearDown() {
+        // 取消 sendHandlerScope，释放 Dispatchers.IO 线程，避免非守护线程阻止 JVM 退出
+        try {
+            GlobalContext.get().get<CoroutineScope>(named("sendHandlerScope")).cancel()
+        } catch (_: Exception) {}
         stopKoin()
     }
 

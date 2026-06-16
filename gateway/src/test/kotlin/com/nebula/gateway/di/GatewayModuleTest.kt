@@ -59,6 +59,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -142,7 +143,7 @@ class GatewayModuleTest {
         single { GetProfileHandler(userService) }
         single { BatchGetUserHandler(userService) }
         single { BatchGetStatusHandler(get(), get()) }
-        single { SetPrivacyHandler(userPrivacyService, get(), get(), get()) }
+        single { SetPrivacyHandler(userPrivacyService, get(), get(), get(), scope) }
         single { GetPrivacyHandler(userPrivacyService) }
 
         // Phase 6: Chat & Message
@@ -179,6 +180,8 @@ class GatewayModuleTest {
     @AfterEach
     fun tearDown() {
         stopKoin()
+        // 取消 CoroutineScope，释放 Dispatchers.IO 线程，避免非守护线程阻止 JVM 退出
+        scope.cancel()
     }
 
     @Test

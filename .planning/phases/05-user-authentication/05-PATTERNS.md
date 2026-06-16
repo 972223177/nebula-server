@@ -697,7 +697,7 @@ class LoginHandlerTest {
     private val handler = LoginHandler(mockk(), mockk(), mockk())
 
     @Test
-    fun `login returns LoginResp with token`() = runTest {
+    fun loginReturnsLoginRespWithToken() = runTest {
         val req = LoginReq.newBuilder().setUsername("test").setPassword("pass").build()
         val resp = handler.handle(req)
         assertEquals(1001L, resp.userId)
@@ -705,7 +705,7 @@ class LoginHandlerTest {
     }
 
     @Test
-    fun `method is user-login`() {
+    fun methodIsUserLogin() {
         assertEquals("user/login", handler.method)
     }
 }
@@ -724,7 +724,7 @@ class SessionRegistryTest {
     }
 
     @Test
-    fun `registerWithDeviceType evicts same device type`() = runTest {
+    fun registerWithDeviceTypeEvictsSameDeviceType() = runTest {
         coEvery { sessionRepository.save(any(), any()) } returns Unit
         coEvery { sessionRepository.delete(any()) } returns Unit
 

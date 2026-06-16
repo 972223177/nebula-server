@@ -19,13 +19,13 @@ class ClockTest {
     // ─── SystemClock — 委托 System.currentTimeMillis() ────────────────────────────
 
     @Test
-    fun `SystemClock millis — 返回值大于 0`() {
+    fun systemClockMillisReturnsPositive() {
         val clock: Clock = SystemClock()
         assertTrue(clock.millis() > 0, "时钟应返回正数毫秒值")
     }
 
     @Test
-    fun `SystemClock millis — 与 System currentTimeMillis 误差小于 50ms`() {
+    fun systemClockMillisWithin50ms() {
         val clock = SystemClock()
         val before = System.currentTimeMillis()
         val millis = clock.millis()
@@ -43,7 +43,7 @@ class ClockTest {
     }
 
     @Test
-    fun `SystemClock millis — 单调非递减`() {
+    fun systemClockMillisIsMonotonic() {
         val clock = SystemClock()
         val first = clock.millis()
         val second = clock.millis()
@@ -60,14 +60,14 @@ class ClockTest {
     }
 
     @Test
-    fun `FakeClock — 返回注入的固定值`() {
+    fun fakeClockReturnsFixedValue() {
         val fixedTime = 1700000000000L
         val clock = FakeClock(fixedTime)
         assertEquals(fixedTime, clock.millis())
     }
 
     @Test
-    fun `FakeClock — 连续调用返回相同值`() {
+    fun fakeClockReturnsSameValue() {
         val fixedTime = 1700000000000L
         val clock = FakeClock(fixedTime)
         assertEquals(clock.millis(), clock.millis())
@@ -76,7 +76,7 @@ class ClockTest {
     // ─── 接口契约 — 面向 Clock 接口编程 ───────────────────────────────────────────
 
     @Test
-    fun `Clock 多态 — SystemClock 和 FakeClock 均可赋值给 Clock 引用`() {
+    fun clockPolymorphismBothImplementationsWork() {
         val systemClock: Clock = SystemClock()
         val fakeClock: Clock = FakeClock(0L)
 

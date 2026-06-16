@@ -4,12 +4,20 @@ import com.nebula.chat.Request
 import com.nebula.chat.Response
 import com.nebula.gateway.handler.SessionKey
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 限流拦截器 — 基于 Semaphore 的每用户并发限流骨架（D-08）。
@@ -26,10 +34,12 @@ import java.util.concurrent.TimeUnit
  *
  * @property permitsPerUser 每用户最大并发请求数
  * @property acquireTimeoutMs 获取信号量的超时时间（毫秒）
+ * @property scope 协程作用域，用于后台清理协程；测试可注入控制生命周期
  */
 class RateLimitInterceptor(
     private val permitsPerUser: Int = DEFAULT_PERMITS_PER_USER,
-    private val acquireTimeoutMs: Long = DEFAULT_ACQUIRE_TIMEOUT_MS
+    private val acquireTimeoutMs: Long = DEFAULT_ACQUIRE_TIMEOUT_MS,
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : Interceptor {
 
     /** 每用户信号量映射 — userId/IP → Semaphore(permitsPerUser) */
@@ -40,32 +50,37 @@ class RateLimitInterceptor(
      *
      * 每 10 分钟扫描一次，移除所有 permit 已全部归还的条目，
      * 防止长期运行中 userSemaphores 因 IP 变化或过期用户无限增长导致 OOM。
-     * 使用守护线程，不阻止 JVM 正常退出。
+     * 清理协程运行在注入的 [scope] 上，默认使用 Dispatchers.IO（daemon 线程池）。
+     *
+     * 调用 [shutdown] 可取消清理循环（如测试结束后释放资源）。
      */
-    init {
-        Thread {
-            while (true) {
-                try {
-                    Thread.sleep(CLEANUP_INTERVAL_MS)
-                    val before = userSemaphores.size
-                    // 仅移除所有 permit 都可用的条目（用户完全无请求时安全移除）
-                    userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
-                    val after = userSemaphores.size
-                    if (before != after) {
-                        log.debug { "RateLimiter 清理完成: $before → $after 个信号量" }
-                    }
-                } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    break
-                } catch (e: Exception) {
-                    log.warn(e) { "RateLimiter 清理异常" }
+    private val cleanupJob: Job = scope.launch {
+        while (isActive) {
+            try {
+                delay(CLEANUP_INTERVAL_MS)
+                val before = userSemaphores.size
+                // 仅移除所有 permit 都可用的条目（用户完全无请求时安全移除）
+                userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
+                val after = userSemaphores.size
+                if (before != after) {
+                    log.debug { "RateLimiter 清理完成: $before → $after 个信号量" }
                 }
+            } catch (_: CancellationException) {
+                break
+            } catch (e: Exception) {
+                log.warn(e) { "RateLimiter 清理异常" }
             }
-        }.apply {
-            isDaemon = true
-            name = "rate-limit-cleanup"
-            start()
         }
+    }
+
+    /**
+     * 关闭清理协程，释放资源。
+     *
+     * 调用后清理循环停止，[userSemaphores] 不再被扫描。
+     * 适用于测试场景或应用优雅关闭时使用。
+     */
+    fun shutdown() {
+        cleanupJob.cancel()
     }
 
     /** 注册 IP 限流器 — 每小时每 IP 最多 5 次注册（D-02） */

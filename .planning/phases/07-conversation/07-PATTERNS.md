@@ -601,7 +601,7 @@ class XxxHandlerTest {
     }
     
     @Test
-    fun `测试场景描述`() = runTest {
+    fun testScenarioDescription() = runTest {
         // coEvery / every 设置 mock 行为
         // withContext(SessionKey(session)) { handler.handle(req) }
         // assertEquals / assertFailsWith 断言

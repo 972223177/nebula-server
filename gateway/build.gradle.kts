@@ -23,9 +23,9 @@ tasks.test {
     useJUnitPlatform {
         excludeTags("koin-di")
     }
-    maxParallelForks = 2
-    // 每 50 个测试类复用一个 JVM fork，兼顾隔离与性能
-    forkEvery = 50
+    // 使用单 fork 执行，避免并行 fork 进程在全部测试通过后无法正常退出
+    // （与 service/server 模块行为一致，确保 JVM 能干净关闭）
+    maxParallelForks = 1
 }
 
 dependencies {

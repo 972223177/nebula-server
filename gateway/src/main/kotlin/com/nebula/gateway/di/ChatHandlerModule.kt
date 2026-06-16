@@ -7,9 +7,6 @@ import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -19,8 +16,6 @@ import org.koin.dsl.module
  * Handler 依赖 Service 层而非直接依赖 Repository。
  */
 val chatHandlerModule = module {
-    /** SendMessageHandler 使用 IO 调度器的后台协程执行 fire-and-forget 推送 */
-    single(named("sendHandlerScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
     single { UserStreamRegistry() }
     single { PushService(get(), get(), get()) }
 

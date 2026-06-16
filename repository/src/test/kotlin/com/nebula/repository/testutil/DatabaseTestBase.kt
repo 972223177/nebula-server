@@ -3,6 +3,7 @@ package com.nebula.repository.testutil
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.MySQLContainer
@@ -58,6 +59,18 @@ abstract class DatabaseTestBase {
                 .locations(MIGRATION_LOCATION)
                 .load()
                 .migrate()
+        }
+
+        /**
+         * 关闭 HikariCP 连接池，释放 JDBC 连接和后台线程。
+         *
+         * 在测试类所有用例执行完毕后调用，保证 JVM 正常退出，避免因 minimumIdle 连接和非守护线程
+         * 导致测试程序无法关闭。
+         */
+        @JvmStatic
+        @AfterAll
+        fun tearDownDatabase() {
+            (dataSource as HikariDataSource).close()
         }
 
         /**

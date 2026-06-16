@@ -73,7 +73,7 @@ class <SourceClass>Test {
     private val handler = Handler(mockService)
     
     @Test
-    fun `<方法名> — <场景>`() {
+    fun <camelCaseMethodName>() {
         // Given: <前置条件>
         every { mockService.method() } returns expectedValue
         
@@ -89,7 +89,7 @@ class <SourceClass>Test {
 **P1 差距**（生成测试骨架）：
 ```kotlin
 @Test
-fun `<方法名> — <场景>`() {
+fun <camelCaseMethodName>() {
     // TODO: 补充具体测试逻辑
     // Given: <前置条件>
     // When: <执行操作>  

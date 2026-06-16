@@ -17,26 +17,26 @@ class ConversationStatusTest {
     // ─── fromCode() 正向映射 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(0) — 返回 ACTIVE`() {
+    fun fromCode0ReturnsActive() {
         assertEquals(ConversationStatus.ACTIVE, ConversationStatus.fromCode(0))
     }
 
     @Test
-    fun `fromCode(1) — 返回 DISMISSED`() {
+    fun fromCode1ReturnsDismissed() {
         assertEquals(ConversationStatus.DISMISSED, ConversationStatus.fromCode(1))
     }
 
     // ─── fromCode() 异常路径 ──────────────────────────────────────────────────────
 
     @Test
-    fun `fromCode(-1) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCodeNegOneThrowsException() {
         assertThrows<NoSuchElementException> {
             ConversationStatus.fromCode(-1)
         }
     }
 
     @Test
-    fun `fromCode(999) — 无匹配时抛出 NoSuchElementException`() {
+    fun fromCode999ThrowsException() {
         assertThrows<NoSuchElementException> {
             ConversationStatus.fromCode(999)
         }
@@ -45,12 +45,12 @@ class ConversationStatusTest {
     // ─── 枚举完整性 ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `entries 包含两个枚举值`() {
+    fun entriesHasTwoValues() {
         assertEquals(2, ConversationStatus.entries.size)
     }
 
     @Test
-    fun `entries 包含 ACTIVE 和 DISMISSED`() {
+    fun entriesContainsActiveAndDismissed() {
         val all = ConversationStatus.entries
         assertEquals(setOf(ConversationStatus.ACTIVE, ConversationStatus.DISMISSED), all.toSet())
     }

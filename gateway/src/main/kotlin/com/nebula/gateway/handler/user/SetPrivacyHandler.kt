@@ -14,7 +14,6 @@ import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.service.user.UserPrivacyService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,16 +29,15 @@ import kotlinx.coroutines.withContext
  * @param pushService 推送服务
  * @param friendshipRepository 好友关系仓库
  * @param privacyRepository 隐私设置缓存
+ * @param pushScope 协程作用域（fire-and-forget 推送，由 Koin 管理的 sendHandlerScope 注入）
  */
 class SetPrivacyHandler(
     private val userPrivacyService: UserPrivacyService,
     private val onlineStatusRepository: OnlineStatusRepository,
     private val pushService: PushService,
-    private val friendshipRepository: FriendshipRepository
+    private val friendshipRepository: FriendshipRepository,
+    private val pushScope: CoroutineScope
 ) : Handler<SetPrivacyReq, Response> {
-
-    /** 推送专用协程作用域（IO 调度器 + SupervisorJob），fire-and-forget 模式 */
-    private val pushScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override val method: String = "user/setPrivacy"
 

@@ -13,6 +13,10 @@ import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
 import com.nebula.gateway.session.SessionRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -23,6 +27,8 @@ import org.koin.dsl.module
  * - D-07: 拦截器顺序 Auth → Log → RateLimit → Exception
  */
 val frameworkModule = module {
+    /** 用于 fire-and-forget 后台任务的共享协程作用域（IO 调度器 + SupervisorJob） */
+    single(named("sendHandlerScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
     single { HandlerRegistry() }
     single { ProtoCodec }
     single { SessionRegistry(get()) } // SessionRepository 从 Koin 注入

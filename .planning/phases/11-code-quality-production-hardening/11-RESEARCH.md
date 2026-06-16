@@ -682,7 +682,7 @@ suspend fun inviteMember(req: InviteMemberReq, operatorUid: Long): List<Long> {
 1. **单元测试**：修复前后相同输入的输出一致性
    ```kotlin
    @Test
-   fun `inviteMember 批量查询结果与逐个查询一致`() = runTest {
+   fun inviteMemberBatchQueryMatchesIndividual() = runTest {
        val batchResult = service.inviteMember(req, userId)  // 修复后
        val singleResult = legacyInviteMember(req, userId)   // 修复前（方法保留引用）
        assertEquals(singleResult, batchResult)

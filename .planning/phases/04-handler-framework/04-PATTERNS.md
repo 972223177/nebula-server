@@ -710,7 +710,7 @@ class HandlerRegistryTest : KoinTest {
     }
 
     @Test
-    fun `register and lookup handler`() = runTest {
+    fun registerAndLookupHandler() = runTest {
         val handler = PingHandler()
         val entry = HandlerEntry(
             handler = handler,
@@ -750,7 +750,7 @@ import kotlin.test.assertEquals
 class AuthInterceptorTest {
 
     @Test
-    fun `skip auth for system-ping`() = runTest {
+    fun skipAuthForSystemPing() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
         val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping"))
 
@@ -766,7 +766,7 @@ class AuthInterceptorTest {
     }
 
     @Test
-    fun `reject when token invalid`() = runTest {
+    fun rejectWhenTokenInvalid() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
         coEvery { sessionRegistry.validate(any()) } returns null
 
