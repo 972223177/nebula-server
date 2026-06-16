@@ -9,9 +9,8 @@ import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.sessionContext
 import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.redis.MessageQueueRepository
-import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.service.chat.MessageService
+import com.nebula.service.conversation.ConversationService
 import com.nebula.service.chat.SendMessageResult
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
@@ -34,7 +33,7 @@ import kotlin.test.assertTrue
 /**
  * SendMessageHandler 单元测试（D-04, D-13, D-72）。
  *
- * D-72：Redis SETNX 去重逻辑已下沉到 MessageQueueRepository.checkAndSetDedup() 中，
+ * D-72：Redis SETNX 去重逻辑已下沉到 MessageService.checkAndSetDedup() 中，
  * handler 层不再处理去重。
  *
  * 覆盖场景：
@@ -47,7 +46,7 @@ class SendMessageHandlerTest {
 
     private lateinit var messageService: MessageService
     private lateinit var pushService: PushService
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
+    private lateinit var conversationService: ConversationService
     private lateinit var connection: StatefulRedisConnection<String, String>
     private lateinit var scope: CoroutineScope
     private lateinit var handler: SendMessageHandler
@@ -58,14 +57,13 @@ class SendMessageHandlerTest {
     fun setUp() {
         messageService = mockk()
         pushService = mockk<PushService>(relaxed = true)
-        conversationMemberRepository = mockk<ConversationMemberRepository>(relaxed = true)
+        conversationService = mockk<ConversationService>(relaxed = true)
         connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
-        val messageQueueRepository = mockk<MessageQueueRepository>(relaxed = true)
-        coEvery { messageQueueRepository.checkAndSetDedup(any(), any()) } returns true
+        coEvery { messageService.checkAndSetDedup(any(), any()) } returns true
 
-        handler = SendMessageHandler(messageService, pushService, conversationMemberRepository, messageQueueRepository, connection, scope)
+        handler = SendMessageHandler(messageService, pushService, conversationService, connection, scope)
     }
 
     /**
