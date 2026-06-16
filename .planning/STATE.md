@@ -108,6 +108,7 @@ v1.1 已发布。后续可考虑：
 
 | Date | Task | Summary |
 |------|------|---------|
+| 2026-06-16 | [fix-redis-testcontainers-build](quick/20260616-fix-redis-testcontainers-build/) | 修复 service 模块 Testcontainers Docker 连接失败（添加 api.version=1.44）+ SeqService.tryRestoreSeq INCR 语义不匹配 Bug（RedisTestBaseTest 同步验证通过） |
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
