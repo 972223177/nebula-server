@@ -578,4 +578,77 @@ class MessageServiceTest {
             conversationMemberRepository.updateReadReceipt(conversationId, userId, lastReadMsgId)
         }
     }
+
+    // ================ checkAndSetDedup（P1-10）================
+
+    @Test
+    fun checkAndSetDedupShouldReturnBool() = runTest {
+        coEvery { messageQueueRepository.checkAndSetDedup("cmid-001", senderUid) } returns true
+        val result1 = messageService.checkAndSetDedup("cmid-001", senderUid)
+        assertTrue(result1, "唯一消息应返回 true")
+
+        coEvery { messageQueueRepository.checkAndSetDedup("cmid-001", senderUid) } returns false
+        val result2 = messageService.checkAndSetDedup("cmid-001", senderUid)
+        assertFalse(result2, "重复消息应返回 false")
+    }
+
+    // ================ incrementUnreadCount（P1-10）================
+
+    @Test
+    fun incrementUnreadCountShouldCallRepo() = runTest {
+        coEvery { conversationMemberRepository.incrementUnreadCount(conversationId, senderUid) } just Runs
+
+        messageService.incrementUnreadCount(conversationId, senderUid)
+
+        coVerify(exactly = 1) {
+            conversationMemberRepository.incrementUnreadCount(conversationId, senderUid)
+        }
+    }
+
+    // ================ countByConversationId（P1-10）================
+
+    @Test
+    fun countByConversationIdShouldReturnCount() = runTest {
+        coEvery { messageRepository.countByConversationId(conversationId) } returns 5L
+
+        val count = messageService.countByConversationId(conversationId)
+
+        assertEquals(5L, count)
+    }
+
+    // ================ pullMessages coerceIn（P1-13）================
+
+    @Test
+    fun pullMessagesShouldCoerceLimit() = runTest {
+        // 传入 limit=0，应被 coerceIn(1,100) 修剪为 1
+        val req0 = PullMessagesReq.newBuilder()
+            .setConversationId(conversationId)
+            .setCursor(0L)
+            .setLimit(0)
+            .build()
+        coEvery { conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId) } returns activeMember(uid = userId)
+        coEvery { messageRepository.findMessagesBackward(conversationId, Long.MAX_VALUE, Pageable.ofSize(2)) } returns emptyList()
+        messageService.pullMessages(req0, userId)
+        coVerify { messageRepository.findMessagesBackward(conversationId, Long.MAX_VALUE, Pageable.ofSize(2)) }
+
+        // 传入 limit=200，应被 coerceIn(1,100) 修剪为 100
+        val req200 = PullMessagesReq.newBuilder()
+            .setConversationId(conversationId)
+            .setCursor(0L)
+            .setLimit(200)
+            .build()
+        coEvery { messageRepository.findMessagesBackward(conversationId, Long.MAX_VALUE, Pageable.ofSize(101)) } returns emptyList()
+        messageService.pullMessages(req200, userId)
+        coVerify { messageRepository.findMessagesBackward(conversationId, Long.MAX_VALUE, Pageable.ofSize(101)) }
+
+        // 传入 limit=50，保持不变
+        val req50 = PullMessagesReq.newBuilder()
+            .setConversationId(conversationId)
+            .setCursor(0L)
+            .setLimit(50)
+            .build()
+        coEvery { messageRepository.findMessagesBackward(conversationId, Long.MAX_VALUE, Pageable.ofSize(51)) } returns emptyList()
+        messageService.pullMessages(req50, userId)
+        coVerify { messageRepository.findMessagesBackward(conversationId, Long.MAX_VALUE, Pageable.ofSize(51)) }
+    }
 }

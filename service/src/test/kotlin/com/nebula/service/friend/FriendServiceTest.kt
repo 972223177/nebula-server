@@ -30,7 +30,6 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -44,7 +43,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.Assertions.assertThrows
+import kotlin.test.assertFailsWith
 
 /**
  * FriendService 单元测试。
@@ -158,7 +157,7 @@ class FriendServiceTest {
     fun shouldThrowSelfFriendWhenFromUidEqualsToUid() = runTest {
         val req = FriendAddReq.newBuilder().setToUid(fromUid).build()
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.addFriend(req, fromUid) } }
+        val ex = assertFailsWith<FriendException> { service.addFriend(req, fromUid) }
 
         assertEquals(BizCode.SELF_FRIEND, ex.bizCode)
     }
@@ -172,7 +171,7 @@ class FriendServiceTest {
         val existingFriendship = testFriendship(smaller, larger, deleted = 0)
         every { friendshipRepository.findByUserIdAndFriendId(smaller, larger) } returns existingFriendship
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.addFriend(req, fromUid) } }
+        val ex = assertFailsWith<FriendException> { service.addFriend(req, fromUid) }
 
         assertEquals(BizCode.ALREADY_FRIEND, ex.bizCode)
     }
@@ -276,7 +275,7 @@ class FriendServiceTest {
         every { friendRequestRepository.findByFromUidAndToUidAndStatus(toUid, fromUid, 0) } returns null
         every { friendRequestRepository.findByFromUidAndToUidAndStatus(fromUid, toUid, 0) } returns existingRequest
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.addFriend(req, fromUid) } }
+        val ex = assertFailsWith<FriendException> { service.addFriend(req, fromUid) }
 
         assertEquals(BizCode.REQUEST_HANDLED, ex.bizCode)
     }
@@ -340,8 +339,8 @@ class FriendServiceTest {
         assertEquals(expectedConvId, resultA.convId)
 
         // 再执行 B → 已是好友，抛出 ALREADY_FRIEND
-        val ex = assertThrows(FriendException::class.java) {
-            runBlocking { service.addFriend(reqB, toUid) }
+        val ex = assertFailsWith<FriendException> {
+            service.addFriend(reqB, toUid)
         }
         assertEquals(BizCode.ALREADY_FRIEND, ex.bizCode)
 
@@ -360,8 +359,7 @@ class FriendServiceTest {
         val req = FriendAcceptReq.newBuilder().setRequestId(999L).build()
         every { friendRequestRepository.findById(999L) } returns Optional.empty()
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.acceptFriendRequest(req, toUid) } }
-
+        val ex = assertFailsWith<FriendException> { service.acceptFriendRequest(req, toUid) }
         assertEquals(BizCode.REQUEST_NOT_FOUND, ex.bizCode)
     }
 
@@ -374,8 +372,7 @@ class FriendServiceTest {
         val req = FriendAcceptReq.newBuilder().setRequestId(1L).build()
         every { friendRequestRepository.findById(1L) } returns Optional.of(request)
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.acceptFriendRequest(req, toUid) } }
-
+        val ex = assertFailsWith<FriendException> { service.acceptFriendRequest(req, toUid) }
         assertEquals(BizCode.REQUEST_HANDLED, ex.bizCode)
     }
 
@@ -389,7 +386,7 @@ class FriendServiceTest {
         val wrongUserId = 3003L
         every { friendRequestRepository.findById(1L) } returns Optional.of(request)
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.acceptFriendRequest(req, wrongUserId) } }
+        val ex = assertFailsWith<FriendException> { service.acceptFriendRequest(req, wrongUserId) }
 
         assertEquals(BizCode.FORBIDDEN, ex.bizCode)
     }
@@ -481,8 +478,7 @@ class FriendServiceTest {
         val req = FriendRejectReq.newBuilder().setRequestId(999L).build()
         every { friendRequestRepository.findById(999L) } returns Optional.empty()
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.rejectFriendRequest(req, toUid) } }
-
+        val ex = assertFailsWith<FriendException> { service.rejectFriendRequest(req, toUid) }
         assertEquals(BizCode.REQUEST_NOT_FOUND, ex.bizCode)
     }
 
@@ -495,8 +491,7 @@ class FriendServiceTest {
         val req = FriendRejectReq.newBuilder().setRequestId(1L).build()
         every { friendRequestRepository.findById(1L) } returns Optional.of(request)
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.rejectFriendRequest(req, toUid) } }
-
+        val ex = assertFailsWith<FriendException> { service.rejectFriendRequest(req, toUid) }
         assertEquals(BizCode.REQUEST_HANDLED, ex.bizCode)
     }
 
@@ -510,7 +505,7 @@ class FriendServiceTest {
         val wrongUserId = 3003L
         every { friendRequestRepository.findById(1L) } returns Optional.of(request)
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.rejectFriendRequest(req, wrongUserId) } }
+        val ex = assertFailsWith<FriendException> { service.rejectFriendRequest(req, wrongUserId) }
 
         assertEquals(BizCode.FORBIDDEN, ex.bizCode)
     }
@@ -545,8 +540,7 @@ class FriendServiceTest {
         val req = FriendDeleteReq.newBuilder().setUid(toUid).build()
         every { friendshipRepository.findByUserIdAndFriendId(smaller, larger) } returns null
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.deleteFriend(req, fromUid) } }
-
+        val ex = assertFailsWith<FriendException> { service.deleteFriend(req, fromUid) }
         assertEquals(BizCode.FRIEND_NOT_FOUND, ex.bizCode)
     }
 
@@ -560,8 +554,7 @@ class FriendServiceTest {
 
         every { friendshipRepository.findByUserIdAndFriendId(smaller, larger) } returns friendship
 
-        val ex = assertThrows(FriendException::class.java) { runBlocking { service.deleteFriend(req, fromUid) } }
-
+        val ex = assertFailsWith<FriendException> { service.deleteFriend(req, fromUid) }
         assertEquals(BizCode.FRIEND_NOT_FOUND, ex.bizCode)
     }
 
@@ -659,6 +652,9 @@ class FriendServiceTest {
         assertEquals(2, result.friendsCount)
         assertEquals(friendUid1, result.getFriends(0).uid)
         assertEquals(friendUid2, result.getFriends(1).uid)
+
+        // 验证 nextCursor（P1-14）：应为最后一项的 ID（分页游标）
+        assertEquals(2L, result.nextCursor, "nextCursor 应为最后一项的 friendship.id")
     }
 
     /**
