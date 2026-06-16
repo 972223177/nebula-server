@@ -146,4 +146,14 @@ class FriendListHandlerTest {
         // 隐藏用户在线状态始终为 0
         assertEquals(0, friend.status)
     }
+
+    @Test
+    fun handleShouldRequireSession() = runTest {
+        val exception = kotlin.test.assertFailsWith<com.nebula.common.exception.BizException> {
+            val req = com.nebula.chat.friend.FriendListReq.getDefaultInstance()
+            handler.handle(req)
+        }
+        kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
+    }
+
 }
