@@ -1,8 +1,10 @@
 package com.nebula.gateway.codec
 
 import com.nebula.chat.Request
+import com.google.protobuf.ByteString
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 /**
@@ -37,11 +39,17 @@ class ProtoCodecTest {
 
         val original = Request.newBuilder()
             .setMethod("test.method")
+            .setParams(ByteString.copyFromUtf8("{\"key\":\"value\"}"))
+            .putMetadata("traceId", "abc-123")
             .build()
 
         val bytes = codec.toByteArray(original)
         val restored = codec.parseFrom(bytes) as Request
 
         assertNotNull(restored)
+        // 字段级反序列化断言（P2-06）：验证 3 个核心字段一致性
+        assertEquals("test.method", restored.method, "method 字段应一致")
+        assertEquals(ByteString.copyFromUtf8("{\"key\":\"value\"}"), restored.params, "params 字段应一致")
+        assertEquals("abc-123", restored.getMetadataOrThrow("traceId"), "metadata 字段应一致")
     }
 }

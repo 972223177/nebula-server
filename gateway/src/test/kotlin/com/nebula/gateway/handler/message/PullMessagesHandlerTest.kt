@@ -10,6 +10,7 @@ import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
 import com.nebula.service.chat.MessageService
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -59,6 +60,11 @@ class PullMessagesHandlerTest {
 
         assertEquals(1, resp.messagesCount)
         assertEquals(50001L, resp.messagesList[0].msgId)
+
+        // P2-07: 验证 cursor=0 传递到 MessageService（服务层转换为 Long.MAX_VALUE）
+        coVerify {
+            messageService.pullMessages(any(), any())
+        }
     }
 
     @Test
