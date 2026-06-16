@@ -65,6 +65,7 @@ v1.1 已发布。后续可考虑：
 |------|------|--------|
 | 2026-06-16 | fix-gateway-server-tests | 修复 server,gateway 模块 16 个测试文件编译（--team 多专家），适配 Phase 12 api→implementation 依赖隔离 |
 | 2026-06-16 | fix-code-review-issues | 修复 8 个代码问题（P1/P2/P3/P7/C1/C4/GI1/GI8/S7/R11），code-review-2026-06-16.md 新增解决方案和涉及文件列，--team 多专家并行修复 |
+| 2026-06-16 | review-test-service-gateway-repository | 审查 service/gateway/repository 三模块共 74 个测试文件，含--team 并行审查。综合评分：Service 优、Gateway 良、Repository 中。发现 P0 级问题 3 项（SessionRepository 核心方法无覆盖、MessageRepository 完全无测试、ConversationService.dissolveGroup 未测试），共整理 Top 10 关键发现 |
 | 2026-06-16 | fix-repo-gateway-test-imports | 修复 gateway 测试编译错误：11 个测试文件同步重构后的 API 变更（Handler 构造参数、Repository→Service 迁移、DI 注册） |
 | 2026-06-13 | Phase 8 安全审计 | 完成 08-SECURITY.md：识别 25 个威胁（STRIDE 六类全覆盖），mitigate 12 个，accept 9 个，threats_open=0 |
 | 2026-06-14 | Phase 10 Message Reliability 执行 | 4 Plan 全部完成：10-01 Proto扩展（SendMessageResp.seq、DeliveryAckPayload、MessageSeqReq/Resp、admin.proto）+ V4死信表DDL；10-02 Redis三态跟踪（sent/delivered/read）+ DeliveryAck推送 + SETNX去重下沉 + flushBatch异常处理；10-03 SeqService + MessageSeqHandler间隙检测；10-04 DeadLetterEntity/Repository/Service/Compensator + Admin API（查询/重试）+ D-75 pendingBuffer 10次失败→死信 + W2 seq统一到SeqService + W1 DI迁移 + AuthInterceptor admin/放行 |
