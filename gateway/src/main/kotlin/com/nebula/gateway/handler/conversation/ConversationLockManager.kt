@@ -35,6 +35,11 @@ class ConversationLockManager {
      */
     suspend fun <T> withLock(conversationId: String, block: suspend () -> T): T {
         val mutex = locks.computeIfAbsent(conversationId) { Mutex() }
-        return mutex.withLock { block() }
+        try {
+            return mutex.withLock { block() }
+        } finally {
+            // 使用完毕后移除锁，防止 locks Map 无限增长导致内存泄漏
+            locks.remove(conversationId)
+        }
     }
 }

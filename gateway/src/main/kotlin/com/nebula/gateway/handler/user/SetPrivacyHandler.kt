@@ -11,6 +11,7 @@ import com.nebula.gateway.push.PushService
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.friend.FriendService
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
@@ -72,9 +73,13 @@ class SetPrivacyHandler(
                         pushService.pushEventToUser(
                             friendUid, PushEventType.STATUS_CHANGED, payload.toByteString()
                         )
-                    } catch (e: Exception) { }
+                    } catch (e: Exception) {
+                        logger.error(e) { "推送状态变更给好友失败: userId=$userId, friendUid=$friendUid" }
+                    }
                 }
-            } catch (e: Exception) { }
+            } catch (e: Exception) {
+                logger.error(e) { "查询好友列表或构建推送载荷失败: userId=$userId" }
+            }
         }
 
         return Response.newBuilder()
@@ -82,5 +87,10 @@ class SetPrivacyHandler(
             .setMsg("ok")
             .setMethod(method)
             .build()
+    }
+
+    companion object {
+        /** 日志记录器 */
+        private val logger = KotlinLogging.logger {}
     }
 }

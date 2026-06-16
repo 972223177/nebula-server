@@ -185,6 +185,25 @@ class SessionRegistry(
     }
 
     /**
+     * 刷新 Session TTL — 每次请求认证通过后调用，防止活跃用户被强制下线。
+     *
+     * 委托给 L2 Redis 的 [sessionStore.refreshTtl]，失败时仅日志记录不阻塞主流程。
+     *
+     * @param token Session Token
+     */
+    suspend fun refreshTtl(token: String) {
+        try {
+            withTimeout(redisTimeoutMs) {
+                sessionStore.refreshTtl(token)
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Redis refreshTtl timeout for token=$token" }
+        } catch (e: Exception) {
+            logger.error(e) { "Redis refreshTtl failed for token=$token" }
+        }
+    }
+
+    /**
      * 注册新 Session — 写入 L1 本地缓存 + L2 Redis。
      *
      * @param session 待注册的 Session

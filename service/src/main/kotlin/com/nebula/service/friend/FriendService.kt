@@ -358,6 +358,13 @@ class FriendService(
                 .setStatus(if (isOnline && !isHidden) 1 else 0)
                 .build())
         }
+
+        // D-46: 设置游标分页字段
+        if (hasMore) {
+            builder.setNextCursor(result.last().id ?: 0)
+            builder.setHasMore(true)
+        }
+
         return builder.build()
     }
 

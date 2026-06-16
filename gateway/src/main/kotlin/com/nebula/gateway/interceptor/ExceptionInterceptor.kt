@@ -5,6 +5,7 @@ import com.nebula.chat.Response
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CancellationException
 
 /**
  * 异常拦截器 — 三态异常映射（D-08, D-10）。
@@ -37,6 +38,9 @@ class ExceptionInterceptor : Interceptor {
                 .setMsg(e.message ?: BizCode.INVALID_PARAM.msg)
                 .setMethod(request.method)
                 .build()
+        } catch (e: CancellationException) {
+            // 重新抛出以传播协程取消信号，避免协程被异常捕获阻断
+            throw e
         } catch (e: Exception) {
             // D-10: 未预期异常 → INTERNAL_ERROR(9000)，不暴露堆栈
             logger.error(e) { "Unhandled exception for method ${request.method}" }

@@ -131,7 +131,14 @@ class SendMessageHandler(
             // M29: 使用预查询的 userId 列表推送，避免 pushMessage 二次查询 DB
             pushService.pushMessageToMembers(targetUids, result.chatMessage)
         } catch (e: Exception) {
-            logger.error(e) { "Unread count batch increment failed for conv=${result.conversationId}" }
+            logger.error(e) {
+                "未读计数或推送异步操作失败: msgId=${result.msgId}, convId=${result.conversationId}, " +
+                    "senderUid=${result.senderUid}"
+            }
+            // REVIEW: 消息已写入 Stream 但推送/未读可能未完成。
+            // DeadLetterCallback 当前仅处理消息持久化失败，不处理推送异常。
+            // TODO: 扩展死信接口支持 fire-and-forget 异步操作补偿（如 onPushFailed），
+            //       或在此处写入 Redis 补偿标记键供后台 Job 扫描。
         }
     }
 }

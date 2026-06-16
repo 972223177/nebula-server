@@ -54,6 +54,8 @@ class ConversationService(
         private const val ROLE_MEMBER = "member"
         /** 会话列表单页最大条数 */
         private const val MAX_LIST_LIMIT = 50
+        /** 群组已解散状态值（D-17: status=1） */
+        private const val STATUS_DISSOLVED = 1
     }
 
     /**
@@ -212,11 +214,13 @@ class ConversationService(
             if (existing != null && existing.isActive) continue // 已在群中
 
             if (existing != null && !existing.isActive) {
-                // 恢复已退出的成员
+                // 恢复已退出成员，不增加成员计数（原本已计入）
                 existing.deleted = 0
                 existing.joinedAt = now
                 withContext(Dispatchers.IO) { conversationMemberRepository.save(existing) }
+                // 注意：不添加到 newMemberUids，避免重复计数
             } else {
+                // 创建新成员记录
                 val member = ConversationMemberEntity(
                     conversationId = convId,
                     userId = uid,
@@ -224,8 +228,8 @@ class ConversationService(
                 )
                 member.joinedAt = now
                 withContext(Dispatchers.IO) { conversationMemberRepository.save(member) }
+                newMemberUids.add(uid)
             }
-            newMemberUids.add(uid)
         }
 
         // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
@@ -254,9 +258,23 @@ class ConversationService(
             throw ConversationException(BizCode.NOT_MEMBER)
         }
 
-        // 群主不能退群（需要先转让群主）
+        // 查询当前活跃成员数
+        val memberCount = withContext(Dispatchers.IO) {
+            conversationMemberRepository.countActiveByConversationId(convId)
+        }
+
+        // 最后一个成员退群时，直接解散群组
+        if (memberCount == 1L) {
+            withContext(Dispatchers.IO) {
+                conversationRepository.delete(conv)
+                conversationMemberRepository.delete(member)
+            }
+            return
+        }
+
+        // 多成员场景，群主退群逻辑
         if (member.role == ROLE_OWNER) {
-            throw ConversationException(BizCode.GROUP_PERM_DENIED, "群主不能退群，请先转让群主")
+            throw ConversationException(BizCode.GROUP_PERM_DENIED, "群主不能直接离开，请先转让群主或解散群组")
         }
 
         // 软删除成员记录
@@ -267,6 +285,35 @@ class ConversationService(
         // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
         withContext(Dispatchers.IO) {
             conversationRepository.incrementMemberCount(convId, -1)
+        }
+    }
+
+    /**
+     * 解散群组 — 群主操作，标记会话为已解散并软删除所有成员。
+     *
+     * 调用方（Handler）应在事务和锁保护下调用此方法，
+     * 确保 status 更新与成员删除的原子性。
+     *
+     * @param convId 群组会话 ID
+     */
+    suspend fun dissolveGroup(convId: String) {
+        val conv = conversationRepository.findByIdOrNull(convId)
+            ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
+
+        // 检查群组是否已解散
+        if (conv.status == STATUS_DISSOLVED) {
+            throw ConversationException(BizCode.GROUP_DISSOLVED)
+        }
+
+        // 标记群组为已解散
+        conv.status = STATUS_DISSOLVED
+        withContext(Dispatchers.IO) {
+            conversationRepository.save(conv)
+        }
+
+        // 软删除所有群成员
+        withContext(Dispatchers.IO) {
+            conversationMemberRepository.softDeleteAllByConversationId(convId)
         }
     }
 

@@ -53,7 +53,7 @@ class SessionRepository(
      * @param token Session 令牌
      * @param ttlSeconds 续期 TTL 秒数，默认 7 天
      */
-    suspend fun refreshTtl(token: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
+    override suspend fun refreshTtl(token: String, ttlSeconds: Long) {
         redis.expire("$KEY_PREFIX$token", ttlSeconds)
     }
 
