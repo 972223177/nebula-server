@@ -1,5 +1,6 @@
 package com.nebula.repository.repository.impl
 
+import com.nebula.common.init.DeadLetterCallback
 import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.MessageRepository
@@ -41,7 +42,7 @@ class MessageRepositoryImpl(
      * 签名：(conversationId, senderUid, messageType, content, payload, clientMsgId, clientTs, failReason) → Unit
      * 使用基本类型避免跨模块依赖。
      */
-    var onDeadLetter: (suspend (String, Long, Int, String, ByteArray?, String?, Long, String) -> Unit)? = null
+    var onDeadLetter: DeadLetterCallback? = null
     @Volatile
     private var stopped = false
 
@@ -109,7 +110,7 @@ class MessageRepositoryImpl(
                     if (parsed != null) {
                         try {
                             runBlocking {
-                                handler(
+                                handler.onMessageFailed(
                                     parsed.conversationId,
                                     parsed.senderUid,
                                     parsed.messageType,

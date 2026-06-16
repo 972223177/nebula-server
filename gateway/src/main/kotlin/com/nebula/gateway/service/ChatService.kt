@@ -15,9 +15,9 @@ import com.nebula.service.admin.DeadLetterService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.user.OnlineStatusService
+import com.nebula.service.user.UserPrivacyService
+import com.nebula.service.friend.FriendService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.BindableService
 import io.grpc.MethodDescriptor
@@ -63,10 +63,10 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
  * @param sessionRegistry Session 注册中心（含设备类型互踢逻辑）
  * @param registry Handler 注册中心
  * @param userStreamRegistry 用户 StreamObserver 注册中心（D-01）
- * @param onlineStatusRepository 在线状态 Redis 操作（D-57）
- * @param friendshipRepository 好友关系仓库（查询好友列表用于推送）
+ * @param onlineStatusService 在线状态服务（D-57）
+ * @param friendService 好友服务（查询好友列表用于推送）
  * @param pushService 推送服务
- * @param privacyRepository 隐私设置仓库（过滤隐藏用户）
+ * @param privacyService 隐私设置服务（过滤隐藏用户）
  * @param deadLetterService 死信服务（D-75：缓存投递失败 10 次后写入死信表）
  */
 class ChatService(
@@ -74,10 +74,10 @@ class ChatService(
     private val sessionRegistry: SessionRegistry,
     private val registry: HandlerRegistry,
     private val userStreamRegistry: UserStreamRegistry,
-    private val onlineStatusRepository: OnlineStatusRepository,
-    private val friendshipRepository: FriendshipRepository,
+    private val onlineStatusService: OnlineStatusService,
+    private val friendService: FriendService,
     private val pushService: PushService,
-    private val privacyRepository: PrivacyRepository,
+    private val privacyService: UserPrivacyService,
     private val deadLetterService: DeadLetterService,
     /**
      * 协程作用域 — 用于桥接 gRPC 回调线程与协程。
@@ -407,7 +407,7 @@ class ChatService(
                     if (userStreamRegistry.getStreams(uid).isEmpty()) {
                         // 无剩余设备，标记离线
                         withContext(Dispatchers.IO) {
-                            onlineStatusRepository.setOffline(uid)
+                            onlineStatusService.setOffline(uid)
                         }
                         // 推送状态变更给所有好友
                         pushStatusChangeToFriends(uid, 0)
@@ -500,7 +500,7 @@ class ChatService(
         // D-57: 标记在线 + 推送状态变更给所有好友
         scope.launch {
             withContext(Dispatchers.IO) {
-                onlineStatusRepository.setOnline(loginResp.userId)
+                onlineStatusService.setOnline(loginResp.userId)
             }
             pushStatusChangeToFriends(loginResp.userId, 1)
         }
@@ -543,7 +543,7 @@ class ChatService(
         (responseObserver as? ChatStreamObserver)?.userId?.let { uid ->
             scope.launch {
                 withContext(Dispatchers.IO) {
-                    onlineStatusRepository.refreshTtl(uid)
+                    onlineStatusService.refreshTtl(uid)
                 }
             }
         }
@@ -617,16 +617,14 @@ class ChatService(
         scope.launch {
             try {
                 val friendships = withContext(Dispatchers.IO) {
-                    friendshipRepository.findFriendsByUserId(
-                        userId, 0, org.springframework.data.domain.PageRequest.of(0, Int.MAX_VALUE)
-                    )
+                    friendService.findFriendsByUserId(userId)
                 }
                 val friendUids = friendships.map { f ->
                     if (f.userId == userId) f.friendId else f.userId
                 }.distinct()
 
                 // 过滤隐藏用户
-                val hiddenUids = privacyRepository.batchGetHideOnlineStatus(friendUids)
+                val hiddenUids = privacyService.batchGetHideOnlineStatus(friendUids)
                 val visibleFriends = friendUids.filter { it !in hiddenUids }
 
                 val payload = StatusChangedPayload.newBuilder()

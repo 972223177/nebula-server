@@ -9,13 +9,9 @@ import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 
 /**
  * 退群/解散群 Handler — method = "conversation/leave_group"（D-04, D-09, D-19）。
@@ -34,8 +30,7 @@ class LeaveGroupHandler(
     private val conversationService: ConversationService,
     private val lockManager: ConversationLockManager,
     private val transactionTemplate: org.springframework.transaction.support.TransactionTemplate,
-    private val pushService: PushService,
-    private val conversationMemberRepository: ConversationMemberRepository
+    private val pushService: PushService
 ) : Handler<LeaveGroupReq, Response> {
 
     override val method: String = "conversation/leave_group"
@@ -53,9 +48,7 @@ class LeaveGroupHandler(
         val convId = req.conversationId
 
         // 判断是否是群主退群
-        val selfMember = withContext(kotlinx.coroutines.Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, session.userId)
-        }
+        val selfMember = conversationService.getMemberRole(convId, session.userId)
 
         if (selfMember != null && selfMember.role == ROLE_OWNER) {
             // 群主退群 → 解散群（D-09）

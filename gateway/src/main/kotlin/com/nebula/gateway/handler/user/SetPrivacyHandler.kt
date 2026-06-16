@@ -8,15 +8,12 @@ import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
+import com.nebula.service.friend.FriendService
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * 在线状态可见性设置 Handler — method = "user/setPrivacy"（BIZ-USER-05, D-09, D-11, D-57）。
@@ -26,16 +23,16 @@ import kotlinx.coroutines.withContext
  * - 推送状态变更给所有在线好友（gateway 层职责）
  *
  * @param userPrivacyService 用户隐私设置业务服务
+ * @param onlineStatusService 用户在线状态服务
  * @param pushService 推送服务
- * @param friendshipRepository 好友关系仓库
- * @param privacyRepository 隐私设置缓存
+ * @param friendService 好友业务服务
  * @param pushScope 协程作用域（fire-and-forget 推送，由 Koin 管理的 sendHandlerScope 注入）
  */
 class SetPrivacyHandler(
     private val userPrivacyService: UserPrivacyService,
-    private val onlineStatusRepository: OnlineStatusRepository,
+    private val onlineStatusService: OnlineStatusService,
     private val pushService: PushService,
-    private val friendshipRepository: FriendshipRepository,
+    private val friendService: FriendService,
     private val pushScope: CoroutineScope
 ) : Handler<SetPrivacyReq, Response> {
 
@@ -48,23 +45,19 @@ class SetPrivacyHandler(
         // 委托 UserPrivacyService 处理业务逻辑
         userPrivacyService.setHideOnlineStatus(userId, req)
 
-        // D-57: 切换隐藏状态时同步更新 OnlineStatusRepository
+        // D-57: 切换隐藏状态时同步更新在线状态服务
         val newStatus = if (req.hideOnlineStatus) {
-            onlineStatusRepository.setHidden(userId)
+            onlineStatusService.setHidden(userId)
             2
         } else {
-            onlineStatusRepository.setOnline(userId)
+            onlineStatusService.setOnline(userId)
             1
         }
 
         // D-50: 推送状态变更给所有在线好友（fire-and-forget，gateway 层职责）
         pushScope.launch {
             try {
-                val friendships = withContext(Dispatchers.IO) {
-                    friendshipRepository.findFriendsByUserId(
-                        userId, 0, org.springframework.data.domain.PageRequest.of(0, Int.MAX_VALUE)
-                    )
-                }
+                val friendships = friendService.findFriendsByUserId(userId)
                 val friendUids = friendships.map { f ->
                     if (f.userId == userId) f.friendId else f.userId
                 }.distinct()

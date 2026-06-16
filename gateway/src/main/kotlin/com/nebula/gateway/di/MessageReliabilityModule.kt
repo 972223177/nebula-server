@@ -8,8 +8,6 @@ import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.admin.AdminHandlerCollector
 import com.nebula.gateway.handler.admin.DeadLetterQueryHandler
 import com.nebula.gateway.handler.admin.RetryDeadLetterHandler
-import com.nebula.service.admin.DeadLetterService
-import com.nebula.service.sequence.SeqService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,15 +27,11 @@ import org.koin.dsl.module
  * - [DeliveryHandlerCollector]、[AdminHandlerCollector]：Handler 注册收集器
  */
 val messageReliabilityModule = module {
-    // 序列号服务
-    single { SeqService(get()) }
-
     // 投递跟踪
     single { RedisDeliveryTracker(get()) }
     single { DeliveryTrackingService(get()) }
 
-    // 死信服务与补偿
-    single { DeadLetterService(get(), get(), get()) }
+    // 死信补偿
     single { DeadLetterCompensator(get(), get(named("sendHandlerScope"))) }
 
     // Admin 管理 Handler

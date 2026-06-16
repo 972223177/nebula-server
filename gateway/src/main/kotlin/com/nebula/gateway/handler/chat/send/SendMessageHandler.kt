@@ -7,8 +7,7 @@ import com.nebula.common.exception.BizException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
-import com.nebula.repository.redis.MessageQueueRepository
-import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.service.conversation.ConversationService
 import com.nebula.service.chat.MessageService
 import com.nebula.service.chat.SendMessageResult
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -17,25 +16,22 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * chat/send Handler（D-04, D-05, D-06, D-09, D-11, D-13, D-72）。
  *
  * 职责：
- * - 委托 MessageService 处理核心业务逻辑（参数校验、成员验证、好友检查、写入 Redis Stream）
+ * - 委托 MessageService 处理核心业务逻辑（参数校验、成员验证、好友检查、去重、写入 Redis Stream）
  * - 写入后异步 fire-and-forget 执行未读计数递增和推送
  *
- * D-72：Redis SETNX 去重逻辑已下沉到 MessageQueueRepository.checkAndSetDedup() 中，
+ * D-72：Redis SETNX 去重逻辑已下沉到 MessageService.checkAndSetDedup() 中，
  * handler 层不再处理去重。
  *
- * @param messageService 消息业务服务
+ * @param messageService 消息业务服务（去重 + 写入 + 未读计数）
  * @param pushService 推送服务（异步 fire-and-forget）
- * @param conversationMemberRepository 会话成员查询（异步未读计数）
- * @param messageQueueRepository 消息队列仓库（去重 SETNX 操作）
+ * @param conversationService 会话业务服务（成员查询）
  * @param connection Redis 连接（未读计数 INCR 操作）
  * @param scope 协程作用域（Dispatcher.IO + SupervisorJob，D-85）
  */
@@ -43,8 +39,7 @@ import kotlinx.coroutines.currentCoroutineContext
 class SendMessageHandler(
     private val messageService: MessageService,
     private val pushService: PushService,
-    private val conversationMemberRepository: ConversationMemberRepository,
-    private val messageQueueRepository: MessageQueueRepository,
+    private val conversationService: ConversationService,
     private val connection: StatefulRedisConnection<String, String>,
     private val scope: CoroutineScope
 ) : Handler<SendMessageReq, SendMessageResp> {
@@ -65,7 +60,7 @@ class SendMessageHandler(
 
         // M17/M20: 去重检查 — 相同 clientMessageId 重复发送时返回幂等 ACK
         if (req.clientMessageId.isNotEmpty()) {
-            val isNew = messageQueueRepository.checkAndSetDedup(req.clientMessageId, senderUid)
+            val isNew = messageService.checkAndSetDedup(req.clientMessageId, senderUid)
             if (!isNew) {
                 logger.info { "检测到重复消息: clientMessageId=${req.clientMessageId}, senderUid=$senderUid" }
                 return SendMessageResp.newBuilder()
@@ -106,24 +101,20 @@ class SendMessageHandler(
     /**
      * 异步执行未读计数递增和消息推送。
      *
-     * M29: 合并 pushMessage 和 incrementUnreadCount 的两次 findByConversationId 查询为一次。
-     * M24: 同步调用 incrementUnreadCount() 将未读计数持久化到 DB。
+     * M29: 合并 pushMessage 和 incrementUnreadCount 的两次成员查询为一次（通过 conversationService）。
+     * M24: 同步调用 messageService.incrementUnreadCount() 将未读计数持久化到 DB。
      *
      * @param result 消息发送结果，包含 conversationId、chatMessage、senderUid 等信息
      */
     private suspend fun asyncUnreadAndPush(result: SendMessageResult) {
         try {
             // M29: 一次查询获取成员列表，复用给未读计数和推送
-            val members = withContext(Dispatchers.IO) {
-                conversationMemberRepository.findByConversationId(result.conversationId)
-            }
+            val members = conversationService.getConversationMembers(result.conversationId)
             val targetUids = members.filter { it.userId != result.senderUid }.map { it.userId }
 
             // M24: 未读计数持久化到 DB（JPQL 批量 UPDATE）
             try {
-                withContext(Dispatchers.IO) {
-                    conversationMemberRepository.incrementUnreadCount(result.conversationId, result.senderUid)
-                }
+                messageService.incrementUnreadCount(result.conversationId, result.senderUid)
             } catch (e: Exception) {
                 logger.error(e) { "DB unread count increment failed for conv=${result.conversationId}" }
             }

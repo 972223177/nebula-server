@@ -26,8 +26,8 @@ val userHandlerModule = module {
     single { SearchUserHandler(get()) }                       // UserService
     single { GetProfileHandler(get()) }                       // UserService
     single { BatchGetUserHandler(get()) }                     // UserService
-    single { BatchGetStatusHandler(get(), get()) }            // OnlineStatusRepository + PrivacyRepository
-    single { SetPrivacyHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) }   // UserPrivacyService + OnlineStatusRepository + PushService + FriendshipRepository + sendHandlerScope
+    single { BatchGetStatusHandler(get(), get()) }            // OnlineStatusService + UserPrivacyService
+    single { SetPrivacyHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) }   // UserPrivacyService + OnlineStatusService + PushService + FriendService + sendHandlerScope
     single { GetPrivacyHandler(get()) }                       // UserPrivacyService
 
     // HandlerCollector 注册

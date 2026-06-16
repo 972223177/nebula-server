@@ -52,4 +52,14 @@ class UserPrivacyService(
         val hide = privacyRepository.getHideOnlineStatus(userId)
         return GetPrivacyResp.newBuilder().setHideOnlineStatus(hide).build()
     }
+
+    /**
+     * 批量查询在线状态隐藏用户。
+     *
+     * @param uids 待查询的用户 ID 列表
+     * @return 隐藏了在线状态的用户 ID 集合
+     */
+    suspend fun batchGetHideOnlineStatus(uids: List<Long>): Set<Long> {
+        return privacyRepository.batchGetHideOnlineStatus(uids)
+    }
 }

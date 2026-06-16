@@ -1,7 +1,7 @@
 package com.nebula.gateway.session
 
 import kotlinx.serialization.json.Json
-import com.nebula.repository.redis.SessionRepository
+import com.nebula.common.session.SessionStore
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -9,22 +9,22 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Session 注册中心 — L1(ConcurrentHashMap) + L2(Redis SessionRepository) 二级缓存（D-18）。
+ * Session 注册中心 — L1(ConcurrentHashMap) + L2(SessionStore) 二级缓存（D-18）。
  *
  * 职责：
  * - L1 本地缓存（ConcurrentHashMap）提供毫秒级内存读取，用于高频认证场景
- * - L2 Redis 缓存（SessionRepository）提供跨节点持久化存储
+ * - L2 缓存（SessionStore）提供跨节点持久化存储
  * - 提供组合方法（validate/register/unregister）和细粒度方法双入口
  * - 缓存驱逐回调注册点，用于连接清理时关闭 StreamObserver（D-20）
  *
- * L2 Redis 调用使用 500ms 超时保护，Redis 不可用时降级为纯 L1 缓存（Review 反馈#6）。
- * 已登录用户不受影响（Session 在 L1 中），新登录用户在 Redis 恢复前无法完成跨节点认证。
- * TODO: Phase 11 添加熔断器（如 Resilience4j）保护 Redis 调用。
+ * L2 调用使用 500ms 超时保护，后端不可用时降级为纯 L1 缓存（Review 反馈#6）。
+ * 已登录用户不受影响（Session 在 L1 中），新登录用户在后端恢复前无法完成跨节点认证。
+ * TODO: Phase 11 添加熔断器（如 Resilience4j）保护后端调用。
  *
- * @param sessionRepository Redis Session 操作接口
+ * @param sessionStore Session 持久化存储接口
  */
 class SessionRegistry(
-    private val sessionRepository: SessionRepository
+    private val sessionStore: SessionStore
 ) {
     /** L1 本地缓存 — token → Session 映射 */
     private val localCache = ConcurrentHashMap<String, Session>()
@@ -105,7 +105,7 @@ class SessionRegistry(
     /**
      * 保存 Session 到 Redis（L2）。
      *
-     * 将 Session 序列化为 JSON 字符串后，通过 SessionRepository.save() 写入 Redis。
+     * 将 Session 序列化为 JSON 字符串后，通过 SessionStore.save() 写入。
      * 使用 500ms 超时保护，超时仅日志记录不阻塞注册流程。
      *
      * @param session 待保存的 Session
@@ -114,7 +114,7 @@ class SessionRegistry(
         try {
             withTimeout(redisTimeoutMs) {
                 val sessionJson = json.encodeToString(session)
-                sessionRepository.save(session.token, sessionJson)
+                sessionStore.save(session.token, sessionJson)
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Redis save timeout for token=${session.token}, degraded to L1 only" }
@@ -131,7 +131,7 @@ class SessionRegistry(
     suspend fun removeFromRedis(token: String) {
         try {
             withTimeout(redisTimeoutMs) {
-                sessionRepository.delete(token)
+                sessionStore.delete(token)
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Redis remove timeout for token=$token" }
@@ -143,7 +143,7 @@ class SessionRegistry(
     /**
      * 从 Redis（L2）查询 Session。
      *
-     * 通过 SessionRepository.findByToken() 查询，反序列化 JSON 字符串为 Session。
+     * 通过 SessionStore.findByToken() 查询，反序列化 JSON 字符串为 Session。
      * 使用 500ms 超时保护，超时返回 null 不阻塞调用方。
      *
      * @param token Session Token
@@ -152,7 +152,7 @@ class SessionRegistry(
     suspend fun queryFromRedis(token: String): Session? {
         return try {
             withTimeout(redisTimeoutMs) {
-                val sessionJson = sessionRepository.findByToken(token)
+                val sessionJson = sessionStore.findByToken(token)
                 if (sessionJson != null) {
                     json.decodeFromString<Session>(sessionJson)
                 } else null
@@ -264,7 +264,7 @@ class SessionRegistry(
     private suspend fun saveDeviceTypeMapping(session: Session) {
         try {
             withTimeout(redisTimeoutMs) {
-                sessionRepository.saveRaw(
+                sessionStore.saveRaw(
                     "session:${session.userId}:${session.deviceType}",
                     session.token
                 )
@@ -284,7 +284,7 @@ class SessionRegistry(
     private suspend fun deleteDeviceTypeMapping(session: Session) {
         try {
             withTimeout(redisTimeoutMs) {
-                sessionRepository.deleteKey("session:${session.userId}:${session.deviceType}")
+                sessionStore.deleteKey("session:${session.userId}:${session.deviceType}")
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Device type mapping delete timeout for userId=${session.userId}" }
@@ -303,7 +303,7 @@ class SessionRegistry(
     private suspend fun findDeviceTokenFromRedis(userId: Long, deviceType: String): String? {
         return try {
             withTimeout(redisTimeoutMs) {
-                sessionRepository.findRaw("session:$userId:$deviceType")
+                sessionStore.findRaw("session:$userId:$deviceType")
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Device type mapping query timeout for userId=$userId" }

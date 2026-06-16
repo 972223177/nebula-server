@@ -394,6 +394,55 @@ class ConversationService(
         }
         return builder.build()
     }
+
+    /**
+     * 根据会话 ID 查询会话信息，不存在时返回 null。
+     *
+     * 返回 [ConversationInfo] 替代在 gateway 层直接暴露 JPA 实体，
+     * 仅包含 gateway 层需要的 id 和 type 字段。
+     *
+     * @param conversationId 会话 ID
+     * @return 会话信息 DTO，不存在时返回 null
+     */
+    suspend fun getConversation(conversationId: String): ConversationInfo? {
+        val entity = withContext(Dispatchers.IO) {
+            conversationRepository.findByIdOrNull(conversationId)
+        }
+        return entity?.let { ConversationInfo(id = requireNotNull(it.id), type = it.type) }
+    }
+
+    /**
+     * 查询会话的所有成员列表。
+     *
+     * 返回 [ConversationMemberInfo] 替代在 gateway 层直接暴露 JPA 实体，
+     * 仅包含 gateway 层需要的 userId 和 role 字段。
+     *
+     * @param conversationId 会话 ID
+     * @return 会话成员信息 DTO 列表
+     */
+    suspend fun getConversationMembers(conversationId: String): List<ConversationMemberInfo> {
+        val entities = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationId(conversationId)
+        }
+        return entities.map { ConversationMemberInfo(userId = it.userId, role = it.role) }
+    }
+
+    /**
+     * 查询指定用户在指定会话中的成员角色，不存在时返回 null。
+     *
+     * 返回 [ConversationMemberInfo] 替代在 gateway 层直接暴露 JPA 实体，
+     * 仅包含 gateway 层需要的 userId 和 role 字段。
+     *
+     * @param conversationId 会话 ID
+     * @param userId 用户 ID
+     * @return 成员信息 DTO，不存在时返回 null
+     */
+    suspend fun getMemberRole(conversationId: String, userId: Long): ConversationMemberInfo? {
+        val entity = withContext(Dispatchers.IO) {
+            conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
+        }
+        return entity?.let { ConversationMemberInfo(userId = it.userId, role = it.role) }
+    }
 }
 
 /**

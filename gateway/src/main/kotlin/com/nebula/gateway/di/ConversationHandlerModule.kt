@@ -23,9 +23,9 @@ val conversationHandlerModule = module {
     single { GroupMembersHandler(get()) }                             // ConversationService
     single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
     single { CreateGroupHandler(get(), get(), get(), get()) }               // ConversationService + LockManager + TxTemplate + PushService
-    single { InviteMemberHandler(get(), get(), get(), get(), get()) } // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
-    single { LeaveGroupHandler(get(), get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
-    single { KickMemberHandler(get(), get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService + ConvRepo
+    single { InviteMemberHandler(get(), get(), get(), get()) } // ConversationService + LockManager + TxTemplate + PushService
+    single { LeaveGroupHandler(get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService
+    single { KickMemberHandler(get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService
 
     // HandlerCollector 注册
     single<HandlerCollector> { ConversationHandlerCollector(

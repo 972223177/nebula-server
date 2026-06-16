@@ -224,6 +224,41 @@ class MessageService(
     }
 
     /**
+     * 统计指定会话的消息数量（从数据库查询）。
+     *
+     * @param conversationId 会话 ID
+     * @return 消息总数
+     */
+    suspend fun countByConversationId(conversationId: String): Long {
+        return withContext(Dispatchers.IO) {
+            messageRepository.countByConversationId(conversationId)
+        }
+    }
+
+    /**
+     * 消息去重检查 — 使用 Redis SETNX 检测重复消息。
+     *
+     * @param clientMessageId 客户端消息 ID
+     * @param senderUid 发送者用户 ID
+     * @return true 表示新消息，false 表示重复
+     */
+    suspend fun checkAndSetDedup(clientMessageId: String, senderUid: Long): Boolean {
+        return messageQueueRepository.checkAndSetDedup(clientMessageId, senderUid)
+    }
+
+    /**
+     * 递增会话中除发送者外的所有成员的未读计数。
+     *
+     * @param conversationId 会话 ID
+     * @param senderUid 发送者用户 ID（该用户不递增未读）
+     */
+    suspend fun incrementUnreadCount(conversationId: String, senderUid: Long) {
+        withContext(Dispatchers.IO) {
+            conversationMemberRepository.incrementUnreadCount(conversationId, senderUid)
+        }
+    }
+
+    /**
      * 私聊会话的好友关系检查（D-56）。
      *
      * @param conversationId 会话 ID（格式 "private:smaller:larger"）

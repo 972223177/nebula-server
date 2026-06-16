@@ -20,8 +20,8 @@ val friendHandlerModule = module {
     single { FriendRequestsHandler(get()) }                                             // FriendService
     single { FriendListHandler(get()) }                                                 // FriendService
     single { FriendDeleteHandler(get()) }                                               // FriendService
-    single { FriendAddHandler(get(), get(), get(), get(), get()) }                    // FriendService + PushService + LockManager + TxTemplate + FriendshipRepo
-    single { FriendAcceptHandler(get(), get(), get(), get(), get()) }                 // FriendService + PushService + LockManager + TxTemplate + FriendshipRepo
+    single { FriendAddHandler(get(), get(), get(), get()) }                    // FriendService + PushService + LockManager + TxTemplate
+    single { FriendAcceptHandler(get(), get(), get(), get()) }                 // FriendService + PushService + LockManager + TxTemplate
 
     // HandlerCollector 注册
     single<HandlerCollector> { FriendHandlerCollector(

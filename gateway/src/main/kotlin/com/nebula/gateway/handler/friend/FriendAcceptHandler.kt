@@ -25,14 +25,12 @@ import org.springframework.transaction.support.TransactionTemplate
  * @param pushService 推送服务
  * @param lockManager 会话级互斥锁管理器
  * @param transactionTemplate 编程式事务模板（D-79）
- * @param friendshipRepository 好友关系仓库（保留供后续使用）
  */
 class FriendAcceptHandler(
     private val friendService: FriendService,
     private val pushService: PushService,
     private val lockManager: ConversationLockManager,
-    private val transactionTemplate: TransactionTemplate,
-    @Suppress("unused") private val friendshipRepository: com.nebula.repository.repository.FriendshipRepository
+    private val transactionTemplate: TransactionTemplate
 ) : Handler<FriendAcceptReq, Response> {
 
     override val method: String = "friend/accept"

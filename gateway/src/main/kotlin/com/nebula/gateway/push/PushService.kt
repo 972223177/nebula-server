@@ -15,7 +15,7 @@ import com.nebula.chat.message.DeliveryAckPayload
 import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.service.conversation.ConversationService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,23 +33,23 @@ import kotlinx.coroutines.withContext
  * - 不自行判断推送权限，由调用方（SendMessageHandler/ReadReportHandler）保证仅推送给验证过的成员
  *
  * @param userStreamRegistry 用户 StreamObserver 注册中心
- * @param conversationMemberRepository 会话成员查询接口
+ * @param conversationService 会话成员查询服务
  * @param deliveryTrackingService 投递三态跟踪服务（D-70 ~ D-72）
  */
 class PushService(
     private val userStreamRegistry: UserStreamRegistry,
-    private val conversationMemberRepository: ConversationMemberRepository,
+    private val conversationService: ConversationService,
     private val deliveryTrackingService: DeliveryTrackingService
 ) {
     /**
      * 向会话成员推送 ChatMessage 消息（D-09, D-11, D-12）。
      *
      * 流程：
-     * 1. 通过 conversationMemberRepository 查询会话成员列表
+     * 1. 通过 conversationService 查询会话成员列表
      * 2. 过滤掉 excludeUid 对应的发送者（D-09）
      * 3. 逐个遍历在线成员，构建 PUSH Envelope 并投递
      *
-     * TODO(REVIEW-MEDIUM-4): findByConversationId 是 blocking JPA 调用，
+     * TODO(REVIEW-MEDIUM-4): getConversationMembers 底层是 blocking JPA 调用，
      * 应考虑使用 withContext(Dispatchers.IO) 包裹以避免阻塞协程线程。
      *
      * @param convId 会话 ID
@@ -59,7 +59,7 @@ class PushService(
     suspend fun pushMessage(convId: String, chatMessage: ChatMessage, excludeUid: Long) {
         // D-84/M18: 包裹 withContext(Dispatchers.IO) 避免阻塞协程线程
         val members = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationId(convId)
+            conversationService.getConversationMembers(convId)
         }
         val targets = members.filter { it.userId != excludeUid }
 
@@ -162,7 +162,7 @@ class PushService(
     /**
      * 向指定成员列表推送 ChatMessage（M29: 复用批量查询结果，避免二次 DB 查询）。
      *
-     * 与 [pushMessage] 的区别：本方法接受预查询的成员 userId 列表，而非通过 conversationMemberRepository 再次查询。
+     * 与 [pushMessage] 的区别：本方法接受预查询的成员 userId 列表，而非通过 conversationService 再次查询。
      *
      * @param targetUids 目标用户 ID 列表（已过滤 excludeUid）
      * @param chatMessage 待推送的 ChatMessage
@@ -210,7 +210,7 @@ class PushService(
     ) {
         // D-84/M18: 包裹 withContext(Dispatchers.IO) 避免阻塞协程线程
         val members = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationId(convId)
+            conversationService.getConversationMembers(convId)
         }
         val targets = members.filter { it.userId !in excludeUids }
 

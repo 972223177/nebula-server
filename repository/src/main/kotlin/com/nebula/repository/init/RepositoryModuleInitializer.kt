@@ -9,6 +9,7 @@ import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
+import com.nebula.common.session.SessionStore
 import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.DeadLetterRepository
@@ -81,6 +82,7 @@ class RepositoryModuleInitializer : ModuleInitializer, KoinComponent {
         koin.declare(jpaConfig.transactionTemplate())
         koin.declare<UserRepository>(userRepo)
         koin.declare<SessionRepository>(sessionRepo)
+        koin.declare<SessionStore>(sessionRepo)
         koin.declare<OnlineStatusRepository>(onlineStatusRepo)
         koin.declare<ConversationRepository>(conversationRepo)
         koin.declare<ConversationMemberRepository>(conversationMemberRepo)

@@ -12,8 +12,8 @@ kotlin {
 }
 
 dependencies {
-    api(project(":repository"))
-    api(project(":proto"))
+    implementation(project(":repository"))
+    implementation(project(":proto"))
     implementation(project(":common"))
 
     implementation(libs.kotlinx.coroutines.core)
@@ -22,6 +22,9 @@ dependencies {
     implementation(libs.spring.security.crypto)
     implementation(libs.kotlin.reflect)
     implementation(libs.protobuf.java)
+
+    // Koin DI — 模块聚合需要 org.koin.core.module.Module 类型
+    implementation(libs.koin.core)
 
     // Spring Data JPA — 访问 Repository 接口（JpaRepository 超类）
     implementation(libs.spring.data.jpa)

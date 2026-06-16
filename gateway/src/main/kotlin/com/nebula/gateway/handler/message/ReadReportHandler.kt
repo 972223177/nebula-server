@@ -8,17 +8,13 @@ import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.findByIdOrNull
 import com.nebula.service.chat.MessageService
+import com.nebula.service.conversation.ConversationService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 
 /**
@@ -30,16 +26,14 @@ import kotlinx.coroutines.currentCoroutineContext
  * - 私聊场景推送已读回执给原发送者（gateway 层推送）
  *
  * @param messageService 消息业务服务
- * @param conversationRepository 会话数据仓库
- * @param conversationMemberRepository 会话成员数据仓库
+ * @param conversationService 会话业务服务（会话查询 + 成员查询）
  * @param pushService 推送服务
  * @param connection Lettuce Redis 连接
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class ReadReportHandler(
     private val messageService: MessageService,
-    private val conversationRepository: ConversationRepository,
-    private val conversationMemberRepository: ConversationMemberRepository,
+    private val conversationService: ConversationService,
     private val pushService: PushService,
     private val connection: StatefulRedisConnection<String, String>
 ) : Handler<ReadReportReq, Response> {
@@ -68,7 +62,7 @@ class ReadReportHandler(
         redis.del("conversation:${req.conversationId}:unread:${session.userId}")
 
         // D-27: 获取会话并判断类型
-        val conversation = conversationRepository.findByIdOrNull(req.conversationId) ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
+        val conversation = conversationService.getConversation(req.conversationId) ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
         val isPrivate = conversation.type == PRIVATE_TYPE
 
         // D-23: 私聊场景推送已读回执给原发送者
@@ -92,9 +86,7 @@ class ReadReportHandler(
      * @param readerUid 阅读者用户 ID
      */
     private suspend fun pushReadReceiptToSender(req: ReadReportReq, readerUid: Long) {
-        val members = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationId(req.conversationId)
-        }
+        val members = conversationService.getConversationMembers(req.conversationId)
         val senderMember = members.firstOrNull { it.userId != readerUid }
 
         if (senderMember != null) {
