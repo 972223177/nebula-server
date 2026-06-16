@@ -77,12 +77,11 @@ class FriendSmokeTest {
     fun fullFlowShouldCompleteFriendLifecycle() = runTest {
         // 预创建所有 Handler
         val transactionTemplate = mockTransactionTemplate()
-        val friendshipRepository = mockk<com.nebula.repository.repository.FriendshipRepository>()
         val addHandler = FriendAddHandler(
-            friendService, pushService, mockLockManager(), transactionTemplate, friendshipRepository
+            friendService, pushService, mockLockManager(), transactionTemplate
         )
         val acceptHandler = FriendAcceptHandler(
-            friendService, pushService, mockLockManager(), transactionTemplate, friendshipRepository
+            friendService, pushService, mockLockManager(), transactionTemplate
         )
         val rejectHandler = FriendRejectHandler(friendService)
         val deleteHandler = FriendDeleteHandler(friendService)

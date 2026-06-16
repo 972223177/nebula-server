@@ -1,6 +1,6 @@
 package com.nebula.gateway.session
 
-import com.nebula.repository.redis.SessionRepository
+import com.nebula.common.session.SessionStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -22,7 +22,7 @@ import kotlin.test.assertNull
  */
 class SessionRegistryTest {
 
-    private lateinit var sessionRepository: SessionRepository
+    private lateinit var sessionStore: SessionStore
     private lateinit var registry: SessionRegistry
 
     private val testSession = Session(
@@ -35,8 +35,8 @@ class SessionRegistryTest {
 
     @BeforeEach
     fun setUp() {
-        sessionRepository = mockk<SessionRepository>()
-        registry = SessionRegistry(sessionRepository)
+        sessionStore = mockk<SessionStore>()
+        registry = SessionRegistry(sessionStore)
     }
 
     @Test
@@ -50,21 +50,21 @@ class SessionRegistryTest {
         assertEquals(testSession.userId, result.userId)
         assertEquals(testSession.token, result.token)
         // 验证 Redis 未被调用（L1 命中）
-        coVerify(inverse = true) { sessionRepository.findByToken(any()) }
+        coVerify(inverse = true) { sessionStore.findByToken(any()) }
     }
 
     @Test
     fun validateQueriesL2WhenL1Misses() = runTest {
         // L1 未命中，Mock L2 返回 Session 的 JSON
         val sessionJson = """{"userId":1001,"token":"test-token-abc","deviceType":"android","deviceId":"device-001","connectionId":"conn-001"}"""
-        coEvery { sessionRepository.findByToken(testSession.token) } returns sessionJson
+        coEvery { sessionStore.findByToken(testSession.token) } returns sessionJson
 
         val result = registry.validate(testSession.token)
 
         assertNotNull(result)
         assertEquals(testSession.userId, result.userId)
         assertEquals(testSession.token, result.token)
-        coVerify(exactly = 1) { sessionRepository.findByToken(testSession.token) }
+        coVerify(exactly = 1) { sessionStore.findByToken(testSession.token) }
 
         // 验证结果已回填到 L1
         val cached = registry.getFromLocalCache(testSession.token)
@@ -73,7 +73,7 @@ class SessionRegistryTest {
 
     @Test
     fun registerStoresToL1AndL2() = runTest {
-        coEvery { sessionRepository.save(any(), any()) } returns Unit
+        coEvery { sessionStore.save(any(), any()) } returns Unit
 
         registry.register(testSession)
 
@@ -83,12 +83,12 @@ class SessionRegistryTest {
         assertEquals(testSession.userId, cached.userId)
 
         // 验证 Redis save 被调用
-        coVerify(exactly = 1) { sessionRepository.save(testSession.token, any()) }
+        coVerify(exactly = 1) { sessionStore.save(testSession.token, any()) }
     }
 
     @Test
     fun unregisterTriggersEvictionCallbacks() = runTest {
-        coEvery { sessionRepository.delete(any()) } returns Unit
+        coEvery { sessionStore.delete(any()) } returns Unit
         registry.addToLocalCache(testSession)
 
         var callbackToken: String? = null
@@ -105,6 +105,6 @@ class SessionRegistryTest {
         assertNull(cached)
 
         // 验证 Redis delete 被调用
-        coVerify(exactly = 1) { sessionRepository.delete(testSession.token) }
+        coVerify(exactly = 1) { sessionStore.delete(testSession.token) }
     }
 }

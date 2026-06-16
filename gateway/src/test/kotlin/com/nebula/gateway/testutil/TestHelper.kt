@@ -16,17 +16,15 @@ import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.entity.FriendRequestEntity
-import com.nebula.repository.entity.FriendshipEntity
-import com.nebula.repository.entity.UserEntity
+import com.nebula.service.conversation.ConversationInfo
+import com.nebula.service.conversation.ConversationMemberInfo
+import com.nebula.service.friend.FriendshipInfo
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import org.springframework.transaction.support.TransactionCallback
 import org.springframework.transaction.support.TransactionTemplate
-import java.time.LocalDateTime
+
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
@@ -249,120 +247,46 @@ fun createDispatcher(
 // 5. 测试数据工厂
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * 创建测试 UserEntity。
- *
- * @param userId 用户 ID
- * @param username 用户名
- * @param nickname 显示名称
- * @return 测试用的 UserEntity，已设置 id
- */
-fun testUser(userId: Long, username: String = "user$userId", nickname: String = "用户$userId"): UserEntity {
-    return UserEntity(
-        username = username,
-        passwordHash = "hash",
-        nickname = nickname
-    ).apply { id = userId }
-}
 
 /**
- * 创建测试 ConversationEntity（群聊类型）。
+ * 创建测试 ConversationInfo（群聊类型）。
  *
  * @param convId 会话 ID（UUID 格式）
- * @param name 群聊名称
  * @param ownerUid 群主用户 ID
- * @param memberCount 成员数量，默认 3
- * @return 测试用的 ConversationEntity，已设置 id、createdAt、updatedAt
+ * @return 测试用的 ConversationInfo，类型为群聊（2）
  */
 fun testConversation(
     convId: String,
-    name: String = "测试群聊",
-    ownerUid: Long = 1001L,
-    memberCount: Int = 3
-): ConversationEntity {
-    return ConversationEntity(
-        type = 2,
-        name = name,
-        avatar = "",
-        groupOwnerUid = ownerUid,
-        memberCount = memberCount,
-        maxMembers = 200,
-        status = 0
-    ).apply {
-        id = convId
-        createdAt = LocalDateTime.now()
-        updatedAt = LocalDateTime.now()
-    }
+    ownerUid: Long = 1001L
+): ConversationInfo {
+    return ConversationInfo(id = convId, type = 2)
 }
 
 /**
- * 创建测试 ConversationMemberEntity。
+ * 创建测试 ConversationMemberInfo。
  *
- * @param convId 会话 ID
  * @param userId 用户 ID
  * @param role 成员角色："owner" 或 "member"
- * @return 测试用的 ConversationMemberEntity，已设置 id、joinedAt
+ * @return 测试用的 ConversationMemberInfo
  */
-fun testMember(convId: String, userId: Long, role: String = "member"): ConversationMemberEntity {
-    return ConversationMemberEntity(
-        conversationId = convId,
-        userId = userId,
-        role = role
-    ).apply {
-        id = userId
-        joinedAt = LocalDateTime.now()
-    }
+fun testMember(convId: String, userId: Long, role: String = "member"): ConversationMemberInfo {
+    return ConversationMemberInfo(userId = userId, role = role)
 }
 
 /**
- * 创建测试 FriendRequestEntity。
- *
- * @param fromUid 发起方用户 ID
- * @param toUid 接收方用户 ID
- * @param status 申请状态：0=pending 1=accepted 2=rejected，默认 0
- * @param message 申请附言，默认空字符串
- * @param id 申请 ID（数据库自增主键），默认 null（不设置）
- * @return 测试用的 FriendRequestEntity，已设置 createdAt、updatedAt
- */
-fun testFriendRequest(
-    fromUid: Long,
-    toUid: Long,
-    status: Int = 0,
-    message: String = "",
-    id: Long? = null
-): FriendRequestEntity {
-    return FriendRequestEntity(
-        fromUid = fromUid,
-        toUid = toUid,
-        status = status,
-        message = message
-    ).apply {
-        this.id = id
-        createdAt = LocalDateTime.now()
-        updatedAt = LocalDateTime.now()
-    }
-}
-
-/**
- * 创建测试 FriendshipEntity。
+ * 创建测试 FriendshipInfo。
  *
  * @param userId 用户 ID（排序后的较小值）
  * @param friendId 好友 ID（排序后的较大值）
  * @param deleted 软删除标记：0=正常 1=已删除，默认 0
- * @return 测试用的 FriendshipEntity，已设置 createdAt
+ * @return 测试用的 FriendshipInfo
  */
 fun testFriendship(
     userId: Long,
     friendId: Long,
     deleted: Int = 0
-): FriendshipEntity {
-    return FriendshipEntity(
-        userId = userId,
-        friendId = friendId
-    ).apply {
-        this.deleted = deleted
-        createdAt = LocalDateTime.now()
-    }
+): FriendshipInfo {
+    return FriendshipInfo(userId, friendId, deleted)
 }
 
 /**

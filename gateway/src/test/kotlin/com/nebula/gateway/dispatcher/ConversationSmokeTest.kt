@@ -25,8 +25,6 @@ import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.gateway.testutil.mockLockManager
 import com.nebula.gateway.testutil.mockTransactionTemplate
-import com.nebula.gateway.testutil.testMember
-import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.conversation.CreateGroupResult
 import io.mockk.coEvery
@@ -47,7 +45,6 @@ class ConversationSmokeTest {
     // ========== Mock 依赖 ==========
 
     private lateinit var conversationService: ConversationService
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
     private lateinit var pushService: PushService
     private lateinit var sessionRegistry: SessionRegistry
 
@@ -59,7 +56,6 @@ class ConversationSmokeTest {
     @BeforeEach
     fun setUp() {
         conversationService = mockk()
-        conversationMemberRepository = mockk()
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
     }
@@ -80,13 +76,13 @@ class ConversationSmokeTest {
         val membersHandler = GroupMembersHandler(conversationService)
         val editHandler = EditGroupHandler(conversationService, pushService)
         val inviteHandler = InviteMemberHandler(
-            conversationService, lockManager, transactionTemplate, pushService, conversationMemberRepository
+            conversationService, lockManager, transactionTemplate, pushService
         )
         val kickHandler = KickMemberHandler(
-            conversationService, lockManager, transactionTemplate, pushService, conversationMemberRepository
+            conversationService, lockManager, transactionTemplate, pushService
         )
         val leaveHandler = LeaveGroupHandler(
-            conversationService, lockManager, transactionTemplate, pushService, conversationMemberRepository
+            conversationService, lockManager, transactionTemplate, pushService
         )
 
         // 注册所有 Handler
@@ -127,8 +123,6 @@ class ConversationSmokeTest {
         coEvery { conversationService.kickMember(any(), any()) } returns 2001L
 
         // ---- 退群 ----
-        coEvery { conversationMemberRepository.findByConversationIdAndUserId(testConvId, 1001L) } returns
-            testMember(testConvId, 1001L, "owner").apply { id = 1L }
         coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
         // 步骤 1: 创建群聊

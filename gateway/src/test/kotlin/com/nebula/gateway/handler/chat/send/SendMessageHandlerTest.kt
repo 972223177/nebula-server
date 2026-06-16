@@ -8,13 +8,13 @@ import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.sessionContext
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationService
+import com.nebula.service.chat.MessageService
 import com.nebula.service.chat.SendMessageResult
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,20 +77,15 @@ class SendMessageHandlerTest {
     @Test
     fun sendShouldReturnSendMessageResp() = runTest {
         // MessageService 返回成功结果
-        val convEntity = ConversationEntity(type = 0).apply { id = "conv-001" }
         val chatMsg = ChatMessage.newBuilder()
             .setMsgId(50001L)
             .setConversationId("conv-001")
             .setSenderUid(1001L)
             .build()
-        coEvery { messageService.sendMessage(any(), any()) } returns SendMessageResult(
-            msgId = 50001L,
-            serverTs = 1700000000000L,
-            conversationId = "conv-001",
-            senderUid = 1001L,
-            chatMessage = chatMsg,
-            conversation = convEntity
-        )
+        val sendResult = mockk<SendMessageResult>(relaxed = true)
+        every { sendResult.msgId } returns 50001L
+        every { sendResult.serverTs } returns 1700000000000L
+        coEvery { messageService.sendMessage(any(), any()) } returns sendResult
 
         val req = SendMessageReq.newBuilder()
             .setConversationId("conv-001")
