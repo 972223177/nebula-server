@@ -67,16 +67,21 @@ class Dispatcher(
         }
 
         // Step 3: 构建 Pipeline 链尾 — 最终调用 Handler
+        // 使用 var 记录拦截器链中最新传入的 request；
+        // 当拦截器修改了 request 并调用 chain.proceed(modifiedRequest) 时，
+        // 后续代码应使用传入的参数而非闭包捕获的 envelopeRequest（CQ-17）
+        var currentRequest = envelopeRequest
         val handlerChain: Interceptor.Chain = object : Interceptor.Chain {
-            override val request: Request get() = envelopeRequest
+            override val request: Request get() = currentRequest
 
             override suspend fun proceed(request: Request): Response {
+                currentRequest = request
                 @Suppress("UNCHECKED_CAST")
                 val result = (entry.handler as Handler<Any, Any>).handle(req)
                 val resultBytes = protoCodec.serialize(entry, result)
                 return Response.newBuilder()
                     .setCode(BizCode.OK.code)
-                    .setMethod(method)
+                    .setMethod(request.method) // 使用链传入的 request.method，允许拦截器修改路由目标
                     .setResult(ByteString.copyFrom(resultBytes))
                     .build()
             }

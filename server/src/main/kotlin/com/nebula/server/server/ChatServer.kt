@@ -81,10 +81,11 @@ class ChatServer(private val config: ApplicationConfig) {
      * 优雅关闭 gRPC 服务。
      *
      * 调用 shutdown() 后，服务端停止接受新请求，并等待已有 RPC 完成。
-     * awaitTermination 设置最长等待 5 秒，超时后强制关闭。
+     * awaitTermination 设置最长等待 30 秒，给高负载场景下缓冲消息足够的写入时间，
+     * 超时后强制关闭。
      */
     fun stop() {
-        server?.shutdown()?.awaitTermination(5, TimeUnit.SECONDS)
+        server?.shutdown()?.awaitTermination(30, TimeUnit.SECONDS)
     }
 
     /**

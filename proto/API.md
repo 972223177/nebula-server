@@ -22,7 +22,7 @@
 - [8. 会话模块 (conversation)](#8-会话模块-conversation)
 - [9. 群组模块 (group)](#9-群组模块-group)
 - [10. 管理模块 (admin)](#10-管理模块-admin)
-- [11. 推送 Payload 索引](#11-推送-payload-索引)
+- [12. 推送 Payload 索引](#12-推送-payload-索引)
 
 ---
 
@@ -70,7 +70,6 @@
 │ message/seq  │              │                        │
 │ admin/dead-letters│         │                        │
 │ admin/retry-dead-letter│    │                        │
-│ message/delivery-ack│       │                        │
 └──────────────┴──────────────┴────────────────────────┘
 ```
 
@@ -301,7 +300,6 @@ message Request {
 | `message/pull` | `PullMessagesReq` | `PullMessagesResp` | message |
 | `message/read` | `ReadReportReq` | — | message |
 | `message/seq` | `MessageSeqReq` | `MessageSeqResp` | message |
-| `message/delivery-ack` | — | — | message |
 | `conversation/list` | `ConvListReq` | `ConvListResp` | conversation |
 | `conversation/create_group` | `CreateGroupReq` | `CreateGroupResp` | conversation |
 | `conversation/invite_member` | `InviteMemberReq` | — | conversation |
@@ -1052,7 +1050,7 @@ message Message {
 
 ---
 
-## 11. 推送 Payload 索引
+## 12. 推送 Payload 索引
 
 按 `PushEventType` 编号排序，汇总所有推送 Payload 与枚举值的对应关系。
 
@@ -1083,7 +1081,7 @@ message Message {
 
 ## 附录：Proto 源码
 
-### envelop.proto
+### envelope.proto
 
 ```protobuf
 syntax = "proto3";
@@ -1695,6 +1693,13 @@ message GroupUpdatedPayload {
   string conversation_id = 1;         // 会话 ID
   optional string name = 2;           // 新群名称（不传则不修改）
   optional string avatar_url = 3;     // 新群头像 URL（不传则不修改）
+}
+
+// 群邀请通知（推送给被邀请者）
+message GroupInvitedPayload {
+  string conversation_id = 1;         // 会话 ID
+  string name = 2;                    // 群名称
+  int64 inviter_uid = 3;              // 邀请人 UID
 }
 
 // 群解散通知

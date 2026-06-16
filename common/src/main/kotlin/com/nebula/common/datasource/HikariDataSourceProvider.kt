@@ -10,12 +10,13 @@ import javax.sql.DataSource
  *
  * 读取 [DatabaseConfig] 并使用 HikariCP 配置连接池参数。
  * 利用 Kotlin [by lazy] 实现延迟单例初始化，仅在首次调用 [getDataSource] 时构建连接池。
+ * 实现 [AutoCloseable]，应用关闭时调用 [close] 释放连接池资源，避免连接泄漏。
  *
  * @param config 数据库连接池配置，包含连接串、池大小、超时等参数
  */
 class HikariDataSourceProvider(
     private val config: DatabaseConfig
-) : DataSourceProvider {
+) : DataSourceProvider, AutoCloseable {
 
     /**
      * Hikari 数据源实例，延迟初始化。
@@ -64,6 +65,18 @@ class HikariDataSourceProvider(
      * @return 已初始化的 [HikariDataSource] 实例
      */
     override fun getDataSource(): DataSource = hikariDataSource
+
+    /**
+     * 释放 HikariCP 连接池资源。
+     *
+     * 应用关闭时应调用此方法以确保所有数据库连接被正确释放，避免连接泄漏。
+     * 仅在连接池已初始化时才执行关闭，未初始化时无需操作。
+     */
+    override fun close() {
+        if (::hikariDataSource.isInitialized()) {
+            hikariDataSource.close()
+        }
+    }
 
     /**
      * 构建 MySQL JDBC 连接 URL。
