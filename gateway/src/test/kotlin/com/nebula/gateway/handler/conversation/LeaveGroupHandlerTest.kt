@@ -58,7 +58,7 @@ class LeaveGroupHandlerTest {
 
     @Test
     fun ownerLeaveShouldDissolveAndPushGroupDissolved() = runTest {
-        coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
+        coEvery { conversationService.dissolveGroup(any()) } returns Unit
 
         // Handle 直接查询当前用户成员信息，判断角色
         val ownerMember = ConversationMemberInfo(userId = 1001L, role = "owner")
