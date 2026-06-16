@@ -2,6 +2,7 @@ package com.nebula.gateway.interceptor
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
+import com.nebula.common.BizCode
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
 import io.mockk.coEvery
@@ -280,7 +281,7 @@ class RateLimitInterceptorTest {
         val resp429 = interceptor.intercept(request6, mockChain)
 
         // Then: 第 6 次返回 429（注册限流）
-        assertEquals(429, resp429.code)
+        assertEquals(BizCode.RATE_LIMITED.code, resp429.code)
         assertEquals("register rate limit exceeded", resp429.msg)
     }
 
@@ -309,7 +310,7 @@ class RateLimitInterceptorTest {
                 .build(),
             mockChain
         )
-        assertEquals(429, respA.code, "IP-A 超过限流应返回 429")
+        assertEquals(BizCode.RATE_LIMITED.code, respA.code, "IP-A 超过限流应返回 ${BizCode.RATE_LIMITED.code}")
 
         // IP-B 第 1 次：应正常通行
         val respB = interceptor.intercept(
