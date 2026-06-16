@@ -48,6 +48,10 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.kotlin.test)
+
+    // Testcontainers — Redis 集成测试容器
+    testImplementation(libs.testcontainers.core)
+    testImplementation(libs.testcontainers.junit.jupiter)
 }
 
 tasks.test {
