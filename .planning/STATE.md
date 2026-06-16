@@ -66,6 +66,7 @@ v1.1 已发布。后续可考虑：
 
 | Date | Task | Impact |
 |------|------|--------|
+| 2026-06-16 | fix-conversation-smoke-test | 修复 ConversationSmokeTest 缺失的 MockK answer（getMemberRole、dissolveGroup），以及 TestHelper.buildTestDispatcher 缺 refreshTtl mock |
 | 2026-06-16 | fix-message-reliability-module-test | 修复 MessageReliabilityModuleTest 测试：在测试的 buildExternalModule() 中添加 DeadLetterService 和 SeqService 的 mockk 实例，避免因 serviceKoinModule 未加载导致的 NoDefinitionFoundException |
 | 2026-06-16 | fix-gateway-server-tests | 修复 server,gateway 模块 16 个测试文件编译（--team 多专家），适配 Phase 12 api→implementation 依赖隔离 |
 | 2026-06-16 | fix-code-review-issues | 修复 8 个代码问题（P1/P2/P3/P7/C1/C4/GI1/GI8/S7/R11），code-review-2026-06-16.md 新增解决方案和涉及文件列，--team 多专家并行修复 |

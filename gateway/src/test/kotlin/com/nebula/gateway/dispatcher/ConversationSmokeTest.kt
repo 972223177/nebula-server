@@ -25,6 +25,7 @@ import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.gateway.testutil.mockLockManager
 import com.nebula.gateway.testutil.mockTransactionTemplate
+import com.nebula.service.conversation.ConversationMemberInfo
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.conversation.CreateGroupResult
 import io.mockk.coEvery
@@ -123,6 +124,8 @@ class ConversationSmokeTest {
         coEvery { conversationService.kickMember(any(), any()) } returns 2001L
 
         // ---- 退群 ----
+        coEvery { conversationService.getMemberRole(any(), any()) } returns ConversationMemberInfo(userId = 1001L, role = "owner")
+        coEvery { conversationService.dissolveGroup(any()) } returns Unit
         coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
         // 步骤 1: 创建群聊
