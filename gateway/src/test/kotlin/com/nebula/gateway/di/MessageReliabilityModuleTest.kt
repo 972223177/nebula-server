@@ -42,6 +42,8 @@ class MessageReliabilityModuleTest {
     private val messageQueueRepo = mockk<MessageQueueRepository>()
     private val idGenerator = mockk<SnowflakeIdGenerator>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val deadLetterService = mockk<DeadLetterService>()
+    private val seqService = mockk<SeqService>()
 
     /**
      * 构建外部依赖模块（模拟 Repository 层和基础设施）。
@@ -51,6 +53,8 @@ class MessageReliabilityModuleTest {
         single { deadLetterRepo }
         single { messageQueueRepo }
         single { idGenerator }
+        single { deadLetterService }
+        single { seqService }
         single(named("sendHandlerScope")) { scope }
     }
 
