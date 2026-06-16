@@ -8,26 +8,21 @@ import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.chat.MessageService
+import com.nebula.service.conversation.ConversationInfo
+import com.nebula.service.conversation.ConversationMemberInfo
+import com.nebula.service.conversation.ConversationService
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.just
 import io.mockk.mockk
-import io.mockk.runs
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.Optional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -46,8 +41,7 @@ import kotlin.test.assertNotNull
 class ReadReportHandlerTest {
 
     private lateinit var messageService: MessageService
-    private lateinit var conversationRepository: ConversationRepository
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
+    private lateinit var conversationService: ConversationService
     private lateinit var pushService: PushService
     private lateinit var connection: StatefulRedisConnection<String, String>
     private lateinit var redis: RedisCoroutinesCommands<String, String>
@@ -58,16 +52,14 @@ class ReadReportHandlerTest {
     @BeforeEach
     fun setUp() {
         messageService = mockk()
-        conversationRepository = mockk()
-        conversationMemberRepository = mockk()
+        conversationService = mockk()
         pushService = mockk(relaxed = true)
         connection = mockk(relaxed = true)
         redis = mockk(relaxed = true)
 
         handler = ReadReportHandler(
             messageService,
-            conversationRepository,
-            conversationMemberRepository,
+            conversationService,
             pushService,
             connection
         )
@@ -77,12 +69,6 @@ class ReadReportHandlerTest {
         // MessageService 已读报告默认返回成功（handler 先委托 messageService，再执行自有的 gateway 逻辑）
         coEvery { messageService.readReport(any<ReadReportReq>(), any()) } returns Unit
     }
-
-    /** 创建私聊会话实体 */
-    private fun privateConv(id: String) = ConversationEntity(type = 0).apply { this.id = id }
-
-    /** 创建群聊会话实体 */
-    private fun groupConv(id: String) = ConversationEntity(type = 1).apply { this.id = id }
 
     /**
      * 通过反射替换 ReadReportHandler 中的 [redis] 字段为 mock 实例。
@@ -101,7 +87,7 @@ class ReadReportHandlerTest {
 
     @Test
     fun convNotFoundShouldThrowConversationException() = runTest {
-        every { conversationRepository.findById("conv-not-exists") } returns Optional.empty()
+        coEvery { conversationService.getConversation("conv-not-exists") } returns null
 
         val req = ReadReportReq.newBuilder()
             .setConversationId("conv-not-exists")
@@ -137,16 +123,16 @@ class ReadReportHandlerTest {
     @Test
     fun privateChatReadReportShouldUpdateAndPushReadReceipt() = runTest {
         // 模拟私聊会话（type=0）
-        val convEntity = privateConv("conv-001")
-        every { conversationRepository.findById("conv-001") } returns Optional.of(convEntity)
+        val convEntity = ConversationInfo(id = "conv-001", type = 0)
+        coEvery { conversationService.getConversation("conv-001") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 内部处理）
-        val member = ConversationMemberEntity("conv-001", 2001L)
+        val member = ConversationMemberInfo(userId = 2001L, role = "member")
 
         // 私聊另一方成员（用于 pushReadReceiptToSender）
-        val senderMember = ConversationMemberEntity("conv-001", 1001L)
-        every {
-            conversationMemberRepository.findByConversationId("conv-001")
+        val senderMember = ConversationMemberInfo(userId = 1001L, role = "member")
+        coEvery {
+            conversationService.getConversationMembers("conv-001")
         } returns listOf(member, senderMember)
 
         // 执行
@@ -177,8 +163,8 @@ class ReadReportHandlerTest {
     @Test
     fun groupChatReadReportShouldUpdateWithoutPush() = runTest {
         // 模拟群聊会话（type=1）
-        val convEntity = groupConv("conv-002")
-        every { conversationRepository.findById("conv-002") } returns Optional.of(convEntity)
+        val convEntity = ConversationInfo(id = "conv-002", type = 1)
+        coEvery { conversationService.getConversation("conv-002") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 处理）
 
@@ -209,15 +195,15 @@ class ReadReportHandlerTest {
     @Test
     fun otherPartyLeftShouldSkipPush() = runTest {
         // 模拟私聊会话（type=0）
-        val convEntity = privateConv("conv-003")
-        every { conversationRepository.findById("conv-003") } returns Optional.of(convEntity)
+        val convEntity = ConversationInfo(id = "conv-003", type = 0)
+        coEvery { conversationService.getConversation("conv-003") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 处理）
 
         // 私聊成员查询——只有读者自己，无发送者
-        val member = ConversationMemberEntity("conv-003", 2001L)
-        every {
-            conversationMemberRepository.findByConversationId("conv-003")
+        val member = ConversationMemberInfo(userId = 2001L, role = "member")
+        coEvery {
+            conversationService.getConversationMembers("conv-003")
         } returns listOf(member)
 
         // 执行

@@ -2,9 +2,9 @@ package com.nebula.gateway.handler.user
 
 import com.nebula.chat.user.BatchIdRequest
 import com.nebula.chat.user.BatchGetStatusResp
-import com.nebula.repository.redis.OnlineStatusData
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.service.user.OnlineStatusInfo
+import com.nebula.service.user.OnlineStatusService
+import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -25,22 +25,22 @@ import kotlin.test.assertEquals
  */
 class BatchGetStatusHandlerTest {
 
-    private lateinit var onlineStatusRepository: OnlineStatusRepository
-    private lateinit var privacyRepository: PrivacyRepository
+    private lateinit var onlineStatusService: OnlineStatusService
+    private lateinit var privacyService: UserPrivacyService
     private lateinit var handler: BatchGetStatusHandler
 
     @BeforeEach
     fun setup() {
-        onlineStatusRepository = mockk()
-        privacyRepository = mockk()
-        handler = BatchGetStatusHandler(onlineStatusRepository, privacyRepository)
+        onlineStatusService = mockk()
+        privacyService = mockk()
+        handler = BatchGetStatusHandler(onlineStatusService, privacyService)
     }
 
     @Test
     fun queryOnlineStatusWithoutHiddenUsers() = runTest {
-        coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L)) } returns emptySet()
+        coEvery { privacyService.batchGetHideOnlineStatus(listOf(1L)) } returns emptySet()
         // D-57: 使用 getStatus 替代 isOnline
-        coEvery { onlineStatusRepository.getStatus(1L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
+        coEvery { onlineStatusService.getStatus(1L) } returns OnlineStatusInfo(status = 1)
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L)).build()
         val resp = handler.handle(req)
@@ -52,8 +52,8 @@ class BatchGetStatusHandlerTest {
 
     @Test
     fun hiddenUsersShouldBeFiltered() = runTest {
-        coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L, 2L)) } returns setOf(1L)
-        coEvery { onlineStatusRepository.getStatus(2L) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
+        coEvery { privacyService.batchGetHideOnlineStatus(listOf(1L, 2L)) } returns setOf(1L)
+        coEvery { onlineStatusService.getStatus(2L) } returns OnlineStatusInfo(status = 1)
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L, 2L)).build()
         val resp = handler.handle(req)
@@ -69,9 +69,9 @@ class BatchGetStatusHandlerTest {
         val onlineUid = 2L
         val offlineUid = 3L
 
-        coEvery { privacyRepository.batchGetHideOnlineStatus(listOf(1L, 2L, 3L)) } returns setOf(hiddenUid)
-        coEvery { onlineStatusRepository.getStatus(onlineUid) } returns OnlineStatusData(status = 1, lastActiveAt = 0L)
-        coEvery { onlineStatusRepository.getStatus(offlineUid) } returns null  // null = 离线
+        coEvery { privacyService.batchGetHideOnlineStatus(listOf(1L, 2L, 3L)) } returns setOf(hiddenUid)
+        coEvery { onlineStatusService.getStatus(onlineUid) } returns OnlineStatusInfo(status = 1)
+        coEvery { onlineStatusService.getStatus(offlineUid) } returns null  // null = 离线
 
         val req = BatchIdRequest.newBuilder().addAllUids(listOf(1L, 2L, 3L)).build()
         val resp = handler.handle(req)
@@ -86,7 +86,7 @@ class BatchGetStatusHandlerTest {
 
     @Test
     fun batchStatusEmptyListShouldReturnEmpty() = runTest {
-        coEvery { privacyRepository.batchGetHideOnlineStatus(emptyList()) } returns emptySet()
+        coEvery { privacyService.batchGetHideOnlineStatus(emptyList()) } returns emptySet()
 
         val req = BatchIdRequest.getDefaultInstance()
         val resp = handler.handle(req)

@@ -51,6 +51,7 @@ import com.nebula.repository.repository.UserRepository
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.friend.FriendService
+import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.user.UserService
 import io.lettuce.core.api.StatefulRedisConnection
@@ -102,6 +103,7 @@ class GatewayModuleTest {
     private val messageService = mockk<MessageService>()
     private val conversationService = mockk<ConversationService>()
     private val friendService = mockk<FriendService>()
+    private val onlineStatusService = mockk<OnlineStatusService>()
 
     /**
      * 构建外部 Repository Koin 模块。
@@ -134,6 +136,7 @@ class GatewayModuleTest {
         single { messageService }
         single { conversationService }
         single { friendService }
+        single { onlineStatusService }
 
         // Phase 5: User Handler
         single { PingHandler() }
@@ -150,9 +153,9 @@ class GatewayModuleTest {
         single { scope }
         single { UserStreamRegistry() }
         single { PushService(get(), get(), get()) }
-        single { SendMessageHandler(messageService, get(), get(), get(), get(), get()) }
+        single { SendMessageHandler(messageService, get(), get(), get(), get()) }
         single { PullMessagesHandler(messageService) }
-        single { ReadReportHandler(messageService, get(), get(), get(), get()) }
+        single { ReadReportHandler(messageService, get(), get(), get()) }
 
         // Phase 10: Message Reliability
         single { com.nebula.service.sequence.SeqService(get()) }
@@ -164,17 +167,17 @@ class GatewayModuleTest {
         single { GroupMembersHandler(conversationService) }
         single { EditGroupHandler(conversationService, get()) }
         single { CreateGroupHandler(conversationService, get(), get(), get()) }
-        single { InviteMemberHandler(conversationService, get(), get(), get(), get()) }
-        single { LeaveGroupHandler(conversationService, get(), get(), get(), get()) }
-        single { KickMemberHandler(conversationService, get(), get(), get(), get()) }
+        single { InviteMemberHandler(conversationService, get(), get(), get()) }
+        single { LeaveGroupHandler(conversationService, get(), get(), get()) }
+        single { KickMemberHandler(conversationService, get(), get(), get()) }
 
         // Phase 8: Friend
         single { FriendRejectHandler(friendService) }
         single { FriendRequestsHandler(friendService) }
         single { FriendListHandler(friendService) }
         single { FriendDeleteHandler(friendService) }
-        single { FriendAddHandler(friendService, get(), get(), get(), get()) }
-        single { FriendAcceptHandler(friendService, get(), get(), get(), get()) }
+        single { FriendAddHandler(friendService, get(), get(), get()) }
+        single { FriendAcceptHandler(friendService, get(), get(), get()) }
     }
 
     @AfterEach

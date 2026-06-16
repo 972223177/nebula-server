@@ -61,8 +61,7 @@ class FriendAcceptHandlerTest {
             friendService,
             pushService,
             lockManager,
-            transactionTemplate,
-            mockk()
+            transactionTemplate
         )
     }
 

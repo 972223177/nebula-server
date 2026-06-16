@@ -13,7 +13,6 @@ import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -54,8 +53,7 @@ class InviteMemberHandlerTest {
             conversationService,
             lockManager,
             transactionTemplate,
-            pushService,
-            mockk() // conversationMemberRepository 在 handle() 中未被直接调用
+            pushService
         )
     }
 
