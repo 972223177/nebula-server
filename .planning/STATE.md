@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: v1.1 Enhancement — Module Dependency Isolation
-status: Phase 12 complete (production build passes)
-last_updated: "2026-06-16T10:00:00.000Z"
+milestone_name: v1.1 Enhancement — Code Review Cleanup
+status: Phase 13 complete (5 fixes + 11 decisions, compile verified)
+last_updated: "2026-06-16T13:00:00.000Z"
 progress:
-  total_phases: 12
-  completed_phases: 12
-  total_plans: 50
-  completed_plans: 50
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 51
+  completed_plans: 51
   percent: 100
 ---
 
@@ -19,9 +19,9 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 **Core value:** Users send and receive real-time messages over a single gRPC bidirectional stream with reliable delivery
-**Current focus:** v1.1 — Module dependency isolation complete  
-**Phase count:** 12  
-**Requirements:** 85 v1 requirements — 78/81 CQ issues resolved, 3 test items deferred (needs embedded Redis)
+**Current focus:** v1.1 — Code review cleanup complete  
+**Phase count:** 13  
+**Requirements:** 85 v1 requirements — 83/81 CQ issues resolved, 3 test items deferred (needs embedded Redis)
 
 ## Phase Status
 
@@ -39,6 +39,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 10 — Message Reliability | Complete | 2026-06-13 | 2026-06-14 |
 | 11 — Code Quality & Production Hardening | Complete | 2026-06-15 | 2026-06-15 |
 | 12 — Module Dependency Isolation | Complete | 2026-06-16 | 2026-06-16 |
+| 13 — Code Review Cleanup | Complete | 2026-06-16 | 2026-06-16 |
 
 ## Next Actions
 
@@ -50,6 +51,7 @@ v1.1 已发布。后续可考虑：
 
 | Date | Task | Impact |
 |------|------|--------|
+| 2026-06-16 | Phase 13 Code Review Cleanup | 处理 16 条待评估/待确认问题：5 条修复（R2 Stream字段名、GS3 私聊已读回执、R12 TOCTOU异常保护、R15 安全类型转换、GS5 死代码清理），11 条决策（降为暂不修复/v1.2）。编译验证通过 |
 | 2026-06-16 | Phase 12 Module Dependency Isolation | 所有 api→implementation，消除 gateway→repository 跨层引用。新增 10 文件（SessionStore、DeadLetterCallback、4 DTO、2 Service 类、2 Koin 模块），修改 30+ 文件。生产代码编译通过 |
 | 2026-06-15 | Phase 11 完成 | 4 Plan：11-01 安全加固、11-02 数据一致性、11-03 数据完整性、11-04 代码质量。14 commit，78/81 CQ 问题关闭 |
 | 2026-06-15 | nx-verify 11 | 四层验证 PARTIAL：3 个非阻塞 gap（路径声明差异、STATE.md 未同步、3 个测试延期） |
@@ -103,4 +105,4 @@ v1.1 已发布。后续可考虑：
 | 2026-06-12 | [code-warnings-assessment](quick/20260612-code-warnings-assessment/) | 评估所有代码警告：发现 2 个 Bug（P0），9 处可安全清理的死代码（P1），5 项需谨慎确认的问题（P2） |
 
 ---
-*Last updated: 2026-06-16 after quick(fix-gateway-server-tests)*
+*Last updated: 2026-06-16 after Phase 13 Code Review Cleanup*

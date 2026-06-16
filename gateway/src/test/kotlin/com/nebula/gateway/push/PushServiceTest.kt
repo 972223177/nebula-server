@@ -26,8 +26,7 @@ import kotlin.test.assertNotNull
  * PushService 单元测试。
  *
  * 覆盖场景：
- * - pushMessage 排除 excludeUid
- * - pushMessage 对在线成员投递 CHAT_MESSAGE Envelope
+ * - pushMessageToMembers 向指定成员推送 CHAT_MESSAGE Envelope
  * - 单个 observer.onNext 异常不影响其他 observer（D-05 容错）
  * - pushReadReceipt 投递 READ_RECEIPT Envelope
  * - pushReadReceipt 异常容错
@@ -55,35 +54,23 @@ class PushServiceTest {
     }
 
     @Test
-    fun pushMessageExcludesSenderFromPushTargets() = runTest {
+    fun pushMessageToMembersPushesToAllTargetUids() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
-        val members = listOf(
-            ConversationMemberInfo(userId = senderUid, role = "member"),
-            ConversationMemberInfo(userId = receiverUid, role = "member")
-        )
-        coEvery { conversationService.getConversationMembers(convId) } returns members
-        every { userStreamRegistry.getStreams(senderUid) } returns emptyList()
-        every { userStreamRegistry.getStreams(receiverUid) } returns emptyList()
+        val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
+        every { userStreamRegistry.getStreams(any()) } returns listOf(observer)
 
-        pushService.pushMessage(convId, chatMessage, senderUid)
+        pushService.pushMessageToMembers(listOf(receiverUid), chatMessage)
 
-        // 验证 getStreams 没有被发送者调用（已排除）
-        verify(exactly = 0) { userStreamRegistry.getStreams(senderUid) }
-        // 但 receiverUid 被调用了
-        verify { userStreamRegistry.getStreams(receiverUid) }
+        verify(exactly = 1) { userStreamRegistry.getStreams(receiverUid) }
     }
 
     @Test
-    fun pushMessageSendsCHAT_MESSAGEEnvelopeToOnlineMembers() = runTest {
+    fun pushMessageToMembersSendsCHAT_MESSAGEEnvelopeToOnlineMembers() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
-        val members = listOf(
-            ConversationMemberInfo(userId = receiverUid, role = "member")
-        )
-        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
 
-        pushService.pushMessage(convId, chatMessage, senderUid)
+        pushService.pushMessageToMembers(listOf(receiverUid), chatMessage)
 
         // 捕获 Envelope 并验证 direction 和 pushEventType
         val envelopeSlot = slot<Envelope>()
@@ -95,19 +82,15 @@ class PushServiceTest {
     }
 
     @Test
-    fun pushMessageSingleObserverExceptionDoesNotAffectOthers() = runTest {
+    fun pushMessageToMembersSingleObserverExceptionDoesNotAffectOthers() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
-        val members = listOf(
-            ConversationMemberInfo(userId = receiverUid, role = "member")
-        )
-        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer1, observer2)
         // observer1 首次 onNext 抛异常
         every { observer1.onNext(any()) } throws RuntimeException("push failed")
 
-        pushService.pushMessage(convId, chatMessage, senderUid)
+        pushService.pushMessageToMembers(listOf(receiverUid), chatMessage)
 
         // observer1 调用一次后抛出异常，进入 catch 分支
         verify(exactly = 1) { observer1.onNext(any()) }
@@ -146,15 +129,11 @@ class PushServiceTest {
     }
 
     @Test
-    fun pushMessageNoOnlineMembersDoesNothing() = runTest {
+    fun pushMessageToMembersNoOnlineMembersDoesNothing() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
-        val members = listOf(
-            ConversationMemberInfo(userId = receiverUid, role = "member")
-        )
-        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns emptyList()
 
-        pushService.pushMessage(convId, chatMessage, senderUid)
+        pushService.pushMessageToMembers(listOf(receiverUid), chatMessage)
         // 没有 observer，getStreams 被调用但 onNext 从未被调用
         verify(exactly = 1) { userStreamRegistry.getStreams(receiverUid) }
     }

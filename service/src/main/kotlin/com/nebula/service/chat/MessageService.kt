@@ -120,16 +120,16 @@ class MessageService(
             .setServerTs(now)
             .build()
 
-        // 写入 Redis Stream
+        // 写入 Redis Stream（key 使用 camelCase 与 MessageRepositoryImpl.parseToEntity() 对齐）
         val streamFields = mapOf(
-            "msg_id" to msgId.toString(),
-            "conversation_id" to conversationId,
-            "sender_uid" to senderUid.toString(),
-            "message_type" to req.messageType.toString(),
+            "msgId" to msgId.toString(),
+            "conversationId" to conversationId,
+            "senderUid" to senderUid.toString(),
+            "messageType" to req.messageType.toString(),
             "content" to req.content,
-            "client_message_id" to req.clientMessageId,
-            "client_ts" to req.clientTs.toString(),
-            "server_ts" to now.toString(),
+            "clientMessageId" to req.clientMessageId,
+            "clientTs" to req.clientTs.toString(),
+            "serverTs" to now.toString(),
             "payload" to (if (req.payload.size() > 0) java.util.Base64.getEncoder().encodeToString(req.payload.toByteArray()) else "")
         )
         withContext(Dispatchers.IO) {

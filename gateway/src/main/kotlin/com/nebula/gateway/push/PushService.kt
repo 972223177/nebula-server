@@ -42,53 +42,6 @@ class PushService(
     private val deliveryTrackingService: DeliveryTrackingService
 ) {
     /**
-     * 向会话成员推送 ChatMessage 消息（D-09, D-11, D-12）。
-     *
-     * 流程：
-     * 1. 通过 conversationService 查询会话成员列表
-     * 2. 过滤掉 excludeUid 对应的发送者（D-09）
-     * 3. 逐个遍历在线成员，构建 PUSH Envelope 并投递
-     *
-     * TODO(REVIEW-MEDIUM-4): getConversationMembers 底层是 blocking JPA 调用，
-     * 应考虑使用 withContext(Dispatchers.IO) 包裹以避免阻塞协程线程。
-     *
-     * @param convId 会话 ID
-     * @param chatMessage 待推送的 ChatMessage
-     * @param excludeUid 排除的发送者 userId，不向自己推送
-     */
-    suspend fun pushMessage(convId: String, chatMessage: ChatMessage, excludeUid: Long) {
-        // D-84/M18: 包裹 withContext(Dispatchers.IO) 避免阻塞协程线程
-        val members = withContext(Dispatchers.IO) {
-            conversationService.getConversationMembers(convId)
-        }
-        val targets = members.filter { it.userId != excludeUid }
-
-        for (member in targets) {
-            val observers = userStreamRegistry.getStreams(member.userId)
-            for (observer in observers) {
-                try {
-                    val envelope = Envelope.newBuilder()
-                        .setDirection(Direction.PUSH)
-                        .setRequestId("")
-                        .setMessage(Message.newBuilder()
-                            .setEventType(PushEventType.CHAT_MESSAGE)
-                            .setContent("")
-                            .setPayload(chatMessage.toByteString())
-                            .build())
-                        .build()
-                    observer.onNext(envelope)
-                    // D-70: 推送成功后标记为 sent 状态
-                    deliveryTrackingService.markSent(chatMessage.msgId, member.userId)
-                } catch (e: Exception) {
-                    // D-05 容错：单个 observer 推送异常不影响其他 observer
-                    logger.error(e) { "Failed to push CHAT_MESSAGE to userId=${member.userId}" }
-                    userStreamRegistry.removeStream(member.userId, observer)
-                }
-            }
-        }
-    }
-
-    /**
      * 向发送者推送已读回执 Envelope（D-15）。
      *
      * 非 suspend 函数 — 操作仅涉及内存（UserStreamRegistry.getStreams 返回快照列表），无 I/O。

@@ -6,6 +6,7 @@ import com.nebula.chat.message.ReadReportReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.Handler
+import com.nebula.gateway.handler.conversation.ConversationConstants
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.chat.MessageService
@@ -45,9 +46,6 @@ class ReadReportHandler(
     override val method: String = "message/read"
 
     companion object {
-        /** 私聊会话类型常量 */
-        private const val PRIVATE_TYPE = 0
-
         /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
     }
@@ -67,7 +65,7 @@ class ReadReportHandler(
 
         // D-27: 获取会话并判断类型
         val conversation = conversationService.getConversation(req.conversationId) ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")
-        val isPrivate = conversation.type == PRIVATE_TYPE
+        val isPrivate = conversation.type == ConversationConstants.CONV_TYPE_PRIVATE
 
         // D-23: 私聊场景推送已读回执给原发送者
         if (isPrivate) {

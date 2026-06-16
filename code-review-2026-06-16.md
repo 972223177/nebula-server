@@ -198,15 +198,15 @@
 | 编号 | 严重度 | 问题描述 | 状态 | 解决方案 | 涉及文件 |
 |------|--------|---------|------|----------|---------|
 | R1 | 🔴 | FriendshipRepository 游标分页方向错误 | ✅ 已修复 | `f.id > :cursor` → `f.id < :cursor`，DESC 降序取更小 id | repository/.../repository/FriendshipRepository.kt:30 |
-| R2 | 🔴 | MessageService 存在两套独立的 Redis Stream 写入路径，字段名不一致 | ⏸️ 待评估 | sendMessage 写 conversation_id，flushBatch 解析 conversationId（camelCase），需统一命名。当前未触发原因为实际未启用 Stream 写入（标记 Phase 10 处理） | service/.../MessageService.kt, repository/.../MessageRepositoryImpl.kt |
+| R2 | 🔴 | MessageService 存在两套独立的 Redis Stream 写入路径，字段名不一致 | ✅ 已修复 | sendMessage 中 Stream key 从 snake_case 改为 camelCase，与 parseToEntity 对齐 | service/.../MessageService.kt:124-133, repository/.../MessageRepositoryImpl.kt:61 |
 | R7 | 🔴 | JpaConfig.getRepository 每次创建新 EntityManager 但未关闭 | ✅ 已修复 | 复用单例 EntityManager 实例（lateinit var），添加 close() 方法防止连接泄漏 | repository/.../config/JpaConfig.kt:52-90 |
 | R8 | 🔴 | MessageQueueRepository 去重 SETNX + EXPIRE 非原子 | ✅ 已修复 | 改用 Lettuce SetArgs.Builder.nx().ex(ttl) 单次原子操作替代 SETNX+EXPIRE | repository/.../redis/MessageQueueRepository.kt:115-119 |
 | R9 | 🟡 | JPA 实体完全缺少 @ManyToOne / @OneToMany 关联映射 | ⏸️ 暂不修复 | @ManyToOne/@OneToMany 引入懒加载/N+1 等问题，当前通过 ID 字段手动 JOIN 更可控 | — |
-| R10 | 🟡 | MessageService.sendMessage 中的会话更新与消息写入不同步 | ⏸️ 待评估 | Handler 层 TransactionTemplate 包裹保证事务，但跨仓储写入需进一步验证边界 | — |
-| R15 | 🟡 | PrivacyRepository 使用不安全的类型转换 | ⏸️ 待评估 | 需具体检查 as 转换代码并添加安全检查和错误处理 | — |
-| R16 | 🟡 | OnlineStatusRepository.batchGetStatus 返回顺序依赖 | ⏸️ 待评估 | 确认 Redis MGET 返回顺序与输入键顺序的对应关系，添加文档或改用 Map 返回 | — |
-| R19 | 🟡 | MessageRepositoryImpl.flushBatch 事务管理风险 | ⏸️ 待评估 | 批量写入失败时部分消息可能已提交，需评估全部回滚或部分成功语义 | — |
-| R20 | 🟡 | SessionRepository.batchDelete 使用 async API 可能阻塞 | ⏸️ 待评估 | 确认 Redis async API 在同步调用上下文中的阻塞行为 | — |
+| R10 | 🟡 | MessageService.sendMessage 中的会话更新与消息写入不同步 | ⏸️ 暂不修复 | Handler 层 TransactionTemplate 已包裹事务保证，当前设计可行 | — |
+| R15 | 🟡 | PrivacyRepository 使用不安全的类型转换 | ✅ 已修复 | mget() 返回使用 as? 安全转换 + null 安全处理，替代 as 强制转换和 @Suppress | repository/.../redis/PrivacyRepository.kt:157-158 |
+| R16 | 🟡 | OnlineStatusRepository.batchGetStatus 返回顺序依赖 | ⏸️ 暂不修复 | Redis MGET 官方文档明确保证返回顺序与输入键顺序一致，非碰巧对 | — |
+| R19 | 🟡 | MessageRepositoryImpl.flushBatch 事务管理风险 | ⏸️ 暂不修复 | 每 30 条 flush+clear 是标准批处理模式，部分成功语义优于全部回滚 | — |
+| R20 | 🟡 | SessionRepository.batchDelete 使用 async API 可能阻塞 | ⏸️ 暂不修复 | Lettuce pipeline 模式：autoFlush=false 时 async.del() 仅缓冲命令，不阻塞 | — |
 | R21 | 🟡 | V5 迁移中 dead_letters.client_msg_id 改为 UNIQUE | ⏸️ 暂不修复 | 迁移已执行，回滚风险高；client_msg_id 唯一保证业务正确性 | — |
 | R23 | 🔵 | Entity 中魔法数字可用 enum 替代 | ⏸️ 暂不修复 | 低优先级重构债务，不影响功能正确性 | — |
 | R24 | 🔵 | Redis Key 命名风格不统一 | ⏸️ 暂不修复 | 低优先级重构债务 | — |
@@ -225,10 +225,10 @@
 | R4 | 🔴 | ConversationService.createGroup 缺少事务边界 | ⏸️ 暂不修复 | 同上，Handler 层 TransactionTemplate 保证 | — |
 | R5 | 🔴 | MessageService.sendMessage 去重步骤被跳过 | ⏸️ 非缺陷 | 去重已移至 Handler 层（SendMessageHandler.kt:62-71），有意架构选择 | — |
 | R11 | 🟡 | UserService 每次创建 BCryptPasswordEncoder | ✅ 已修复 | 提取为 lazy 属性 passwordEncoder，register() 和 verifyPassword() 复用单例，减少 GC 压力 | service/.../user/UserService.kt |
-| R12 | 🟡 | UserService.register 用户名唯一性检查存在 TOCTOU 竞态 | ⏸️ 待评估 | 添加 DB 唯一约束最彻底，应用层 synchronized 仅保单节点 | — |
+| R12 | 🟡 | UserService.register 用户名唯一性检查存在 TOCTOU 竞态 | ✅ 已修复 | save() 外层 catch DataIntegrityViolationException 转为 USERNAME_EXISTS；DB 已有 UNIQUE KEY uk_username 兜底 | service/.../user/UserService.kt:99-102 |
 | R13 | 🟡 | ConversationService.inviteMember 成员计数不准确 | ✅ 已修复 | 重新邀请已退出成员仅恢复 deleted=0，不加入 newMemberUids，避免重复计数 | service/.../conversation/ConversationService.kt:210-231 |
-| R14 | 🟡 | SeqService.nextSeq 序列号重置存在竞态 | ⏸️ 待评估 | GET→检查→SET 需改为 Lua 脚本原子操作，Phase 10 消息可靠性规划中处理 | — |
-| R17 | 🟡 | DeadLetterService.compensate 中 re-enqueue 与 status 更新不在同一事务 | ⏸️ 待评估 | re-enqueue 与 status 更新需在同一事务或引入补偿事务，Phase 10 处理 | — |
+| R14 | 🟡 | SeqService.nextSeq 序列号重置存在竞态 | ⏸️ 暂不修复 | MAX_SEQ_THRESHOLD = Long.MAX_VALUE - 10000 ≈ 9.2×10^18，单会话消息数永不可达，仅理论风险 | — |
+| R17 | 🟡 | DeadLetterService.compensate 中 re-enqueue 与 status 更新不在同一事务 | ⏸️ 暂不修复 | 跨 Redis+MySQL 事务需 saga 补偿模式，属 v1.2 增强项 | — |
 | R18 | 🟡 | FriendService.listFriends 未设置 nextCursor | ✅ 已修复 | 设置 nextCursor（取 result.last().id）和 hasMore，Proto 新增字段 | service/.../friend/FriendService.kt:345-365, proto/.../friend/friend.proto |
 | R22 | 🟡 | ConversationService.leaveGroup 未处理最后一个成员场景 | ✅ 已修复 | 活跃成员仅 1 人时直接解散群组；群主多成员场景抛异常提示转让或解散 | service/.../conversation/ConversationService.kt:246-271 |
 | R27 | 🔵 | FriendService.addFriend 方法过长（~100行） | ⏸️ 暂不修复 | 约 100 行在可接受范围内，暂无功能 bug，按需提取子方法 | — |
@@ -243,22 +243,22 @@
 | GC1 | 🔴 | SendMessageHandler fire-and-forget 中异常静默吞没 | ✅ 已修复 | 增强异常日志上下文（msgId/convId/senderUid），添加 DeadLetterCallback 扩展 TODO | gateway/.../handler/chat/send/SendMessageHandler.kt:133 |
 | GC2 | 🔴 | runBlocking 在事务模板内阻塞协程线程 | ⏸️ 暂不修复 | runBlocking 改造为完整 suspend 重构，影响事务管理，需单独规划 | — |
 | GC3 | 🔴 | LeaveGroupHandler 事务返回值被忽略，潜在 NPE | ✅ 已修复 | 群主路径调用新增 dissolveGroup(convId) 解散群组，Service 新增解散方法 | gateway/.../handler/conversation/LeaveGroupHandler.kt:59, service/.../conversation/ConversationService.kt |
-| GC4 | 🔴 | AuthInterceptor admin/ 前缀完全绕过认证 | ⏸️ 待确认 | admin/ 前缀白名单认证放宽是当前设计意图，需确认生产环境是否应移除或加 IP 白名单 | — |
-| GC5 | 🔴 | LoginHandler Token 重连未验证 Token 与设备/用户的绑定关系 | ⏸️ 待评估 | Token 与(设备+用户)绑定关系校验涉及 Session Store 结构变更，Phase 10 处理 | — |
+| GC4 | 🔴 | AuthInterceptor admin/ 前缀完全绕过认证 | ⏸️ 暂不修复 | 当前 admin/ 白名单是有意设计（Phase 10 已审计），标记为已知风险，v1.2 加 IP 白名单或 basic auth | — |
+| GC5 | 🔴 | LoginHandler Token 重连未验证 Token 与设备/用户的绑定关系 | ⏸️ 暂不修复 | v1.2 处理：需 Session Store 加 deviceId，跨模块大改 | — |
 | GI1 | 🟡 | Dispatcher handlerChain.proceed 忽略 chain 传入的 request | ✅ 已修复 | proceed() 内使用 request.method 替代闭包 method；新增 currentRequest var 跟踪链中最新 request | gateway/.../dispatcher/Dispatcher.kt |
-| GI2 | 🟡 | SessionRegistry L1/L2 双写先 L1 后 L2，L2 失败无补偿 | ⏸️ 待评估 | L1→L2 写入顺序确保主路径优先，L2 失败不阻塞主流程。完全补偿需事件溯源，成本高 | — |
+| GI2 | 🟡 | SessionRegistry L1/L2 双写先 L1 后 L2，L2 失败无补偿 | ⏸️ 暂不修复 | 完全补偿需事件溯源，成本极高。L2 失败仅影响多节点一致性，单节点不依赖 L2 | — |
 | GI3 | 🟡 | ReadReportHandler redis.del() 无异常保护 | ✅ 已修复 | redis.del() 包裹 try-catch，异常不中断已读上报主流程 | gateway/.../handler/message/ReadReportHandler.kt:61-66 |
 | GI4 | 🟡 | SetPrivacyHandler 空 catch 块静默吞没所有异常 | ✅ 已修复 | catch 块添加 logger.error(e) { "..." } 日志记录，保留异常上下文 | gateway/.../handler/user/SetPrivacyHandler.kt:76-82 |
-| GI5 | 🟡 | RateLimitInterceptor 信号量清理有竞态条件 | ⏸️ 待评估 | removeIf 对 ConcurrentHashMap 弱一致性不影响正确性（清理不及时但不泄漏，可接受） | — |
+| GI5 | 🟡 | RateLimitInterceptor 信号量清理有竞态条件 | ⏸️ 暂不修复 | ConcurrentHashMap.removeIf 弱一致性不影响正确性（清理不及时但不泄漏，可接受） | — |
 | GI6 | 🟡 | ConversationLockManager 锁永不释放，可能导致内存泄漏 | ✅ 已修复 | withLock() 改为 try-finally 结构，finally 块 locks.remove() 防止 Map 无限增长 | gateway/.../handler/conversation/ConversationLockManager.kt:36-44 |
 | GI7 | 🟡 | ProtoCodec.deserialize 空 ByteString 可能抛异常 | ✅ 已修复 | deserialize() 开头添加 if (params.isEmpty) return ByteArray(0) 空字节保护 | gateway/.../codec/ProtoCodec.kt:81-87 |
 | GI8 | 🟡 | FriendAddHandler 死代码路径 | ➡ 非缺陷 | 两行 throw 是防御性编程：if 处理"已存在未删除好友"，else 处理"UK 冲突但异常状态"，逻辑独立非死代码 | — |
 | GI9 | 🟡 | FriendAcceptHandler/KickMemberHandler/InviteMemberHandler 未使用的依赖注入 | ⏸️ 暂不修复 | 部分 Handler 接收 ConversationLockManager/TransactionTemplate 但未使用，需逐个排查（可能为将来预留） | — |
 | GS1 | 🔵 | Dispatcher Handler 未找到时的错误信息可暴露内部 method 名 | ⏸️ 暂不修复 | 返回 method 名有助于客户端调试，内部 method 名非敏感信息 | — |
 | GS2 | 🔵 | LogInterceptor 硬编码 200 判断成功 | ✅ 已修复 | resp.code != 200 → resp.code != BizCode.OK.code | gateway/.../interceptor/LogInterceptor.kt:26 |
-| GS3 | 🔵 | ConversationConstants 与 ReadReportHandler PRIVATE_TYPE 常量不一致 | ⏸️ 待评估 | Private 类型常量在不同文件中的一致性问题，提取到统一常量类 | — |
+| GS3 | 🔵 | ConversationConstants 与 ReadReportHandler PRIVATE_TYPE 常量不一致 | ✅ 已修复 | 删除 ReadReportHandler 中 PRIVATE_TYPE = 0（错误值），改为引用 ConversationConstants.CONV_TYPE_PRIVATE = 1。修复私聊已读回执推送不触发的 bug | gateway/.../ReadReportHandler.kt:49,67 |
 | GS4 | 🔵 | MessageSeqHandler 参数校验应统一到 Service 层 | ⏸️ 暂不修复 | 架构优化建议，不影响功能，后续统一调整 | — |
-| GS5 | 🔵 | PushService.pushMessage 未被调用（代码死代码） | ⏸️ 待确认 | 确认 PushService.pushMessage 是否确实无用，若确认则删除并移除相关 mock | — |
+| GS5 | 🔵 | PushService.pushMessage 未被调用（代码死代码） | ✅ 已修复 | 确认无生产代码调用后删除 pushMessage() 方法，4 个测试用例改为测试 pushMessageToMembers | gateway/.../PushService.kt:59-89, gateway/.../PushServiceTest.kt |
 | GS6 | 🔵 | DeliveryHandlerCollector 空实现占位 | ⏸️ 暂不修复 | 空实现为 Phase 10 占位（delivery-ack 去重），待 Phase 10 实现 | — |
 | GS7 | 🔵 | 部分 Collector 文件注释较简略 | ⏸️ 暂不修复 | 不影响功能，下次修改相关文件时补充 | — |
 
@@ -270,7 +270,7 @@
 | S2 | 🔴 | server 模块直接依赖 repository 模块，破坏分层架构 | ⏸️ 暂不修复 | 分层违规需通过引入 server API 接口或拆出独立模块解决，涉及大面积重构 | server/build.gradle.kts, server/.../NebulaServer.kt |
 | S3 | 🔴 | docker-compose.yml 和 dev.conf 硬编码密码 | ⏸️ 暂不修复 | 密码为开发环境测试用，生产环境需通过环境变量注入。标记为技术债务，部署时解决 | docker-compose.yml, config/dev.conf |
 | S4 | 🔴 | SessionRegistry 从未刷新 TTL，活跃用户 Session 7 天必然过期 | ✅ 已修复 | SessionStore 接口新增 refreshTtl()，SessionRegistry 代理调用，AuthInterceptor 认证后刷新 TTL | common/.../session/SessionStore.kt, repository/.../redis/SessionRepository.kt, gateway/.../session/SessionRegistry.kt, gateway/.../interceptor/AuthInterceptor.kt |
-| S5 | 🔴 | LoginHandler Token 重连存在 TTL 空窗期 | ⏸️ 待评估 | TTL 空窗期与 Session 管理机制相关，Phase 10 统一处理 | — |
+| S5 | 🔴 | LoginHandler Token 重连存在 TTL 空窗期 | ⏸️ 暂不修复 | v1.2 处理：Session 生命周期管理需整体方案，Phase 10 已处理 TTL 刷新（S4 ✅） | — |
 | S6 | 🔴 | 无 gRPC 双向流端到端集成测试 | ⏸️ 暂不修复 | gRPC 双向流集成测试框架搭建复杂，需为 Phase 10 预留专项测试规划 | — |
 | S7 | 🔴 | ChatServer.stop() 仅等待 5 秒 | ✅ 已修复 | stop() 中 awaitTermination 从 5s → 30s，给高负载场景缓冲消息足够写入时间 | server/.../server/ChatServer.kt |
 | S8 | 🟡 | server/build.gradle.kts 存在大量冗余依赖声明 | ⏸️ 暂不修复 | 冗余依赖不造成运行时问题，依赖清理需逐项验证各模块是否真正使用 | — |
