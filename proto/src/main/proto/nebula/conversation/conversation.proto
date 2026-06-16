@@ -121,6 +121,13 @@ message GroupUpdatedPayload {
   optional string avatar_url = 3;     // 新群头像 URL（不传则不修改）
 }
 
+// 群邀请通知（推送给被邀请者）
+message GroupInvitedPayload {
+  string conversation_id = 1;         // 会话 ID
+  string name = 2;                    // 群名称
+  int64 inviter_uid = 3;              // 邀请人 UID
+}
+
 // 群解散通知
 message GroupDissolvedPayload {
   string conversation_id = 1;         // 会话 ID

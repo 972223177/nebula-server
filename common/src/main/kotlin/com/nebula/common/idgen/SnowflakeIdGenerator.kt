@@ -97,10 +97,11 @@ class SnowflakeIdGenerator(
     }
 
     /**
-     * 忙等待直到系统时间越过 [lastTimestamp]。
+     * 带退避的忙等待，直到系统时间越过 [lastTimestamp]。
      *
-     * 不采用 Thread.sleep 以避免不可预测的唤醒延迟，尤其在毫秒粒度下 sleep(1)
-     * 实际可能休眠 2~15ms，自旋消耗 CPU 但延迟远低于 sleep。
+     * 每次检查后调用 [Thread.sleep]\(1) 退避 1ms，避免纯自旋消耗 CPU。
+     * sleep(1) 实际休眠时长可能为 2~15ms，但此方法仅在序列号耗尽时触发（每毫秒 4096 次后），
+     * 属于低概率路径，延迟可接受。高频路径（同毫秒递增序列号）不受影响。
      *
      * @param lastTimestamp 上次生成 ID 时记录的时间戳
      * @return 越过 lastTimestamp 后的当前毫秒时间戳
@@ -108,6 +109,7 @@ class SnowflakeIdGenerator(
     private fun waitNextMillis(lastTimestamp: Long): Long {
         var timestamp = clock.millis()
         while (timestamp <= lastTimestamp) {
+            Thread.sleep(1) // 退避 1ms，避免纯自旋消耗 CPU
             timestamp = clock.millis()
         }
         return timestamp

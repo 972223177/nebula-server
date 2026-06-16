@@ -60,9 +60,11 @@ class FriendAddHandler(
             val larger = maxOf(fromUid, req.toUid)
             val existingFriendship = friendService.findFriendshipBetween(smaller, larger)
             if (existingFriendship != null && existingFriendship.deleted == 0) {
+                // 已存在未删除的好友关系 → 直接返回 ALREADY_FRIEND
                 throw FriendException(BizCode.ALREADY_FRIEND)
             }
-            // 理论上不会走到这里；防御性编程
+            // 防御性编程：UK 冲突意味着 DB 中已存在记录，若走到此处说明出现异常状态
+            // （如 existingFriendship==null 或 deleted!=0），按冲突处理返回 ALREADY_FRIEND
             throw FriendException(BizCode.ALREADY_FRIEND)
         }
 

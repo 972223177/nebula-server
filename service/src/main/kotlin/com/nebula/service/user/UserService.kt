@@ -47,6 +47,16 @@ class UserService(
     }
 
     /**
+     * BCrypt 密码编码器，延迟初始化为单例复用。
+     *
+     * [BCryptPasswordEncoder] 本身是线程安全的，使用 [by lazy] 确保全局唯一实例，
+     * 避免 register() 和 verifyPassword() 中重复创建对象，减少高频场景下的 GC 压力。
+     */
+    private val passwordEncoder: BCryptPasswordEncoder by lazy {
+        BCryptPasswordEncoder(BCRYPT_COST)
+    }
+
+    /**
      * 用户注册（D-01, D-02, AUTH-01）。
      *
      * 校验用户名唯一性 → 校验密码强度 → BCrypt 哈希密码 → 生成 Snowflake ID → 持久化。
@@ -73,8 +83,7 @@ class UserService(
         }
 
         // BCrypt 哈希密码
-        val encoder = BCryptPasswordEncoder(BCRYPT_COST)
-        val passwordHash = encoder.encode(password)
+        val passwordHash = passwordEncoder.encode(password)
 
         val user = UserEntity(
             username = username,
@@ -230,7 +239,6 @@ class UserService(
      * @return 是否匹配
      */
     fun verifyPassword(rawPassword: String, storedHash: String): Boolean {
-        val encoder = BCryptPasswordEncoder(BCRYPT_COST)
-        return encoder.matches(rawPassword, storedHash)
+        return passwordEncoder.matches(rawPassword, storedHash)
     }
 }
