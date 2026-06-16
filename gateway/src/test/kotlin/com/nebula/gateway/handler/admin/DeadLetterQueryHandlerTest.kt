@@ -2,7 +2,7 @@ package com.nebula.gateway.handler.admin
 
 import com.nebula.chat.admin.DeadLetterQueryReq
 import com.nebula.chat.admin.DeadLetterQueryResp
-import com.nebula.repository.entity.DeadLetterEntity
+import com.nebula.service.admin.DeadLetterDTO
 import com.nebula.service.admin.DeadLetterService
 import io.mockk.clearMocks
 import io.mockk.coEvery
@@ -13,7 +13,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.PageRequest
-import java.time.LocalDateTime
+
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -37,22 +37,18 @@ class DeadLetterQueryHandlerTest {
     private lateinit var deadLetterService: DeadLetterService
     private lateinit var handler: DeadLetterQueryHandler
 
-    /** 通用的测试实体，字段值用于断言检查 */
-    private val testEntity: DeadLetterEntity by lazy {
-        DeadLetterEntity(
+    /** 通用的测试 DTO，字段值用于断言检查 */
+    private val testEntity: DeadLetterDTO by lazy {
+        DeadLetterDTO(
+            id = 42L,
+            msgId = 100L,
             conversationId = "conv-001",
             senderUid = 1L,
-            messageType = 1,
-            content = "测试消息内容",
-            clientTs = 1000L,
             failReason = "超时",
             failCount = 3,
-            status = "pending"
-        ).apply {
-            id = 42L
-            msgId = 100L
-            createdAt = LocalDateTime.of(2024, 1, 15, 10, 30, 0)
-        }
+            status = "pending",
+            createdAt = 1705314600000L
+        )
     }
 
     @BeforeEach
@@ -157,16 +153,16 @@ class DeadLetterQueryHandlerTest {
 
     @Test
     fun handleShouldConvertEntityToProto() = runTest {
-        // 准备：实体的所有 nullable 字段均为 null
-        val nullEntity = DeadLetterEntity(
+        // 准备：DTO 的可空字段均为 null/默认值
+        val nullEntity = DeadLetterDTO(
+            id = 0L,
+            msgId = null,
             conversationId = "conv-001",
             senderUid = 1L,
-            messageType = 1,
-            content = "test",
-            clientTs = 1000L,
             failReason = "timeout",
             failCount = 3,
-            status = "pending"
+            status = "pending",
+            createdAt = 0L
         )
         val page = PageImpl(
             listOf(nullEntity),
@@ -209,7 +205,7 @@ class DeadLetterQueryHandlerTest {
     @Test
     fun handleShouldReturnEmptyResultForNoMatchingRecords() = runTest {
         // 准备：空结果分页
-        val emptyPage = PageImpl<DeadLetterEntity>(
+        val emptyPage = PageImpl<DeadLetterDTO>(
             emptyList(),
             PageRequest.of(0, 20),
             0L

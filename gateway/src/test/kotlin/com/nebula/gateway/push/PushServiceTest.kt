@@ -7,10 +7,11 @@ import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.repository.ConversationMemberRepository
+import com.nebula.service.conversation.ConversationService
+import com.nebula.service.conversation.ConversationMemberInfo
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -36,7 +37,7 @@ import kotlin.test.assertNotNull
 class PushServiceTest {
 
     private lateinit var userStreamRegistry: UserStreamRegistry
-    private lateinit var conversationMemberRepository: ConversationMemberRepository
+    private lateinit var conversationService: ConversationService
     private lateinit var deliveryTrackingService: DeliveryTrackingService
     private lateinit var pushService: PushService
 
@@ -48,19 +49,19 @@ class PushServiceTest {
     @BeforeEach
     fun setUp() {
         userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true)
-        conversationMemberRepository = mockk<ConversationMemberRepository>(relaxed = true)
+        conversationService = mockk<ConversationService>(relaxed = true)
         deliveryTrackingService = mockk<DeliveryTrackingService>(relaxed = true)
-        pushService = PushService(userStreamRegistry, conversationMemberRepository, deliveryTrackingService)
+        pushService = PushService(userStreamRegistry, conversationService, deliveryTrackingService)
     }
 
     @Test
     fun pushMessageExcludesSenderFromPushTargets() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, senderUid),
-            ConversationMemberEntity(convId, receiverUid)
+            ConversationMemberInfo(userId = senderUid, role = "member"),
+            ConversationMemberInfo(userId = receiverUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(senderUid) } returns emptyList()
         every { userStreamRegistry.getStreams(receiverUid) } returns emptyList()
 
@@ -77,9 +78,9 @@ class PushServiceTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, receiverUid)
+            ConversationMemberInfo(userId = receiverUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
 
         pushService.pushMessage(convId, chatMessage, senderUid)
@@ -99,9 +100,9 @@ class PushServiceTest {
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, receiverUid)
+            ConversationMemberInfo(userId = receiverUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer1, observer2)
         // observer1 首次 onNext 抛异常
         every { observer1.onNext(any()) } throws RuntimeException("push failed")
@@ -148,9 +149,9 @@ class PushServiceTest {
     fun pushMessageNoOnlineMembersDoesNothing() = runTest {
         val chatMessage = mockk<ChatMessage>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, receiverUid)
+            ConversationMemberInfo(userId = receiverUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns emptyList()
 
         pushService.pushMessage(convId, chatMessage, senderUid)
@@ -164,10 +165,10 @@ class PushServiceTest {
     fun pushConversationEventExcludesSpecifiedUidsFromPushTargets() = runTest {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, receiverUid),
-            ConversationMemberEntity(convId, otherUid)
+            ConversationMemberInfo(userId = receiverUid, role = "member"),
+            ConversationMemberInfo(userId = otherUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
         every { userStreamRegistry.getStreams(otherUid) } returns emptyList()
 
@@ -193,9 +194,9 @@ class PushServiceTest {
     fun pushConversationEventExcludesAllUidsWithEmptySetAsDefault() = runTest {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, receiverUid)
+            ConversationMemberInfo(userId = receiverUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
 
         // 默认 excludeUids = emptySet，所有成员均收到推送
@@ -213,9 +214,9 @@ class PushServiceTest {
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberEntity(convId, receiverUid)
+            ConversationMemberInfo(userId = receiverUid, role = "member")
         )
-        every { conversationMemberRepository.findByConversationId(convId) } returns members
+        coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer1, observer2)
         // observer1 异常
         every { observer1.onNext(any()) } throws RuntimeException("push failed")

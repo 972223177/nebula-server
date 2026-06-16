@@ -11,9 +11,9 @@ import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.user.OnlineStatusService
+import com.nebula.service.friend.FriendService
+import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.admin.DeadLetterService
 import io.grpc.stub.StreamObserver
 import io.mockk.coEvery
@@ -57,10 +57,10 @@ class ChatServiceReconnectIntegrationTest {
     private lateinit var userStreamRegistry: UserStreamRegistry
     private lateinit var dispatcher: Dispatcher
     private lateinit var handlerRegistry: HandlerRegistry
-    private lateinit var onlineStatusRepository: OnlineStatusRepository
-    private lateinit var friendshipRepository: FriendshipRepository
+    private lateinit var onlineStatusService: OnlineStatusService
+    private lateinit var friendService: FriendService
     private lateinit var pushService: PushService
-    private lateinit var privacyRepository: PrivacyRepository
+    private lateinit var privacyService: UserPrivacyService
     private lateinit var deadLetterService: DeadLetterService
     private lateinit var mockResponseObserver: StreamObserver<Envelope>
     private lateinit var chatService: ChatService
@@ -206,10 +206,10 @@ class ChatServiceReconnectIntegrationTest {
             sessionRegistry = sessionRegistry,
             registry = handlerRegistry,
             userStreamRegistry = userStreamRegistry,
-            onlineStatusRepository = onlineStatusRepository,
-            friendshipRepository = friendshipRepository,
+            onlineStatusService = onlineStatusService,
+            friendService = friendService,
             pushService = pushService,
-            privacyRepository = privacyRepository,
+            privacyService = privacyService,
             deadLetterService = deadLetterService,
             scope = scope
         )
@@ -226,10 +226,10 @@ class ChatServiceReconnectIntegrationTest {
         userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true)
         dispatcher = mockk<Dispatcher>(relaxed = true)
         handlerRegistry = mockk<HandlerRegistry>(relaxed = true)
-        onlineStatusRepository = mockk<OnlineStatusRepository>(relaxed = true)
-        friendshipRepository = mockk<FriendshipRepository>(relaxed = true)
+        onlineStatusService = mockk<OnlineStatusService>(relaxed = true)
+        friendService = mockk<FriendService>(relaxed = true)
         pushService = mockk<PushService>(relaxed = true)
-        privacyRepository = mockk<PrivacyRepository>(relaxed = true)
+        privacyService = mockk<UserPrivacyService>(relaxed = true)
         deadLetterService = mockk<DeadLetterService>(relaxed = true)
         mockResponseObserver = mockk(relaxed = true)
 
@@ -505,8 +505,8 @@ class ChatServiceReconnectIntegrationTest {
         // Given: 创建 ChatStreamObserver，首次注册无旧连接被驱逐
         val observer = createChatStreamObserver(mockResponseObserver)
         coEvery { sessionRegistry.registerWithDeviceType(any()) } returns null
-        coEvery { friendshipRepository.findFriendsByUserId(any(), any(), any()) } returns emptyList()
-        coEvery { onlineStatusRepository.setOnline(any()) } returns Unit
+        coEvery { friendService.findFriendsByUserId(any()) } returns emptyList()
+        coEvery { onlineStatusService.setOnline(any()) } returns Unit
 
         val response = buildLoginResponse()
 
@@ -527,8 +527,8 @@ class ChatServiceReconnectIntegrationTest {
         val oldToken = "old-token"
         val observer = createChatStreamObserver(mockResponseObserver)
         coEvery { sessionRegistry.registerWithDeviceType(any()) } returns oldToken
-        coEvery { friendshipRepository.findFriendsByUserId(any(), any(), any()) } returns emptyList()
-        coEvery { onlineStatusRepository.setOnline(any()) } returns Unit
+        coEvery { friendService.findFriendsByUserId(any()) } returns emptyList()
+        coEvery { onlineStatusService.setOnline(any()) } returns Unit
 
         val response = buildLoginResponse()
 

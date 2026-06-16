@@ -6,9 +6,9 @@ import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.user.OnlineStatusService
+import com.nebula.service.friend.FriendService
+import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.admin.DeadLetterService
 import io.grpc.stub.StreamObserver
 import io.mockk.every
@@ -52,10 +52,10 @@ class ChatServiceReconnectTest {
             sessionRegistry = sessionRegistry,
             registry = mockk<HandlerRegistry>(relaxed = true),
             userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true),
-            onlineStatusRepository = mockk<OnlineStatusRepository>(relaxed = true),
-            friendshipRepository = mockk<FriendshipRepository>(relaxed = true),
+            onlineStatusService = mockk<OnlineStatusService>(relaxed = true),
+            friendService = mockk<FriendService>(relaxed = true),
             pushService = mockk<PushService>(relaxed = true),
-            privacyRepository = mockk<PrivacyRepository>(relaxed = true),
+            privacyService = mockk<UserPrivacyService>(relaxed = true),
             deadLetterService = mockk<DeadLetterService>(relaxed = true)
         )
 

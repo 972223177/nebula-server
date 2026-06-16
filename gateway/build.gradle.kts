@@ -68,6 +68,8 @@ dependencies {
     testImplementation(libs.protobuf.java)
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.lettuce.core)
+    testImplementation(project(":repository"))
+    testImplementation(project(":service"))
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

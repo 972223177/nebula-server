@@ -12,8 +12,8 @@ import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.singleHandlerDispatcher
-import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.repository.FriendshipRepository
+import com.nebula.service.friend.FriendService
+import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -40,9 +40,9 @@ class PrivacySmokeTest {
     // ========== Mock 依赖 ==========
 
     private lateinit var userPrivacyService: UserPrivacyService
-    private lateinit var onlineStatusRepo: OnlineStatusRepository
+    private lateinit var onlineStatusService: OnlineStatusService
     private lateinit var pushService: PushService
-    private lateinit var friendshipRepo: FriendshipRepository
+    private lateinit var friendService: FriendService
     private lateinit var sessionRegistry: SessionRegistry
 
     /** 测试用户 */
@@ -54,9 +54,9 @@ class PrivacySmokeTest {
     @BeforeEach
     fun setUp() {
         userPrivacyService = mockk()
-        onlineStatusRepo = mockk()
+        onlineStatusService = mockk()
         pushService = mockk(relaxed = true)
-        friendshipRepo = mockk(relaxed = true)
+        friendService = mockk(relaxed = true)
         sessionRegistry = mockk()
     }
 
@@ -76,10 +76,10 @@ class PrivacySmokeTest {
     fun fullFlowShouldHideThenVerify() = runTest {
         // ---- 步骤 1: 设置隐藏 ----
         coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
-        coEvery { onlineStatusRepo.setHidden(1001L) } returns Unit
+        coEvery { onlineStatusService.setHidden(1001L) } returns Unit
 
         val setDispatcher = singleHandlerDispatcher(
-            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo, pushScope),
+            SetPrivacyHandler(userPrivacyService, onlineStatusService, pushService, friendService, pushScope),
             SetPrivacyReq::class, Response::class
         )
 
@@ -106,10 +106,10 @@ class PrivacySmokeTest {
     fun fullFlowShouldShowThenVerify() = runTest {
         // ---- 步骤 1: 设置可见 ----
         coEvery { userPrivacyService.setHideOnlineStatus(any(), any()) } returns Unit
-        coEvery { onlineStatusRepo.setOnline(1001L) } returns Unit
+        coEvery { onlineStatusService.setOnline(1001L) } returns Unit
 
         val setDispatcher = singleHandlerDispatcher(
-            SetPrivacyHandler(userPrivacyService, onlineStatusRepo, pushService, friendshipRepo, pushScope),
+            SetPrivacyHandler(userPrivacyService, onlineStatusService, pushService, friendService, pushScope),
             SetPrivacyReq::class, Response::class
         )
 

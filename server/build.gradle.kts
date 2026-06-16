@@ -22,7 +22,6 @@ tasks.named<JavaExec>("run") {
 
 dependencies {
     implementation(project(":gateway"))
-    implementation(project(":service"))
     implementation(project(":proto"))
 
     // Phase 2 新增
@@ -37,8 +36,9 @@ dependencies {
     implementation(libs.grpc.api)
     implementation(libs.netty.tcnative)
 
-    // Phase 3 新增 — 持久化层
-    implementation(project(":repository"))
+    // Phase 3 新增 — 持久化层（测试依赖，生产代码通过 gateway 间接访问）
+    testImplementation(project(":repository"))
+    testImplementation(project(":service"))
     implementation(libs.lettuce.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.hibernate.core)
