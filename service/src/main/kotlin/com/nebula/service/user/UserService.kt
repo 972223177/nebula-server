@@ -18,6 +18,7 @@ import com.nebula.repository.repository.UserRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import java.time.Instant
 import java.time.LocalDateTime
@@ -96,7 +97,12 @@ class UserService(
         user.createdAt = now
         user.updatedAt = now
 
-        withContext(Dispatchers.IO) { userRepository.save(user) }
+        // 持久化用户（DB UNIQUE KEY uk_username 兜底，catch 异常转为业务错误）
+        try {
+            withContext(Dispatchers.IO) { userRepository.save(user) }
+        } catch (e: DataIntegrityViolationException) {
+            throw UserException(BizCode.USERNAME_EXISTS, "用户名已存在")
+        }
 
         return requireNotNull(user.id) { "用户ID不能为null" }
     }

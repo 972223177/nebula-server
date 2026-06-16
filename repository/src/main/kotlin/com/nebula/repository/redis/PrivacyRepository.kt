@@ -154,8 +154,8 @@ class PrivacyRepository(
         return try {
             withTimeout(REDIS_TIMEOUT_MS) {
                 val keys: kotlin.Array<String> = userIds.map { "$KEY_PREFIX$it" }.toTypedArray()
-                @Suppress("UNCHECKED_CAST")
-                val mgetResult = redis.mget(*keys) as List<io.lettuce.core.KeyValue<String, String>>
+                // Lettuce 6.5 协程 mget 泛型擦除，需要显式类型转换；as? 安全处理防止 ClassCastException
+                val mgetResult = (redis.mget(*keys) as? List<io.lettuce.core.KeyValue<String, String>>) ?: return@withTimeout emptySet<Long>()
 
                 val hiddenUsers = mutableSetOf<Long>()
                 for (i in userIds.indices) {
