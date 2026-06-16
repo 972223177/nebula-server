@@ -43,6 +43,12 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 | 14 — 遗留问题修复 | Complete | 2026-06-16 | 2026-06-16 |
 | 15 — 测试覆盖缺口闭合 | Complete | 2026-06-16 | 2026-06-16 |
 
+## Quick Tasks Completed
+
+| Date | Slug | Description |
+|------|------|-------------|
+| 2026-06-16 | fix-ratelimit-test | 修复 RateLimitInterceptorTest 断言硬编码 429 改为 BizCode.RATE_LIMITED.code（1 个文件，验证: 通过） |
+
 ## Next Actions
 
 v1.1 已发布。后续可考虑：
