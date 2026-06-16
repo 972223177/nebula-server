@@ -25,7 +25,7 @@ tasks.test {
 }
 
 dependencies {
-    api(project(":common"))
+    implementation(project(":common"))
     implementation(project(":proto"))
 
     // JPA + Hibernate ORM (D-01)

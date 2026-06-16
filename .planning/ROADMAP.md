@@ -5,7 +5,7 @@
 
 ## Overview
 
-**11 phases** | **85 v1 requirements mapped** | 91% covered (Phase 1-10 complete)
+**12 phases** | **86 v1 requirements mapped** | 92% covered
 
 | Phase | Name | Requirements | Success Criteria |
 |-------|------|--------------|------------------|
@@ -20,6 +20,7 @@
 | 9 | Reconnection | RECON-01~05 | State machine, exponential backoff, connection cleanup |
 | 10 | Message Reliability | REL-01~04 | 3-state delivery, idempotent retry, dead letter, gap detect |
 | 11 | Code Quality & Production Hardening | CQ-01~15 | Fix 18 HIGH + 36 MEDIUM + 31 LOW issues from code review |
+| 12 | Module Dependency Isolation | INFRA-07, D-28 | All api→implementation, zero gateway→repository cross-layer refs |
 
 ---
 
@@ -427,6 +428,29 @@ Plans:
 - Phase 8 blocks 9 — online status needed for reconnection logic
 - Phase 9 blocks 10 — reconnection is foundation for message reliability
 - Phase 11 independent — can start immediately, all Phase 1-10 source code available for fixes
+- Phase 12 independent — can start immediately, all Phase 1-11 source code available for refactoring
+
+---
+
+## Phase 12: Module Dependency Isolation
+
+**Goal:** Replace all `api` project dependencies with `implementation`, eliminate gateway→repository cross-layer references, and enforce explicit dependency declaration across all modules.
+
+**Requirements:** INFRA-07, D-28
+
+**Success Criteria:**
+
+1. No `api(project(...))` declarations remain in any `build.gradle.kts`
+2. Gateway production code contains zero `com.nebula.repository.*` imports
+3. Repository module contains zero `com.nebula.service.*` imports (no reverse dependency)
+4. `./gradlew compileKotlin` passes for all production code
+5. SessionStore interface resides in common module (avoiding circular dependency)
+6. DeadLetterCallback interface resides in common module (enabling cross-layer bridge)
+
+**Plans:** 1/1 plan complete
+
+Plans:
+- [x] 12-01-PLAN.md — api→implementation + cross-layer reference elimination
 
 ---
 

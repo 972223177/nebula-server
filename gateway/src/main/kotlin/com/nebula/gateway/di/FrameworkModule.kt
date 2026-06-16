@@ -1,6 +1,7 @@
 package com.nebula.gateway.di
 
 import com.nebula.gateway.codec.ProtoCodec
+import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.dispatcher.HandlerEntry
@@ -12,6 +13,7 @@ import com.nebula.gateway.interceptor.ExceptionInterceptor
 import com.nebula.gateway.interceptor.Interceptor
 import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
+import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,10 +33,16 @@ val frameworkModule = module {
     single(named("sendHandlerScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
     single { HandlerRegistry() }
     single { ProtoCodec }
-    single { SessionRegistry(get()) } // SessionRepository 从 Koin 注入
+    single { SessionRegistry(get()) } // SessionStore 从 Koin 注入
+
+    // D-06: Dispatcher 注册 — 自动注入 HandlerRegistry + Interceptors + ProtoCodec
+    // 使用 getAll<Interceptor>() 收集所有注册的 Interceptor 实现，而非直接解析 List<T>
+    single { Dispatcher(get(), getAll<Interceptor>(), get()) }
+
+    // ChatService 注册 — 依赖 gateway 组件 + service 层组件，全部从 Koin 解析（D-28）
+    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // D-07: 拦截器以 List<Interceptor> 注入，顺序决定执行顺序
-    // Phase 5: user/login 和 user/register 不需要认证（公共方法，D-30）
     single<Interceptor> { AuthInterceptor(
         get(),
         skipMethods = setOf("system/ping", "user/login", "user/register")

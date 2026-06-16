@@ -5,6 +5,8 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 
+import com.nebula.common.session.SessionStore
+
 /**
  * Session Token 缓存操作封装（DB-02, D-13）。
  *
@@ -16,7 +18,7 @@ import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SessionRepository(
     private val connection: StatefulRedisConnection<String, String>
-) {
+) : SessionStore {
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 
     companion object {
@@ -31,7 +33,7 @@ class SessionRepository(
      * @param userData 用户数据（JSON 格式）
      * @param ttlSeconds TTL 秒数，默认 7 天
      */
-    suspend fun save(token: String, userData: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
+    override suspend fun save(token: String, userData: String, ttlSeconds: Long) {
         redis.setex("$KEY_PREFIX$token", ttlSeconds, userData)
     }
 
@@ -41,7 +43,7 @@ class SessionRepository(
      * @param token Session 令牌
      * @return 用户数据 JSON，不存在返回 null
      */
-    suspend fun findByToken(token: String): String? {
+    override suspend fun findByToken(token: String): String? {
         return redis.get("$KEY_PREFIX$token")
     }
 
@@ -60,7 +62,7 @@ class SessionRepository(
      *
      * @param token Session 令牌
      */
-    suspend fun delete(token: String) {
+    override suspend fun delete(token: String) {
         redis.del("$KEY_PREFIX$token")
     }
 
@@ -74,7 +76,7 @@ class SessionRepository(
      * @param value 字符串值
      * @param ttlSeconds TTL 秒数，默认 7 天
      */
-    suspend fun saveRaw(key: String, value: String, ttlSeconds: Long = DEFAULT_TTL_SECONDS) {
+    override suspend fun saveRaw(key: String, value: String, ttlSeconds: Long) {
         redis.setex(key, ttlSeconds, value)
     }
 
@@ -84,7 +86,7 @@ class SessionRepository(
      * @param key Redis key
      * @return 字符串值，不存在返回 null
      */
-    suspend fun findRaw(key: String): String? {
+    override suspend fun findRaw(key: String): String? {
         return redis.get(key)
     }
 
@@ -93,7 +95,7 @@ class SessionRepository(
      *
      * @param key 待删除的 key
      */
-    suspend fun deleteKey(key: String) {
+    override suspend fun deleteKey(key: String) {
         redis.del(key)
     }
 

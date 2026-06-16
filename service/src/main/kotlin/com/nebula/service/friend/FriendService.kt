@@ -398,6 +398,46 @@ class FriendService(
         }
         return builder.build()
     }
+
+    /**
+     * 查询用户的所有好友关系（不分页，仅限内部使用）。
+     *
+     * 返回 [FriendshipInfo] 替代在 gateway 层直接暴露 JPA 实体，
+     * 仅包含 gateway 层需要的 userId、friendId 和 deleted 字段。
+     *
+     * @param userId 用户 ID
+     * @return 好友关系信息 DTO 列表
+     */
+    suspend fun findFriendsByUserId(userId: Long): List<FriendshipInfo> {
+        val entities = withContext(Dispatchers.IO) {
+            friendshipRepository.findFriendsByUserId(
+                userId = userId,
+                cursor = 0,
+                pageable = org.springframework.data.domain.PageRequest.of(0, Int.MAX_VALUE)
+            )
+        }
+        return entities.map { FriendshipInfo(userId = it.userId, friendId = it.friendId, deleted = it.deleted) }
+    }
+
+    /**
+     * 查询两个用户之间的好友关系，不存在时返回 null。
+     *
+     * 返回 [FriendshipInfo] 替代在 gateway 层直接暴露 JPA 实体，
+     * 仅包含 gateway 层需要的 userId、friendId 和 deleted 字段。
+     *
+     * @param userId1 用户 ID
+     * @param userId2 用户 ID
+     * @return 好友关系信息 DTO，不存在时返回 null
+     */
+    suspend fun findFriendshipBetween(userId1: Long, userId2: Long): FriendshipInfo? {
+        val entity = withContext(Dispatchers.IO) {
+            friendshipRepository.findByUserIdAndFriendId(
+                minOf(userId1, userId2),
+                maxOf(userId1, userId2)
+            )
+        }
+        return entity?.let { FriendshipInfo(userId = it.userId, friendId = it.friendId, deleted = it.deleted) }
+    }
 }
 
 /**

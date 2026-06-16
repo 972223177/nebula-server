@@ -4,9 +4,8 @@ import com.nebula.chat.admin.DeadLetterItem
 import com.nebula.chat.admin.DeadLetterQueryReq
 import com.nebula.chat.admin.DeadLetterQueryResp
 import com.nebula.gateway.handler.Handler
-import com.nebula.repository.entity.DeadLetterEntity
+import com.nebula.service.admin.DeadLetterDTO
 import com.nebula.service.admin.DeadLetterService
-import java.time.ZoneOffset
 
 /**
  * 死信查询 Admin Handler — method = "admin/dead-letters"（Phase 10）。
@@ -30,33 +29,31 @@ class DeadLetterQueryHandler(
         val result = deadLetterService.query(page, pageSize, status)
 
         val builder = DeadLetterQueryResp.newBuilder()
-        for (entity in result.content) {
-            builder.addItems(toDeadLetterItem(entity))
+        for (dto in result.content) {
+            builder.addItems(toDeadLetterItem(dto))
         }
         builder.total = result.totalElements.toInt()
         return builder.build()
     }
 
     /**
-     * 将 [DeadLetterEntity] 转换为 [DeadLetterItem] Protobuf 消息。
+     * 将 [DeadLetterDTO] 转换为 [DeadLetterItem] Protobuf 消息。
      *
-     * createdAt 转换为毫秒时间戳（Proto 定义的 int64 类型）。
+     * createdAt 已为毫秒时间戳，直接使用。
      *
-     * @param entity 死信数据库实体
+     * @param dto 死信数据传输对象
      * @return 死信 Protobuf 消息项
      */
-    private fun toDeadLetterItem(entity: DeadLetterEntity): DeadLetterItem {
+    private fun toDeadLetterItem(dto: DeadLetterDTO): DeadLetterItem {
         return DeadLetterItem.newBuilder()
-            .setId(entity.id ?: 0)
-            .setMsgId(entity.msgId ?: 0)
-            .setConversationId(entity.conversationId)
-            .setSenderUid(entity.senderUid)
-            .setFailReason(entity.failReason)
-            .setFailCount(entity.failCount)
-            .setStatus(entity.status)
-            .setCreatedAt(
-                entity.createdAt?.toInstant(ZoneOffset.UTC)?.toEpochMilli() ?: 0L
-            )
+            .setId(dto.id)
+            .setMsgId(dto.msgId ?: 0)
+            .setConversationId(dto.conversationId)
+            .setSenderUid(dto.senderUid)
+            .setFailReason(dto.failReason)
+            .setFailCount(dto.failCount)
+            .setStatus(dto.status)
+            .setCreatedAt(dto.createdAt)
             .build()
     }
 }

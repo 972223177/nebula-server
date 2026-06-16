@@ -8,8 +8,6 @@ import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
 import com.nebula.service.conversation.ConversationService
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
@@ -31,8 +29,7 @@ class InviteMemberHandler(
     private val conversationService: ConversationService,
     private val lockManager: ConversationLockManager,
     private val transactionTemplate: org.springframework.transaction.support.TransactionTemplate,
-    private val pushService: PushService,
-    private val conversationMemberRepository: ConversationMemberRepository
+    private val pushService: PushService
 ) : Handler<InviteMemberReq, Response> {
 
     override val method: String = "conversation/invite_member"

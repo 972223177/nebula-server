@@ -44,6 +44,7 @@ GSD 流程（状态外置 + 验证闭环 + 文档驱动）
 | `/nx-integrate` | 跨阶段集成检查 |
 | `/nx-status` | 项目状态查看 |
 | `/nx-done <N>` | 阶段归档：更新 STATE.md |
+| `/nx-quick [子命令] [--expert <name>] [--team] [--consult] [--review] [--verify] [--full]` | 快捷任务：专家推断→轻量规划→Git 提交，支持 list/status/resume 管理 |
 
 ## 兼容性
 

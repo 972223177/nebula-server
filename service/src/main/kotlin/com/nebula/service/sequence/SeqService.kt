@@ -105,4 +105,40 @@ class SeqService(
         val redisKey = key(convId, uid)
         return redis.setnx(redisKey, nextSeq.toString()) ?: false
     }
+
+    /**
+     * 从 MySQL 恢复所有会话的 Redis 序列号（D-81/H21，D-28 重构版）。
+     *
+     * 原 [ServerBootstrap.recoverSequences] 直接依赖 repository 层的
+     * ConversationRepository/MessageRepository/ConversationMemberRepository。
+     * 此方法使用 service 层接口，接受查询闭包以解耦。
+     *
+     * @param conversationSupplier 获取所有会话的函数（返回 Pair<会话ID, 类型> 的列表）
+     * @param msgCountByConv 按会话 ID 统计消息数量的函数
+     * @param memberSupplier 按会话 ID 获取成员列表的函数（返回成员 UID 列表）
+     * @return 已恢复的序列号 Key 数量
+     */
+    suspend fun recoverSequences(
+        conversationSupplier: suspend () -> List<Pair<String, Int>>,
+        msgCountByConv: suspend (String) -> Long,
+        memberSupplier: suspend (String) -> List<Long>
+    ): Int {
+        logger.info { "开始从 MySQL 恢复 Redis 序列号..." }
+        var restoredCount = 0
+
+        val conversations = conversationSupplier()
+        conversations.forEach { (convId, _) ->
+            val msgCount = msgCountByConv(convId)
+            val nextSeq = msgCount + 1L
+
+            val memberIds = memberSupplier(convId)
+            memberIds.forEach { uid ->
+                val restored = tryRestoreSeq(convId, uid, nextSeq)
+                if (restored) restoredCount++
+            }
+        }
+
+        logger.info { "序列号恢复完成: $restoredCount 个 Key 已初始化（共 ${conversations.size} 个会话）" }
+        return restoredCount
+    }
 }

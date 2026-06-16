@@ -12,13 +12,10 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
-import com.nebula.repository.repository.FriendshipRepository
 import com.nebula.service.friend.FriendService
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.support.TransactionTemplate
 
@@ -35,14 +32,12 @@ import org.springframework.transaction.support.TransactionTemplate
  * @param pushService 推送服务
  * @param lockManager 会话级互斥锁管理器
  * @param transactionTemplate 编程式事务模板（D-79）
- * @param friendshipRepository 好友关系仓库（用于幂等查询）
  */
 class FriendAddHandler(
     private val friendService: FriendService,
     private val pushService: PushService,
     private val lockManager: ConversationLockManager,
-    private val transactionTemplate: TransactionTemplate,
-    private val friendshipRepository: FriendshipRepository
+    private val transactionTemplate: TransactionTemplate
 ) : Handler<FriendAddReq, FriendAddResp> {
 
     override val method: String = "friend/add"
@@ -63,9 +58,7 @@ class FriendAddHandler(
             logger.warn(e) { "好友关系已存在，幂等返回: fromUid=$fromUid, toUid=${req.toUid}" }
             val smaller = minOf(fromUid, req.toUid)
             val larger = maxOf(fromUid, req.toUid)
-            val existingFriendship = withContext(Dispatchers.IO) {
-                friendshipRepository.findByUserIdAndFriendId(smaller, larger)
-            }
+            val existingFriendship = friendService.findFriendshipBetween(smaller, larger)
             if (existingFriendship != null && existingFriendship.deleted == 0) {
                 throw FriendException(BizCode.ALREADY_FRIEND)
             }

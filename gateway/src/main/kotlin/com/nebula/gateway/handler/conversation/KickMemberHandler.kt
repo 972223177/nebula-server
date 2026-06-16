@@ -29,8 +29,7 @@ class KickMemberHandler(
     private val conversationService: ConversationService,
     private val lockManager: ConversationLockManager,
     private val transactionTemplate: org.springframework.transaction.support.TransactionTemplate,
-    private val pushService: PushService,
-    private val conversationMemberRepository: com.nebula.repository.repository.ConversationMemberRepository
+    private val pushService: PushService
 ) : Handler<KickMemberReq, Response> {
 
     override val method: String = "conversation/kick_member"

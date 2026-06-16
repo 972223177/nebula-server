@@ -1,16 +1,20 @@
 package com.nebula.service.admin
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.common.init.DeadLetterCallback
 import com.nebula.repository.entity.DeadLetterEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.repository.DeadLetterRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.OptimisticLockException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
+import java.time.ZoneOffset
 
 /**
  * 死信服务 — 提供死信记录的创建、补偿重试、查询和管理（Phase 10, D-76）。
@@ -30,7 +34,7 @@ class DeadLetterService(
     private val deadLetterRepository: DeadLetterRepository,
     private val messageQueueRepository: MessageQueueRepository,
     private val idGenerator: SnowflakeIdGenerator
-) {
+) : DeadLetterCallback {
 
     companion object {
         /** 日志记录器 */
@@ -59,9 +63,40 @@ class DeadLetterService(
     }
 
     /**
+     * 死信回调实现（D-28 跨层桥接）。
+     *
+     * 由 repository 模块在消息异步刷盘失败时调用，
+     * 创建死信记录。使用 runBlocking 桥接 suspend 方法到同步回调。
+     */
+    override fun onMessageFailed(
+        convId: String,
+        senderUid: Long,
+        msgType: Int,
+        content: String,
+        payload: ByteArray?,
+        clientMsgId: String?,
+        clientTs: Long,
+        reason: String
+    ) {
+        runBlocking {
+            create(
+                conversationId = convId,
+                senderUid = senderUid,
+                messageType = msgType,
+                content = content,
+                payload = payload,
+                clientMsgId = clientMsgId,
+                clientTs = clientTs,
+                failReason = reason
+            )
+        }
+    }
+
+    /**
      * 创建死信记录（D-75）。
      *
      * 当消息投递失败达到最大重试次数时，由 ChatService 调用此方法写入死信表。
+     * 返回 [DeadLetterDTO] 替代在 gateway 层直接暴露 JPA 实体。
      *
      * @param conversationId 会话 ID
      * @param senderUid 发送者用户 ID
@@ -71,7 +106,7 @@ class DeadLetterService(
      * @param clientMsgId 客户端消息 ID（可选）
      * @param clientTs 客户端时间戳
      * @param failReason 失败原因描述
-     * @return 创建的 DeadLetterEntity
+     * @return 创建的死信 DTO
      */
     suspend fun create(
         conversationId: String,
@@ -82,7 +117,7 @@ class DeadLetterService(
         clientMsgId: String? = null,
         clientTs: Long,
         failReason: String
-    ): DeadLetterEntity {
+    ): DeadLetterDTO {
         val entity = DeadLetterEntity(
             conversationId = conversationId,
             senderUid = senderUid,
@@ -95,11 +130,11 @@ class DeadLetterService(
             failCount = 0,
             status = STATUS_PENDING
         )
-        return withContext(Dispatchers.IO) {
+        val saved = withContext(Dispatchers.IO) {
             deadLetterRepository.save(entity)
-        }.also {
-            logger.warn { "死信记录已创建: id=${it.id}, conv=$conversationId, reason=$failReason" }
         }
+        logger.warn { "死信记录已创建: id=${saved.id}, conv=$conversationId, reason=$failReason" }
+        return saved.toDTO()
     }
 
     /**
@@ -228,9 +263,9 @@ class DeadLetterService(
      * @param page 页码（从 1 开始）
      * @param pageSize 每页条数
      * @param status 过滤状态（为空时查询全部）
-     * @return 分页结果
+     * @return DTO 分页结果
      */
-    suspend fun query(page: Int, pageSize: Int, status: String?): Page<DeadLetterEntity> {
+    suspend fun query(page: Int, pageSize: Int, status: String?): Page<DeadLetterDTO> {
         val pageable = PageRequest.of(page - 1, pageSize)
         return withContext(Dispatchers.IO) {
             if (status.isNullOrBlank()) {
@@ -242,11 +277,29 @@ class DeadLetterService(
                         val total = withContext(Dispatchers.IO) {
                             deadLetterRepository.countByStatus(status)
                         }
-                        org.springframework.data.domain.PageImpl(items, pageable, total)
+                        PageImpl(items, pageable, total)
                     }
             }
-        }
+        }.map { it.toDTO() }
     }
+
+    /**
+     * 将 [DeadLetterEntity] 转换为 [DeadLetterDTO]。
+     *
+     * 处理 `createdAt` 的 LocalDateTime → 毫秒时间戳转换，以及 `id` 为 null 时的默认值。
+     *
+     * @return 转换后的 DTO
+     */
+    private fun DeadLetterEntity.toDTO() = DeadLetterDTO(
+        id = id ?: 0,
+        msgId = msgId,
+        conversationId = conversationId,
+        senderUid = senderUid,
+        failReason = failReason,
+        failCount = failCount,
+        status = status,
+        createdAt = createdAt?.toInstant(ZoneOffset.UTC)?.toEpochMilli() ?: 0L
+    )
 
     /**
      * 标记失败次数超过阈值的死信为永久失败。
