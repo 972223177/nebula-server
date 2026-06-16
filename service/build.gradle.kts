@@ -56,4 +56,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // Docker 29.x requires minimum API version 1.44, but docker-java defaults to 1.32
+    // Ref: https://github.com/testcontainers/testcontainers-java/issues/11212
+    systemProperty("api.version", "1.44")
 }
