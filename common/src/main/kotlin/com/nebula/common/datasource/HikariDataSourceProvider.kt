@@ -21,10 +21,12 @@ class HikariDataSourceProvider(
     /**
      * Hikari 数据源实例，延迟初始化。
      *
-     * 使用 [by lazy] 保证连接池仅被构建一次，且线程安全。
+     * 直接持有 [Lazy] 委托对象（而非 [by lazy] 委托），以便通过 [Lazy.isInitialized] 检查初始化状态。
+     * 不调用就不会初始化，这里做防御性编程
+     * [lazy] 默认同步模式保证连接池仅被构建一次且线程安全。
      * 配置项包括连接串、用户名/密码、池大小、超时、泄漏检测等，并对 MySQL 做预处理语句缓存优化。
      */
-    private val hikariDataSource: HikariDataSource by lazy {
+    private val hikariDataSource: Lazy<HikariDataSource> = lazy {
         HikariConfig().apply {
             // 统一拼接 JDBC URL 以保证所有连接使用相同的 SSL、编码和时区设置
             jdbcUrl = buildJdbcUrl()
@@ -60,11 +62,11 @@ class HikariDataSourceProvider(
     /**
      * 获取 HikariCP 数据源实例，首次调用触发连接池延迟初始化。
      *
-     * [HikariDataSource] 由 [by lazy] 延迟创建，仅在首次调用时实例化并配置连接池参数。
+     * [Lazy.value] 首次访问时触发 [lazy] 初始化块，后续直接返回已构建实例。
      *
      * @return 已初始化的 [HikariDataSource] 实例
      */
-    override fun getDataSource(): DataSource = hikariDataSource
+    override fun getDataSource(): DataSource = hikariDataSource.value
 
     /**
      * 释放 HikariCP 连接池资源。
@@ -73,9 +75,7 @@ class HikariDataSourceProvider(
      * 仅在连接池已初始化时才执行关闭，未初始化时无需操作。
      */
     override fun close() {
-        if (::hikariDataSource.isInitialized()) {
-            hikariDataSource.close()
-        }
+        runCatching { hikariDataSource.value.close() }
     }
 
     /**
