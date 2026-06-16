@@ -18,12 +18,13 @@ import kotlinx.coroutines.flow.toList
  * 每条消息的投递状态过期时间为 7 天，与消息去重窗口一致。
  *
  * @param connection 共享 Redis 连接实例
+ * @param redis Lettuce Redis 协程命令接口，默认由 connection.reactive() 构建（D-15-03：可注入用于测试）
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class RedisDeliveryTracker(
-    private val connection: StatefulRedisConnection<String, String>
-) {
+    private val connection: StatefulRedisConnection<String, String>,
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
+) {
 
     companion object {
         /** Redis Hash key 前缀 */

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.hibernate.exception.ConstraintViolationException
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -213,7 +214,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         // 重复插入相同 userId 和 friendId 应触发唯一约束异常
-        assertFailsWith<Exception> {
+        assertFailsWith<ConstraintViolationException> {
             doInSession { session ->
                 session.persist(createFriendship(USER_A_ID, USER_B_ID))
             }

@@ -30,18 +30,16 @@ import kotlinx.coroutines.currentCoroutineContext
  * @param conversationService 会话业务服务（会话查询 + 成员查询）
  * @param pushService 推送服务
  * @param connection Lettuce Redis 连接
+ * @param redis Lettuce Redis 协程命令接口，默认由 connection.reactive() 构建（D-15-03：可注入用于测试）
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class ReadReportHandler(
     private val messageService: MessageService,
     private val conversationService: ConversationService,
     private val pushService: PushService,
-    private val connection: StatefulRedisConnection<String, String>
+    private val connection: StatefulRedisConnection<String, String>,
+    private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 ) : Handler<ReadReportReq, Response> {
-
-    /** Lettuce Redis 协程命令接口，由 connection.reactive() 构建 */
-    private val redis: RedisCoroutinesCommands<String, String> =
-        RedisCoroutinesCommandsImpl(connection.reactive())
 
     override val method: String = "message/read"
 

@@ -8,6 +8,7 @@ import org.hibernate.cfg.Configuration
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.hibernate.exception.ConstraintViolationException
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -275,7 +276,7 @@ class UserRepositoryIntegrationTest : DatabaseTestBase() {
             updatedAt = LocalDateTime.now()
         }
 
-        assertFailsWith<Exception> {
+        assertFailsWith<ConstraintViolationException> {
             doInTransaction { em ->
                 em.persist(user2)
             }

@@ -55,22 +55,12 @@ class RedisDeliveryTrackerTest {
     fun setUp() {
         mockRedis = mockk<RedisCoroutinesCommands<String, String>>(relaxed = true)
         connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
-        tracker = RedisDeliveryTracker(connection)
-        injectMockRedis()
+        tracker = RedisDeliveryTracker(connection, mockRedis)
     }
 
     @AfterEach
     fun tearDown() {
         unmockkAll()
-    }
-
-    /**
-     * 通过反射将 mockRedis 注入到 RedisDeliveryTracker 的私有 redis 字段。
-     */
-    private fun injectMockRedis() {
-        val field = RedisDeliveryTracker::class.java.getDeclaredField("redis")
-        field.isAccessible = true
-        field.set(tracker, mockRedis)
     }
 
     // ──────────────────────────────────────────────

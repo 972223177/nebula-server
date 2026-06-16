@@ -61,28 +61,12 @@ class ReadReportHandlerTest {
             messageService,
             conversationService,
             pushService,
-            connection
+            connection,
+            redis
         )
-        // 通过反射注入 mock redis，避免使用 connection.reactive() 创建的实例
-        injectMockRedis()
 
         // MessageService 已读报告默认返回成功（handler 先委托 messageService，再执行自有的 gateway 逻辑）
         coEvery { messageService.readReport(any<ReadReportReq>(), any()) } returns Unit
-    }
-
-    /**
-     * 通过反射替换 ReadReportHandler 中的 [redis] 字段为 mock 实例。
-     *
-     * 原因：ReadReportHandler 中 redis 字段为 private val，由 connection.reactive()
-     * 初始化。测试中 connection 本身已是 mock，但其 reactive() 返回值仍为真实 Lettuce
-     * 实现，无法在单元测试中直接控制。此处通过反射绕过 private 访问限制注入 mock，
-     * 避免引入生产代码修改（如增加 redis 构造函数参数）。
-     */
-    @Suppress("UNCHECKED_CAST")
-    private fun injectMockRedis() {
-        val field = ReadReportHandler::class.java.getDeclaredField("redis")
-        field.isAccessible = true
-        field.set(handler, redis)
     }
 
     @Test
@@ -122,8 +106,8 @@ class ReadReportHandlerTest {
 
     @Test
     fun privateChatReadReportShouldUpdateAndPushReadReceipt() = runTest {
-        // 模拟私聊会话（type=0）
-        val convEntity = ConversationInfo(id = "conv-001", type = 0)
+        // 模拟私聊会话（type=1，对应 ConversationConstants.CONV_TYPE_PRIVATE）
+        val convEntity = ConversationInfo(id = "conv-001", type = 1)
         coEvery { conversationService.getConversation("conv-001") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 内部处理）
@@ -162,8 +146,8 @@ class ReadReportHandlerTest {
 
     @Test
     fun groupChatReadReportShouldUpdateWithoutPush() = runTest {
-        // 模拟群聊会话（type=1）
-        val convEntity = ConversationInfo(id = "conv-002", type = 1)
+        // 模拟群聊会话（type=2，对应 ConversationConstants.CONV_TYPE_GROUP）
+        val convEntity = ConversationInfo(id = "conv-002", type = 2)
         coEvery { conversationService.getConversation("conv-002") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 处理）
@@ -194,8 +178,8 @@ class ReadReportHandlerTest {
 
     @Test
     fun otherPartyLeftShouldSkipPush() = runTest {
-        // 模拟私聊会话（type=0）
-        val convEntity = ConversationInfo(id = "conv-003", type = 0)
+        // 模拟私聊会话（type=1，对应 ConversationConstants.CONV_TYPE_PRIVATE）
+        val convEntity = ConversationInfo(id = "conv-003", type = 1)
         coEvery { conversationService.getConversation("conv-003") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 处理）
