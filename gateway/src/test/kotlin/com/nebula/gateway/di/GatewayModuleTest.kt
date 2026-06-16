@@ -1,6 +1,7 @@
 package com.nebula.gateway.di
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.common.session.SessionStore
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
@@ -110,6 +111,8 @@ class GatewayModuleTest {
      */
     private fun buildExternalModule() = module {
         single { sessionRepo }
+        // SessionRepository 实现 SessionStore 接口，需要注册为 SessionStore 以供 SessionRegistry 注入
+        single<SessionStore> { sessionRepo }
         single { userRepo }
         single { onlineStatusRepo }
         single { idGenerator }
