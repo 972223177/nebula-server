@@ -183,6 +183,7 @@ fun buildTestDispatcher(
         override fun extractToken(request: Request): String? = session.token
     }
     coEvery { sessionRegistry.validate(session.token) } returns session
+    coEvery { sessionRegistry.refreshTtl(session.token) } returns Unit
 
     val interceptors = listOf(
         authInterceptor,
