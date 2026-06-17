@@ -529,6 +529,12 @@ class ChatService(
         responseObserver.onNext(loginRespEnvelope)
     }
 
+    // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。
+    //  当前只做了 PING 的响应（回 PONG + refreshTtl），没有"PING 超时"的定时检查。
+    //  单机部署下由传输层 gRPC keepalive（10s 超时）兜底断连判决，此缺口不致命。
+    //  多实例负载均衡后需补全：在 ChatStreamObserver 中记录 lastActivityAt，
+    //  定期检查 now - lastActivityAt > 90s → onError() 断连。
+    //  REQUEST 和 PING 均视为活跃（重置 lastActivityAt）。
     /**
      * 处理 PING 心跳请求，回复 PONG Envelope + 刷新在线状态 TTL（D-27, D-57）。
      *
