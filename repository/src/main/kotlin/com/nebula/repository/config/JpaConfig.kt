@@ -33,7 +33,6 @@ class JpaConfig(
             jpaVendorAdapter = HibernateJpaVendorAdapter().apply {
                 setShowSql(false)
                 setGenerateDdl(false) // Flyway 负责 DDL（D-02）
-                setDatabasePlatform("org.hibernate.dialect.MySQLDialect")
             }
             jpaPropertyMap = mapOf(
                 AvailableSettings.HBM2DDL_AUTO to "validate",       // 校验实体与表结构一致
