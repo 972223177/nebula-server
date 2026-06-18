@@ -214,11 +214,17 @@ class ChatService(
 
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
-                Direction.REQUEST -> scope.launch {
-                    handleRequest(envelope, responseObserver)
+                Direction.REQUEST -> {
+                    logger.info { "[stream] 收到 REQUEST requestId=${envelope.requestId}" }
+                    scope.launch {
+                        handleRequest(envelope, responseObserver)
+                    }
                 }
-                Direction.PING -> handlePing(envelope, responseObserver)
-                else -> logger.warn { "Unexpected direction: ${envelope.direction}" }
+                Direction.PING -> {
+                    logger.info { "[stream] 收到 PING requestId=${envelope.requestId}" }
+                    handlePing(envelope, responseObserver)
+                }
+                else -> logger.warn { "[stream] Unexpected direction: ${envelope.direction}" }
             }
         }
 
@@ -374,7 +380,7 @@ class ChatService(
          * 3. 从 SessionRegistry 清除会话（CQ-05: 确保重连时生成新 connectionId）
          * 4. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
-        private fun cleanupConnection() {
+        internal fun cleanupConnection() {
             // D-67 并发安全：使用 values.remove() 精确匹配当前 observer 实例
             // 避免 entries.removeIf 遍历所有条目时误匹配其他线程新注册的 observer
             tokenToObserver.values.remove(responseObserver)
@@ -558,7 +564,20 @@ class ChatService(
             .setDirection(Direction.PONG)
             .setRequestId(envelope.requestId)
             .build()
-        responseObserver.onNext(pongEnvelope)
+
+        try {
+            responseObserver.onNext(pongEnvelope)
+            logger.info { "[heartbeat] 发送 PONG requestId=${envelope.requestId}" }
+        } catch (e: Exception) {
+            logger.error(e) { "[heartbeat] 发送 PONG 失败 requestId=${envelope.requestId}，流可能已损坏" }
+            // 流已损坏，清理连接避免资源泄漏
+            try {
+                (responseObserver as? ChatStreamObserver)?.cleanupPending()
+                (responseObserver as? ChatStreamObserver)?.cleanupConnection()
+            } catch (cleanupEx: Exception) {
+                logger.error(cleanupEx) { "[heartbeat] PONG 失败后清理连接异常" }
+            }
+        }
     }
 
     /**
