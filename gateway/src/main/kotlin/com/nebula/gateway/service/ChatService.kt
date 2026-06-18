@@ -93,6 +93,9 @@ class ChatService(
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
     private val tokenToObserver = ConcurrentHashMap<String, StreamObserver<Envelope>>()
 
+    /** ChatStreamObserver 实例计数器，用于分配连接编号（诊断用） */
+    private val observerCounter = java.util.concurrent.atomic.AtomicLong(0)
+
     /** 标记 eviction callback 是否已注册，使用 AtomicBoolean 确保 check-then-act 的原子性 */
     private val evictionCallbackRegistered = AtomicBoolean(false)
 
@@ -129,6 +132,13 @@ class ChatService(
     private inner class ChatStreamObserver(
         private val responseObserver: StreamObserver<Envelope>
     ) : StreamObserver<Envelope> {
+
+        /** 连接编号（递增，用于关联同一连接的多帧消息）。非 private，允许 handlePing 等外部方法读取。 */
+        internal val connId = observerCounter.incrementAndGet()
+
+        init {
+            logger.info { "[stream] #$connId ChatStreamObserver 创建 responseObserver=${responseObserver.javaClass.simpleName}@${System.identityHashCode(responseObserver)}" }
+        }
 
         /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。
          * 使用 @Volatile 保证协程写入与 gRPC 线程读取之间的可见性。 */
@@ -221,7 +231,8 @@ class ChatService(
                     }
                 }
                 Direction.PING -> {
-                    logger.info { "[stream] 收到 PING requestId=${envelope.requestId}" }
+                    // 诊断日志：打印 Envelope 所有字段，排查 proto 反序列化是否正确
+                    logger.info { "[stream] #$connId 收到 PING requestId=\"${envelope.requestId}\" protocolVersion=${envelope.protocolVersion} direction=${envelope.direction} hasRequest=${envelope.hasRequest()} hasResponse=${envelope.hasResponse()} hasMessage=${envelope.hasMessage()} payloadSize=${envelope.serializedSize}" }
                     handlePing(envelope, responseObserver)
                 }
                 else -> logger.warn { "[stream] Unexpected direction: ${envelope.direction}" }
@@ -229,13 +240,14 @@ class ChatService(
         }
 
         override fun onCompleted() {
+            logger.info { "[stream] #$connId onCompleted userId=$userId token=${token?.take(8)}..." }
             cleanupPending()
             cleanupConnection()
             responseObserver.onCompleted()
         }
 
         override fun onError(t: Throwable) {
-            logger.error(t) { "ChatService stream error" }
+            logger.error(t) { "[stream] #$connId onError userId=$userId token=${token?.take(8)}..." }
             cleanupPending()
             cleanupConnection()
             responseObserver.onError(t)
@@ -551,6 +563,8 @@ class ChatService(
         envelope: Envelope,
         responseObserver: StreamObserver<Envelope>
     ) {
+        // 诊断：获取连接编号
+        val connId = (responseObserver as? ChatStreamObserver)?.let { "#${it.connId}" } ?: "#?"
         // D-57: 刷新在线状态 TTL
         (responseObserver as? ChatStreamObserver)?.userId?.let { uid ->
             scope.launch {
@@ -567,15 +581,15 @@ class ChatService(
 
         try {
             responseObserver.onNext(pongEnvelope)
-            logger.info { "[heartbeat] 发送 PONG requestId=${envelope.requestId}" }
+            logger.info { "[heartbeat] $connId 发送 PONG requestId=\"${envelope.requestId}\"" }
         } catch (e: Exception) {
-            logger.error(e) { "[heartbeat] 发送 PONG 失败 requestId=${envelope.requestId}，流可能已损坏" }
+            logger.error(e) { "[heartbeat] $connId 发送 PONG 失败 requestId=\"${envelope.requestId}\"，流可能已损坏" }
             // 流已损坏，清理连接避免资源泄漏
             try {
                 (responseObserver as? ChatStreamObserver)?.cleanupPending()
                 (responseObserver as? ChatStreamObserver)?.cleanupConnection()
             } catch (cleanupEx: Exception) {
-                logger.error(cleanupEx) { "[heartbeat] PONG 失败后清理连接异常" }
+                logger.error(cleanupEx) { "[heartbeat] $connId PONG 失败后清理连接异常" }
             }
         }
     }
