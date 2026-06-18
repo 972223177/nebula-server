@@ -1,9 +1,16 @@
 <configuration>
+    <!--
+        日志目录注入（D-18）:
+        通过 -Dlog.dir=... JVM 参数传入，默认 logs/。
+        例如 Java 启动参数 -Dlog.dir=/var/log/nebula
+    -->
+    <property name="LOG_DIR" value="${log.dir:-logs}"/>
+
     <!-- CQ-10: 审计日志文件 Appender — 仅 AUDIT_LOGIN Marker 事件写入 audit.log -->
     <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/audit.log</file>
+        <file>${LOG_DIR}/audit.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${LOG_DIR}/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>90</maxHistory>
         </rollingPolicy>
         <encoder>

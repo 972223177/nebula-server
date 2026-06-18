@@ -1,11 +1,22 @@
 <configuration>
-    <!-- CQ-10: 审计日志文件 Appender — 仅 AUDIT_LOGIN Marker 事件写入 audit.log -->
-    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/audit.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>90</maxHistory>
-        </rollingPolicy>
+    <!--
+        调试日志策略：
+        - CONSOLE: 输出到 stdout，被 run_debug.sh 捕获到 ../server_log/ 文件中
+        - 审计日志: 写入 audit.log（使用 FileAppender，不支持日志轮转，简化部署）
+    -->
+
+    <!--
+        审计日志目录注入:
+        - 本地调试：环境变量不设置时默认 logs/
+        - 通过 Gradle 的 -Plog.dir=... 传入系统属性 log.dir
+        - Logback 3.x 不支持带点号的系统属性名，已改用 LOG_DIR 环境变量
+    -->
+    <property name="LOG_DIR" value="${LOG_DIR:-logs}"/>
+
+    <!-- 审计日志文件 — 仅 AUDIT_LOGIN Marker 事件写入 audit.log -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${LOG_DIR}/audit.log</file>
+        <append>true</append>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] - %msg%n</pattern>
         </encoder>
@@ -24,6 +35,21 @@
             <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{36}) - %msg%n</pattern>
         </encoder>
     </appender>
+
+    <!-- 第三方库日志级别：减少启动和运行时的噪音 -->
+    <logger name="com.zaxxer.hikari" level="INFO"/>
+    <logger name="org.flywaydb" level="INFO"/>
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.hibernate.SQL" level="INFO"/>
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="io.lettuce" level="INFO"/>
+    <logger name="io.netty" level="INFO"/>
+    <logger name="io.grpc" level="INFO"/>
+    <logger name="reactor" level="INFO"/>
+    <logger name="org.jboss.logging" level="INFO"/>
+
+    <!-- 项目自身代码使用 DEBUG 级别，方便开发调试 -->
+    <logger name="com.nebula" level="DEBUG"/>
 
     <root level="DEBUG">
         <appender-ref ref="CONSOLE"/>
