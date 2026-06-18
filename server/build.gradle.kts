@@ -18,6 +18,12 @@ application {
 
 tasks.named<JavaExec>("run") {
     workingDir = rootProject.projectDir
+
+    // 日志目录注入：通过 -Plog.dir=... 可覆盖，默认 logs/
+    // 例: ./gradlew :server:run -Plog.dir=../server_log
+    val logDir = project.findProperty("log.dir")?.toString() ?: "logs"
+    systemProperty("log.dir", logDir)
+    environment("LOG_DIR", logDir)
 }
 
 dependencies {
