@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: v1.1 Enhancement — Code Review Cleanup
 status: Phase 15 Complete
-last_updated: "2026-06-16T23:00:00.000Z"
+last_updated: "2026-06-18T15:10:00.000Z"
 progress:
   total_phases: 15
   completed_phases: 15
@@ -47,6 +47,7 @@ See: `.planning/PROJECT.md` (updated 2026-06-11)
 
 | Date | Slug | Description |
 |------|------|-------------|
+| 2026-06-18 | fix-port-bindexception-stop-debug-sh | 修复端口 9090 BindException — stop_debug.sh 增加 lsof 端口占用后备检测（1 文件，验证: 通过） |
 | 2026-06-16 | fix-ratelimit-test | 修复 RateLimitInterceptorTest 断言硬编码 429 改为 BizCode.RATE_LIMITED.code（1 个文件，验证: 通过） |
 
 ## Next Actions
@@ -60,6 +61,7 @@ v1.1 已发布。后续可考虑：
 
 | Date | Task | Impact |
 |------|------|--------|
+| 2026-06-18 | fix-port-bindexception-stop-debug-sh | stop_debug.sh 新增 lsof -ti:9090 端口后备检测，解决 Gradle 进程退出但 JVM 子进程仍持有端口的 BindException 问题（1 文件） |
 | 2026-06-16 | Phase 14 遗留问题修复 | 2 Plan: 14-01（RedisTestBase 基础设施 + T04/T05/T06 延期测试）、14-02（GC5 deviceId 重连验证 + S8 依赖清理）。新建 4 测试文件、修改 6 文件。`./gradlew compileKotlin compileTestKotlin` 通过。service 模块 128/130 通过（2 Docker），gateway 3 个新增 GC5 测试全部通过，server 3/3 通过。Phase 14 Complete |
 | 2026-06-16 | Phase 15 测试覆盖缺口闭合 | 5 Plan 全部完成。闭合 P0 6/6、P1 17/17、P2 5 项。新增 7 个测试文件、~40 个新测试方法、22 处 runBlocking 修复、13 个 Handler 无 Session 测试。全量编译通过，service/repository/gateway 增量测试全绿。Phase 15 Complete |
 | 2026-06-16 | Phase 13 Code Review Cleanup | 处理 16 条待评估/待确认问题：5 条修复（R2 Stream字段名、GS3 私聊已读回执、R12 TOCTOU异常保护、R15 安全类型转换、GS5 死代码清理），11 条决策（降为暂不修复/v1.2）。编译验证通过 |
