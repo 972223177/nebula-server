@@ -37,11 +37,16 @@ import org.koin.dsl.module
  * 11. 阻塞在 awaitTermination() 上，等待进程关闭信号
  */
 fun main() {
-    val logger = KotlinLogging.logger {}
     val env = System.getenv("ENV") ?: "dev"
 
-    // D-18: logback 配置必须在 ConfigLoader 之前设置，否则加载配置期间的日志将丢失
+    // D-18: logback 配置必须在任何 Logger 创建之前设置。
+    // KotlinLogging.logger {} 会触发 SLF4J → Logback 初始化，
+    // 如果初始化时 logback.configurationFile 尚未设置，
+    // Logback 自动发现不会找到 logback-dev.xml（非标准名），
+    // 将使用默认 DEBUG 级别启动，导致海量第三方库日志。
     System.setProperty("logback.configurationFile", "logback-$env.xml")
+
+    val logger = KotlinLogging.logger {}
 
     // Step 2: 加载配置 — 使用 Typesafe Config 解析 HOCON 文件
     val config: ApplicationConfig = ConfigLoader.load()
