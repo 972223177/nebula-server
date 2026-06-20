@@ -392,7 +392,7 @@ class ChatService(
          * 3. 从 SessionRegistry 清除会话（CQ-05: 确保重连时生成新 connectionId）
          * 4. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
-        internal fun cleanupConnection() {
+        fun cleanupConnection() {
             // D-67 并发安全：使用 values.remove() 精确匹配当前 observer 实例
             // 避免 entries.removeIf 遍历所有条目时误匹配其他线程新注册的 observer
             tokenToObserver.values.remove(responseObserver)

@@ -1,0 +1,15 @@
+.git/
+.gitignore
+.gradle/
+build/
+.idea/
+*.iml
+.DS_Store
+local.properties
+*.log
+.env
+out/
+*.class
+.kotlin/
+logs/
+.dockerignore
