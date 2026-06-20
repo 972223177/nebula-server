@@ -22,7 +22,8 @@ val conversationHandlerModule = module {
     single { ListConversationsHandler(get()) }                        // ConversationService
     single { GroupMembersHandler(get()) }                             // ConversationService
     single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
-    single { CreateGroupHandler(get(), get(), get(), get()) }               // ConversationService + LockManager + TxTemplate + PushService
+    // 修复（2026-06-20）：CreateGroupHandler 不再依赖 LockManager（创建群聊无需会话级锁）
+    single { CreateGroupHandler(get(), get(), get()) }                // ConversationService + TxTemplate + PushService
     single { InviteMemberHandler(get(), get(), get(), get()) } // ConversationService + LockManager + TxTemplate + PushService
     single { LeaveGroupHandler(get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService
     single { KickMemberHandler(get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService

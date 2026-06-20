@@ -9,8 +9,10 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * 邀请成员 Handler — method = "conversation/invite_member"（D-03, D-05, D-19）。
@@ -38,12 +40,16 @@ class InviteMemberHandler(
         val session = currentCoroutineContext().requireSession()
 
         // D-79/H17+H20: 锁 + 事务包裹，确保批量邀请与 memberCount 原子性
-        val newMemberUids = lockManager.withLock(req.conversationId) {
-            transactionTemplate.execute {
-                runBlocking {
-                    conversationService.inviteMember(req, session.userId)
-                }
-            }!!
+        // 修复（2026-06-20）：withLock 已挂起，外层仍由 runBlocking 阻塞协程；
+        // 改为 withContext(Dispatchers.IO) 释放调用者协程。
+        val newMemberUids = withContext(Dispatchers.IO) {
+            lockManager.withLock(req.conversationId) {
+                transactionTemplate.execute {
+                    runBlocking {
+                        conversationService.inviteMember(req, session.userId)
+                    }
+                }!!
+            }
         }
 
         // 推送 MEMBER_JOINED 给现有成员

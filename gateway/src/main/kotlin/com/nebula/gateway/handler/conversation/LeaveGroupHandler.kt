@@ -10,8 +10,10 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * 退群/解散群 Handler — method = "conversation/leave_group"（D-04, D-09, D-19）。
@@ -53,10 +55,13 @@ class LeaveGroupHandler(
         if (selfMember != null && selfMember.role == ROLE_OWNER) {
             // 群主退群 → 解散群（D-09）
             // D-79/H18: 事务包裹确保 member 删除 + conversation 更新原子性
-            lockManager.withLock(convId) {
-                transactionTemplate.execute {
-                    runBlocking {
-                        conversationService.dissolveGroup(convId)
+            // 修复（2026-06-20）：withContext(Dispatchers.IO) 释放调用者协程
+            withContext(Dispatchers.IO) {
+                lockManager.withLock(convId) {
+                    transactionTemplate.execute {
+                        runBlocking {
+                            conversationService.dissolveGroup(convId)
+                        }
                     }
                 }
             }
@@ -73,10 +78,13 @@ class LeaveGroupHandler(
         } else {
             // 普通成员退群（D-04）
             // D-79/H18: 事务包裹确保 member 删除 + memberCount 原子性
-            lockManager.withLock(convId) {
-                transactionTemplate.execute {
-                    runBlocking {
-                        conversationService.leaveGroup(req, session.userId)
+            // 修复（2026-06-20）：withContext(Dispatchers.IO) 释放调用者协程
+            withContext(Dispatchers.IO) {
+                lockManager.withLock(convId) {
+                    transactionTemplate.execute {
+                        runBlocking {
+                            conversationService.leaveGroup(req, session.userId)
+                        }
                     }
                 }
             }
