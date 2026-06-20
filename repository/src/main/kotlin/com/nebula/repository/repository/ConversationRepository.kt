@@ -62,6 +62,18 @@ interface ConversationRepository : JpaRepository<ConversationEntity, String> {
         @Param("convId") conversationId: String,
         @Param("delta") delta: Int
     ): Int
+
+    /**
+     * 分页查询所有未解散的会话（status=0），用于启动阶段序列号恢复（D-81/H21）。
+     *
+     * 使用 Spring Data 分页避免一次性加载全表到内存。
+     * 调用方按 page 递增迭代直到结果集为空。
+     *
+     * @param status 状态值（0=正常，1=已解散）
+     * @param pageable 分页参数
+     * @return 匹配的会话实体列表
+     */
+    fun findAllByStatus(status: Int, pageable: Pageable): List<ConversationEntity>
 }
 
 /**

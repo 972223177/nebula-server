@@ -20,6 +20,7 @@ import com.nebula.repository.repository.ConversationMemberRepository
 import com.nebula.repository.repository.ConversationRepository
 import com.nebula.repository.repository.UserRepository
 import com.nebula.repository.repository.findByIdOrNull
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -41,6 +42,8 @@ class ConversationService(
 ) {
 
     companion object {
+        /** 日志记录器 */
+        private val logger = KotlinLogging.logger {}
         /** 群聊最大成员数 */
         private const val MAX_MEMBERS = 200
         /** 私聊会话类型常量 */
@@ -56,6 +59,10 @@ class ConversationService(
         private const val MAX_LIST_LIMIT = 50
         /** 群组已解散状态值（D-17: status=1） */
         private const val STATUS_DISSOLVED = 1
+        /** 序列号恢复分页大小（D-81/H21）：每批扫描 500 条会话 */
+        private const val RECOVERY_PAGE_SIZE = 500
+        /** 序列号恢复安全网（D-81/H21）：最多扫描 10 万条，防止异常数据导致无限循环 */
+        private const val RECOVERY_MAX_RECORDS = 100_000
     }
 
     /**
@@ -179,6 +186,53 @@ class ConversationService(
         }
         builder.setHasMore(hasMore)
         return builder.build()
+    }
+
+    /**
+     * 流式分页获取所有未解散的会话（status=0）— 仅返回 (id, type) 元组（D-81/H21 序列号恢复）。
+     *
+     * 内部按 [RECOVERY_PAGE_SIZE] 分批调用 repository，避免一次性加载全表。
+     * 调用方通过多次调用 nextBatch 推进游标直到返回空列表。
+     *
+     * @param offset 已跳过的记录数（首次传 0）
+     * @return 当前页的 (conversationId, type) 元组列表，到达末尾时为空
+     */
+    suspend fun getActiveConversationsBatch(offset: Int): List<Pair<String, Int>> {
+        return withContext(Dispatchers.IO) {
+            conversationRepository.findAllByStatus(
+                status = 0, // 0=正常
+                pageable = org.springframework.data.domain.PageRequest.of(
+                    offset / RECOVERY_PAGE_SIZE,
+                    RECOVERY_PAGE_SIZE
+                )
+            ).map { entity -> requireNotNull(entity.id) to entity.type }
+        }
+    }
+
+    /**
+     * 获取所有未解散的会话（status=0）— 通过协程 Flow 暴露给 SeqService.recoverSequences。
+     *
+     * 使用 [getActiveConversationsBatch] 内部按 [RECOVERY_PAGE_SIZE] 分批拉取，
+     * 避免内存溢出。仅在启动阶段（SeqService.recoverSequences）调用一次。
+     *
+     * @return 所有未解散会话的 (id, type) 元组序列
+     */
+    suspend fun getAllActiveConversations(): List<Pair<String, Int>> {
+        val result = mutableListOf<Pair<String, Int>>()
+        var offset = 0
+        while (true) {
+            val batch = getActiveConversationsBatch(offset)
+            if (batch.isEmpty()) break
+            result.addAll(batch)
+            offset += batch.size
+            // 安全网：单次启动阶段遍历超过 MAX_BATCHES 时强制退出，防止异常情况下无限循环
+            if (offset > RECOVERY_MAX_RECORDS) {
+                logger.warn { "序列号恢复超过 ${RECOVERY_MAX_RECORDS} 条，强制退出" }
+                break
+            }
+        }
+        logger.info { "扫描到 ${result.size} 个未解散会话用于序列号恢复" }
+        return result
     }
 
     /**
