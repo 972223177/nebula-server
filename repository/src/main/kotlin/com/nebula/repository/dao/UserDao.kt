@@ -55,4 +55,35 @@ class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
         query.maxResults = limit
         return query.resultList
     }
+
+    /**
+     * 按用户名模糊搜索，使用 Snowflake id 作为游标（Phase 5.1 改进）。
+     *
+     * 比 createdAt 游标更稳定：id 唯一、单调递增，相同毫秒的多条记录不会跳数据。
+     * 配合二级排序（id DESC），保证游标推进时不漏。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param keyword 搜索关键词（LIKE %keyword%）
+     * @param cursorId 游标（用户 id，0 表示首次查询）
+     * @param limit 返回行数限制
+     * @return 匹配的用户列表，按 id 倒序
+     */
+    suspend fun findByUsernameContainingById(
+        em: EntityManager,
+        keyword: String,
+        cursorId: Long,
+        limit: Int
+    ): List<UserEntity> {
+        val query = em.createQuery(
+            "SELECT u FROM UserEntity u " +
+                "WHERE u.username LIKE :keyword " +
+                "AND (:cursorId = 0 OR u.id < :cursorId) " +
+                "ORDER BY u.id DESC",
+            UserEntity::class.java
+        )
+        query.setParameter("keyword", "%$keyword%")
+        query.setParameter("cursorId", cursorId)
+        query.maxResults = limit
+        return query.resultList
+    }
 }

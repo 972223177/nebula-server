@@ -307,7 +307,7 @@ class UserServiceTest {
             createUserEntity(10003L, "testuser3", now.minusMinutes(3))
         )
         coEvery {
-            userDao.findByUsernameContaining(em, keyword, null, limit + 1)
+            userDao.findByUsernameContainingById(em, keyword, 0L, limit + 1)
         } returns users
 
         val resp = userService.searchUsers(keyword, 0L, limit)
@@ -316,8 +316,9 @@ class UserServiceTest {
         assertEquals(10001L, resp.getUsers(0).uid)
         assertEquals(10002L, resp.getUsers(1).uid)
         assertTrue(resp.hasMore)
+        // Phase 5.1: 游标改为用户 id 而非 createdAt 毫秒
         assertEquals(
-            requireNotNull(users[limit - 1].createdAt).atZone(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+            users[limit - 1].id,
             resp.nextCursor
         )
     }
@@ -333,7 +334,7 @@ class UserServiceTest {
             createUserEntity(10002L, "testuser2", now.minusMinutes(2))
         )
         coEvery {
-            userDao.findByUsernameContaining(em, keyword, null, limit + 1)
+            userDao.findByUsernameContainingById(em, keyword, 0L, limit + 1)
         } returns users
 
         val resp = userService.searchUsers(keyword, 0L, limit)
@@ -350,7 +351,7 @@ class UserServiceTest {
             createUserEntity(10000L + i, "testuser$i", now.minusMinutes(i.toLong()))
         }
         coEvery {
-            userDao.findByUsernameContaining(em, keyword, null, 21)
+            userDao.findByUsernameContainingById(em, keyword, 0L, 21)
         } returns users
 
         val resp = userService.searchUsers(keyword, 0L, 100)

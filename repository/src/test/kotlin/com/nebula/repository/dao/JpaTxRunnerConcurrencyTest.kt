@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.coroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -284,5 +285,91 @@ class JpaTxRunnerConcurrencyTest : DatabaseTestBase() {
         assertNotNull(found, "UK 异常后清理工作应正常")
         // id3 未使用，避免编译器警告
         assertNotNull(id3)
+    }
+}
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class JpaTxRunnerMetricsTest : DatabaseTestBase() {
+
+    private lateinit var emf: EntityManagerFactory
+
+    @BeforeAll
+    fun setUp() {
+        emf = Configuration().apply {
+            properties["hibernate.connection.datasource"] = getDataSource()
+            properties["hibernate.hbm2ddl.auto"] = "validate"
+            properties["hibernate.dialect"] = "org.hibernate.dialect.MySQLDialect"
+            properties["hibernate.physical_naming_strategy"] =
+                "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy"
+            addAnnotatedClass(UserEntity::class.java)
+        }.buildSessionFactory()
+    }
+
+    @AfterAll
+    fun tearDown() {
+        if (::emf.isInitialized) emf.close()
+    }
+
+    /**
+     * 收集事务执行事件的测试用 metrics hook。
+     */
+    private class CollectingMetricsHook : MetricsHook {
+        var startCount = 0
+        var commitCount = 0
+        var rollbackCount = 0
+        var lastRollbackCause: Throwable? = null
+
+        override fun onTxStart() { startCount++ }
+        override fun onTxCommit() { commitCount++ }
+        override fun onTxRollback(cause: Throwable) {
+            rollbackCount++
+            lastRollbackCause = cause
+        }
+    }
+
+    @Test
+    fun `metrics hook records commit on successful transaction`() = runTest {
+        val hook = CollectingMetricsHook()
+        val runner = JpaTxRunner(emf, hook)
+
+        runner.execute { em ->
+            // 空事务也应触发 onCommit
+        }
+
+        assertEquals(1, hook.startCount, "应触发 onTxStart 一次")
+        assertEquals(1, hook.commitCount, "应触发 onTxCommit 一次")
+        assertEquals(0, hook.rollbackCount, "不应触发 onTxRollback")
+        assertNull(hook.lastRollbackCause, "commit 时不应有 rollback cause")
+    }
+
+    @Test
+    fun `metrics hook records rollback on exception`() = runTest {
+        val hook = CollectingMetricsHook()
+        val runner = JpaTxRunner(emf, hook)
+
+        val thrown = runCatching {
+            runner.execute { em ->
+                throw IllegalStateException("test failure")
+            }
+        }.exceptionOrNull()
+
+        assertNotNull(thrown)
+        assertEquals(1, hook.startCount)
+        assertEquals(0, hook.commitCount, "异常时不应 commit")
+        assertEquals(1, hook.rollbackCount, "应触发 onTxRollback 一次")
+        assertEquals("test failure", hook.lastRollbackCause?.message)
+    }
+
+    @Test
+    fun `default no-op metrics hook works without configuration`() = runTest {
+        val runner = JpaTxRunner(emf)  // 使用默认 NoOpMetricsHook
+        // 不应抛异常
+        runner.execute { em -> }
+        // 第二个事务故意抛错，验证 NoOp hook 不会被错误地传播
+        val thrown = runCatching {
+            runner.execute { em -> throw RuntimeException("test") }
+        }.exceptionOrNull()
+        assertNotNull(thrown, "异常应正常传播")
+        assertEquals("test", thrown.message)
     }
 }
