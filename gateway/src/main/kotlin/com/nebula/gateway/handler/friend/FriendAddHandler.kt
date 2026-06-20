@@ -14,8 +14,10 @@ import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.friend.FriendService
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.support.TransactionTemplate
 
@@ -47,11 +49,18 @@ class FriendAddHandler(
         val fromUid = session.userId
 
         // D-79/H15 + D-80: 事务包裹 + DuplicateKeyException 幂等 catch
-        val result = try {
-            transactionTemplate.execute {
-                runBlocking {
-                    friendService.addFriend(req, fromUid)
-                }
+        // 修复（2026-06-20）：原 runBlocking 阻塞协程线程，改为 withContext(Dispatchers.IO)
+        // 把阻塞的 transactionTemplate.execute 切到 IO 线程池，调用者协程可挂起等待
+        val result: com.nebula.service.friend.FriendAddResult = try {
+            withContext(Dispatchers.IO) {
+                transactionTemplate.execute {
+                    // 仍需在事务同步块内调用 suspend service —— Service 方法内
+                    // 已用 withContext(Dispatchers.IO) 包裹 IO 调用，这里用 runBlocking 仅
+                    // 作为 suspend→sync 桥接，避免在事务回调内做线程切换导致事务上下文丢失
+                    runBlocking {
+                        friendService.addFriend(req, fromUid)
+                    }
+                }!!
             }!!
         } catch (e: DataIntegrityViolationException) {
             // D-80: UK 冲突表示好友关系已存在（双向竞赛中的并行请求被 DB 唯一约束拦截）

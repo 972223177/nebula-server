@@ -10,8 +10,10 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * 踢出成员 Handler — method = "conversation/kick_member"（D-04, D-14, D-19）。
@@ -38,12 +40,15 @@ class KickMemberHandler(
         val session = currentCoroutineContext().requireSession()
 
         // D-79/H19: 锁 + 事务包裹，确保踢人 + memberCount 原子性
-        val targetUid = lockManager.withLock(req.conversationId) {
-            transactionTemplate.execute {
-                runBlocking {
-                    conversationService.kickMember(req, session.userId)
-                }
-            }!!
+        // 修复（2026-06-20）：withContext(Dispatchers.IO) 释放调用者协程
+        val targetUid = withContext(Dispatchers.IO) {
+            lockManager.withLock(req.conversationId) {
+                transactionTemplate.execute {
+                    runBlocking {
+                        conversationService.kickMember(req, session.userId)
+                    }
+                }!!
+            }
         }
 
         // 推送 MEMBER_KICKED 给被踢者（D-14）

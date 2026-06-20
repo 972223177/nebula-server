@@ -169,7 +169,7 @@ class GatewayModuleTest {
         single { ListConversationsHandler(conversationService) }
         single { GroupMembersHandler(conversationService) }
         single { EditGroupHandler(conversationService, get()) }
-        single { CreateGroupHandler(conversationService, get(), get(), get()) }
+        single { CreateGroupHandler(conversationService, get(), get()) }
         single { InviteMemberHandler(conversationService, get(), get(), get()) }
         single { LeaveGroupHandler(conversationService, get(), get(), get()) }
         single { KickMemberHandler(conversationService, get(), get(), get()) }
