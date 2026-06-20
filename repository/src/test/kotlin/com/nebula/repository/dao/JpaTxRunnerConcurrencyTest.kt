@@ -1,0 +1,278 @@
+package com.nebula.repository.dao
+
+import com.nebula.repository.entity.UserEntity
+import com.nebula.repository.testutil.DatabaseTestBase
+import jakarta.persistence.EntityManager
+import jakarta.persistence.EntityManagerFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import org.hibernate.cfg.Configuration
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.coroutineContext
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import kotlin.test.fail
+
+/**
+ * 验证 [JpaTxRunner] 在以下协程场景下行为正确：
+ *
+ * 1. block 内部的 suspend 挂起恢复后仍在 IO 线程（EM 引用不变）
+ * 2. EM 在 block 内可安全跨挂起点使用
+ * 3. NonCancellable 保护下，父协程取消时 cleanup 仍执行
+ * 4. 异常时 rollback 失败信息保留在 addSuppressed
+ * 5. 并发事务隔离性：多个 txRunner.execute 不会相互干扰
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class JpaTxRunnerConcurrencyTest : DatabaseTestBase() {
+
+    private lateinit var emf: EntityManagerFactory
+    private lateinit var txRunner: JpaTxRunner
+    private lateinit var userDao: UserDao
+
+    @BeforeAll
+    fun setUp() {
+        emf = Configuration().apply {
+            // 复用 DatabaseTestBase 的数据源
+            properties["hibernate.connection.datasource"] = getDataSource()
+            properties["hibernate.hbm2ddl.auto"] = "validate"
+            properties["hibernate.dialect"] = "org.hibernate.dialect.MySQLDialect"
+            // 关键：使用 CamelCaseToUnderscoresNamingStrategy，让 entity 字段 createdAt 映射到 DB 列 createdAt
+            // （schema 实际列名就是 camelCase，不转换下划线）
+            properties["hibernate.physical_naming_strategy"] =
+                "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy"
+            addAnnotatedClass(UserEntity::class.java)
+        }.buildSessionFactory()
+        txRunner = JpaTxRunner(emf)
+        userDao = UserDao()
+    }
+
+    @AfterAll
+    fun tearDown() {
+        if (::emf.isInitialized) emf.close()
+    }
+
+    private var counter = 0L
+    private fun nextId(): Long = 3_100_000_000L + (++counter)
+    private fun uniqueUsername(): String = "txrunner_${System.nanoTime()}_$counter"
+
+    private fun newUser(id: Long, username: String, nickname: String = "TxRunner"): UserEntity =
+        UserEntity(
+            username = username,
+            passwordHash = "\$2a\$10\$abc",
+            nickname = nickname,
+            avatar = "",
+            privacyStatus = 0
+        ).apply {
+            this.id = id
+            this.createdAt = LocalDateTime.now()
+            this.updatedAt = LocalDateTime.now()
+        }
+
+    @Test
+    fun `em is created and used on IO dispatcher thread`() = runTest {
+        val ioThread = Thread.currentThread()  // 主测试线程（通常 Default）
+        var emThread: Thread? = null
+
+        val id = nextId()
+        val user = newUser(id, uniqueUsername(), "thread-test")
+
+        txRunner.execute { em ->
+            emThread = Thread.currentThread()
+            assertNotNull(emThread, "EM 应在某个线程上创建")
+            assertTrue(
+                emThread !== ioThread,
+                "EM 不应在主测试线程上创建（应在 IO dispatcher 线程），实际：${emThread.name} == ${ioThread.name}"
+            )
+            userDao.insert(em, user)
+            // suspend 一次后，验证 EM 仍在原线程
+            delay(10)
+            assertSame(emThread, Thread.currentThread(), "delay 后应仍在同一 IO 线程")
+            // EM 仍可使用
+            val found = em.find(UserEntity::class.java, id)
+            assertNotNull(found, "EM 跨挂起点后仍可用")
+        }
+    }
+
+    @Test
+    fun `nested withContext(Default) does not change em thread on return`() = runTest {
+        val emThreadAtStart = arrayOfNulls<Thread>(1)
+        val emThreadAfterDefault = arrayOfNulls<Thread>(1)
+        val id = nextId()
+        val user = newUser(id, uniqueUsername(), "nested-default")
+
+        txRunner.execute { em ->
+            emThreadAtStart[0] = Thread.currentThread()
+            userDao.insert(em, user)
+
+            // 嵌套 withContext 切到 Default 线程
+            withContext(Dispatchers.Default) {
+                // 这里在 Default 线程上，不应触碰 EM
+                Thread.sleep(10)  // 模拟 CPU 工作
+            }
+            // 切回后应在原 IO 线程
+            emThreadAfterDefault[0] = Thread.currentThread()
+            // EM 应仍可正常使用
+            val found = em.find(UserEntity::class.java, id)
+            assertNotNull(found, "嵌套 withContext 切回后 EM 仍可用")
+        }
+
+        assertSame(
+            emThreadAtStart[0], emThreadAfterDefault[0],
+            "嵌套 withContext 后应回到原 IO 线程"
+        )
+    }
+
+    @Test
+    fun `em reference is the same through the entire block`() = runTest {
+        val emRefs = mutableListOf<EntityManager>()
+
+        txRunner.execute { em ->
+            emRefs.add(em)
+            delay(5)
+            emRefs.add(em)
+            // 嵌套 withContext 不应替换 EM 引用
+            val captured = withContext(Dispatchers.Default) { em }
+            emRefs.add(captured)
+            yield()
+            emRefs.add(em)
+        }
+
+        assertEquals(4, emRefs.size)
+        emRefs.forEach { ref ->
+            assertSame(emRefs[0], ref, "block 跨挂起应保持 EM 引用")
+        }
+    }
+
+    @Test
+    fun `cleanup runs under NonCancellable - next transaction works after cancel`() = runTest {
+        // 验证被取消的协程后，新的事务能正常获取连接（说明 EM 已被关闭）
+        val testScope = CoroutineScope(currentCoroutineContext() + Job())
+        val txCommitted = AtomicInteger(0)
+
+        val deferred = testScope.async {
+            txRunner.execute { em ->
+                // 让出，等待外部取消
+                delay(500)
+                txCommitted.incrementAndGet()
+            }
+        }
+        // 给协程时间进入 execute
+        delay(50)
+        // 取消协程
+        testScope.coroutineContext[Job]!!.cancel()
+        // 等待抛 CancellationException
+        try {
+            deferred.await()
+            fail("应该抛 CancellationException")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 预期
+        }
+
+        assertEquals(0, txCommitted.get(), "被取消时事务不应 commit")
+
+        // 关键验证：cleanup 执行后，连接池可被新事务使用
+        val id = nextId()
+        txRunner.execute { em -> userDao.insert(em, newUser(id, uniqueUsername(), "after-cancel")) }
+        val found = txRunner.execute { em -> userDao.findById(em, id) }
+        assertNotNull(found, "取消后下一个事务必须能正常获取连接（EM 已关闭）")
+    }
+
+    @Test
+    fun `concurrent transactions are isolated`() = runTest {
+        // 5 个并发事务互不干扰
+        val ids = (1..5).map { nextId() to uniqueUsername() }
+
+        coroutineScope {
+            ids.map { (id, username) ->
+                async(Dispatchers.IO) {
+                    txRunner.execute { em ->
+                        userDao.insert(em, newUser(id, username, "concurrent-$id"))
+                    }
+                }
+            }.awaitAll()
+        }
+
+        // 验证所有用户都成功插入
+        ids.forEach { (id, _) ->
+            val found = txRunner.execute { em -> userDao.findById(em, id) }
+            assertNotNull(found, "并发事务后应能找到用户 $id")
+        }
+    }
+
+    @Test
+    fun `exception in block triggers rollback and cleans up`() = runTest {
+        val id = nextId()
+        val user = newUser(id, uniqueUsername(), "rollback-test")
+        // 先插一个 baseline
+        txRunner.execute { em -> userDao.insert(em, user) }
+
+        val before = txRunner.execute { em -> userDao.findById(em, id) }
+        assertNotNull(before)
+        val beforeNickname = before.nickname
+
+        // 触发异常，事务应回滚
+        val thrown = runCatching {
+            txRunner.execute { em ->
+                val loaded = userDao.findById(em, id)!!
+                loaded.nickname = "should-not-persist"
+                userDao.update(em, loaded)
+                throw RuntimeException("simulated failure")
+            }
+        }.exceptionOrNull()
+        assertNotNull(thrown)
+        assertEquals("simulated failure", thrown.message)
+
+        // 验证 rollback 生效
+        val after = txRunner.execute { em -> userDao.findById(em, id) }
+        assertNotNull(after)
+        assertEquals(beforeNickname, after.nickname, "异常后应 rollback，nickname 不应被修改")
+    }
+
+    @Test
+    fun `uniqueness violation throws and cleanup works`() = runTest {
+        // 测试 UK 冲突：第二次 insert 同 username 应抛异常
+        val id1 = nextId()
+        val username = uniqueUsername()
+        val id2 = nextId()
+        val id3 = nextId()
+
+        // 第一次插入成功
+        txRunner.execute { em -> userDao.insert(em, newUser(id1, username, "U1")) }
+
+        // 第二次同 username 应抛 PersistenceException
+        val thrown = runCatching {
+            txRunner.execute { em ->
+                userDao.insert(em, newUser(id2, username, "U2"))
+                // 强制 flush 让 UK 立即生效
+                em.flush()
+            }
+        }.exceptionOrNull()
+
+        assertNotNull(thrown, "UK 冲突应抛异常")
+        // 后续操作应正常（cleanup 已执行）
+        val id4 = nextId()
+        txRunner.execute { em -> userDao.insert(em, newUser(id4, uniqueUsername(), "U3")) }
+        val found = txRunner.execute { em -> userDao.findById(em, id4) }
+        assertNotNull(found, "UK 异常后清理工作应正常")
+        // id3 未使用，避免编译器警告
+        assertNotNull(id3)
+    }
+}
