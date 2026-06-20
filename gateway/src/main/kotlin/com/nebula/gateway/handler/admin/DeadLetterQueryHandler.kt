@@ -29,10 +29,10 @@ class DeadLetterQueryHandler(
         val result = deadLetterService.query(page, pageSize, status)
 
         val builder = DeadLetterQueryResp.newBuilder()
-        for (dto in result.content) {
+        for (dto in result.items) {
             builder.addItems(toDeadLetterItem(dto))
         }
-        builder.total = result.totalElements.toInt()
+        builder.total = result.total.toInt()
         return builder.build()
     }
 

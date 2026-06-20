@@ -10,27 +10,23 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 
 /**
  * 踢出成员 Handler — method = "conversation/kick_member"（D-04, D-14, D-19）。
  *
  * 职责：
- * - 委托 ConversationService 处理踢人业务逻辑
+ * - 使用会话级互斥锁（ConversationLockManager）保证踢人与 memberCount 串行执行（D-19）
+ * - 委托 ConversationService 处理踢人业务逻辑（Service 内部已通过 JpaTxRunner 包裹事务）
  * - 推送 MEMBER_KICKED 给被踢者 + MEMBER_LEFT 给剩余成员
  *
  * @param conversationService 会话业务服务
  * @param lockManager 会话级互斥锁管理器
- * @param transactionTemplate 编程式事务模板
  * @param pushService 推送服务
  */
 class KickMemberHandler(
     private val conversationService: ConversationService,
     private val lockManager: ConversationLockManager,
-    private val transactionTemplate: org.springframework.transaction.support.TransactionTemplate,
     private val pushService: PushService
 ) : Handler<KickMemberReq, Response> {
 
@@ -39,16 +35,9 @@ class KickMemberHandler(
     override suspend fun handle(req: KickMemberReq): Response {
         val session = currentCoroutineContext().requireSession()
 
-        // D-79/H19: 锁 + 事务包裹，确保踢人 + memberCount 原子性
-        // 修复（2026-06-20）：withContext(Dispatchers.IO) 释放调用者协程
-        val targetUid = withContext(Dispatchers.IO) {
-            lockManager.withLock(req.conversationId) {
-                transactionTemplate.execute {
-                    runBlocking {
-                        conversationService.kickMember(req, session.userId)
-                    }
-                }!!
-            }
+        // 会话级锁 + Service 内置事务
+        val targetUid = lockManager.withLock(req.conversationId) {
+            conversationService.kickMember(req, session.userId)
         }
 
         // 推送 MEMBER_KICKED 给被踢者（D-14）

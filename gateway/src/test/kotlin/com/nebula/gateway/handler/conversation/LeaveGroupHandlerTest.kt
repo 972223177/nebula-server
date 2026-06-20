@@ -9,7 +9,6 @@ import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
-import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.service.conversation.ConversationMemberInfo
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
@@ -46,12 +45,10 @@ class LeaveGroupHandlerTest {
         pushService = mockk(relaxed = true)
 
         val lockManager = mockLockManager()
-        val transactionTemplate = mockTransactionTemplate()
 
         handler = LeaveGroupHandler(
             conversationService,
             lockManager,
-            transactionTemplate,
             pushService
         )
     }

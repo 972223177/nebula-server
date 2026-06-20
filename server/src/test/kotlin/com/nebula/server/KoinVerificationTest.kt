@@ -15,16 +15,18 @@ import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
+import com.nebula.repository.dao.ConversationDao
+import com.nebula.repository.dao.ConversationMemberDao
+import com.nebula.repository.dao.DeadLetterDao
+import com.nebula.repository.dao.FriendRequestDao
+import com.nebula.repository.dao.FriendshipDao
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.MessageDao
+import com.nebula.repository.dao.UserDao
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.FriendRequestRepository
-import com.nebula.repository.repository.FriendshipRepository
-import com.nebula.repository.repository.MessageRepository
-import com.nebula.repository.repository.UserRepository
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -37,15 +39,15 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import org.springframework.transaction.support.TransactionTemplate
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Koin 容器验证测试 — 验证所有 Phase 组件可在 Koin 容器中正确解析（D-01, D-13）。
  *
  * 测试方法：启动 Koin 并加载 gateway 模块 + 外部依赖模块，
  * 然后逐一解析注册组件，确保无 InstanceCreationException。
+ *
+ * 方案 A 重构（2026-06-20）：Spring Data Repository 替换为 DAO + JpaTxRunner。
  */
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
 class KoinVerificationTest {
@@ -53,19 +55,20 @@ class KoinVerificationTest {
     /** 构建外部依赖模块 — 使用 mock 对象代替真实基础设施 */
     @Suppress("UNCHECKED_CAST")
     private fun buildMockModule() = module {
-        single<UserRepository> { mockk() }
+        single<UserDao> { mockk() }
         single<SessionRepository> { mockk() }
-        single<ConversationRepository> { mockk() }
-        single<ConversationMemberRepository> { mockk() }
-        single<MessageRepository> { mockk() }
+        single<ConversationDao> { mockk() }
+        single<ConversationMemberDao> { mockk() }
+        single<MessageDao> { mockk() }
         single<MessageQueueRepository> { mockk() }
-        single<FriendshipRepository> { mockk() }
-        single<FriendRequestRepository> { mockk() }
+        single<FriendshipDao> { mockk() }
+        single<FriendRequestDao> { mockk() }
+        single<DeadLetterDao> { mockk() }
+        single<JpaTxRunner> { mockk() }
         single<StatefulRedisConnection<String, String>> { mockk(relaxed = true) }
         single<SnowflakeIdGenerator> { mockk() }
         single<OnlineStatusRepository> { OnlineStatusRepository(get()) }
-        single<PrivacyRepository> { PrivacyRepository(get(), get()) }
-        single<TransactionTemplate> { mockk() }
+        single<PrivacyRepository> { mockk() }
     }
 
     @AfterEach

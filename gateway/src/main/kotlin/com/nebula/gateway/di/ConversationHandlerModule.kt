@@ -15,18 +15,20 @@ import org.koin.dsl.module
 /**
  * 会话 Handler Koin 模块 — 注册 Conversation 相关的 Handler 和组件。
  *
- * Handler 依赖 Service 层 + gateway 组件（锁、事务、推送）。
+ * Handler 依赖 Service 层 + gateway 组件（锁、推送）。
+ * 事务由 Service 层内部通过 JpaTxRunner 管理。
  */
 val conversationHandlerModule = module {
     single { ConversationLockManager() }
     single { ListConversationsHandler(get()) }                        // ConversationService
     single { GroupMembersHandler(get()) }                             // ConversationService
     single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
-    // 修复（2026-06-20）：CreateGroupHandler 不再依赖 LockManager（创建群聊无需会话级锁）
-    single { CreateGroupHandler(get(), get(), get()) }                // ConversationService + TxTemplate + PushService
-    single { InviteMemberHandler(get(), get(), get(), get()) } // ConversationService + LockManager + TxTemplate + PushService
-    single { LeaveGroupHandler(get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService
-    single { KickMemberHandler(get(), get(), get(), get()) }  // ConversationService + LockManager + TxTemplate + PushService
+    // 创建群聊无需会话级锁，Service 内置事务
+    single { CreateGroupHandler(get(), get()) }                       // ConversationService + PushService
+    // 邀请/踢人/退群需要会话级锁保护并发
+    single { InviteMemberHandler(get(), get(), get()) }               // ConversationService + LockManager + PushService
+    single { LeaveGroupHandler(get(), get(), get()) }                 // ConversationService + LockManager + PushService
+    single { KickMemberHandler(get(), get(), get()) }                 // ConversationService + LockManager + PushService
 
     // HandlerCollector 注册
     single<HandlerCollector> { ConversationHandlerCollector(

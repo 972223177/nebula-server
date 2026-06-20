@@ -5,7 +5,6 @@ import com.nebula.chat.friend.FriendAcceptedPayload
 import com.nebula.chat.friend.FriendAddReq
 import com.nebula.chat.friend.FriendAddResp
 import com.nebula.chat.friend.FriendRequestPayload
-import com.nebula.chat.friend.StatusChangedPayload
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
 import com.nebula.gateway.handler.Handler
@@ -14,32 +13,25 @@ import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.friend.FriendService
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.Dispatchers
+import jakarta.persistence.PersistenceException
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
-import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 发送好友申请 Handler（D-51, D-52, D-54）。
  *
  * 职责：
- * - 委托 FriendService 处理业务逻辑
- * - 使用 TransactionTemplate 确保跨 Repository 写入原子性（D-79）
- * - DuplicateKeyException 幂等 catch 处理双向竞赛（D-80）
+ * - 委托 FriendService 处理业务逻辑（Service 内部已通过 JpaTxRunner 包裹事务，D-79）
+ * - ConstraintViolationException 幂等 catch 处理双向竞赛（D-80）
  * - 推送 FRIEND_REQUEST / FRIEND_ACCEPTED
  *
  * @param friendService 好友业务服务
  * @param pushService 推送服务
- * @param lockManager 会话级互斥锁管理器
- * @param transactionTemplate 编程式事务模板（D-79）
+ * @param lockManager 会话级互斥锁管理器（保留以维持 API 兼容，Friend 流程不依赖会话级锁）
  */
 class FriendAddHandler(
     private val friendService: FriendService,
     private val pushService: PushService,
-    private val lockManager: ConversationLockManager,
-    private val transactionTemplate: TransactionTemplate
+    @Suppress("unused") private val lockManager: ConversationLockManager
 ) : Handler<FriendAddReq, FriendAddResp> {
 
     override val method: String = "friend/add"
@@ -48,33 +40,28 @@ class FriendAddHandler(
         val session = currentCoroutineContext().requireSession()
         val fromUid = session.userId
 
-        // D-79/H15 + D-80: 事务包裹 + DuplicateKeyException 幂等 catch
-        // 修复（2026-06-20）：原 runBlocking 阻塞协程线程，改为 withContext(Dispatchers.IO)
-        // 把阻塞的 transactionTemplate.execute 切到 IO 线程池，调用者协程可挂起等待
-        val result: com.nebula.service.friend.FriendAddResult = try {
-            withContext(Dispatchers.IO) {
-                transactionTemplate.execute {
-                    // 仍需在事务同步块内调用 suspend service —— Service 方法内
-                    // 已用 withContext(Dispatchers.IO) 包裹 IO 调用，这里用 runBlocking 仅
-                    // 作为 suspend→sync 桥接，避免在事务回调内做线程切换导致事务上下文丢失
-                    runBlocking {
-                        friendService.addFriend(req, fromUid)
-                    }
-                }!!
-            }!!
-        } catch (e: DataIntegrityViolationException) {
-            // D-80: UK 冲突表示好友关系已存在（双向竞赛中的并行请求被 DB 唯一约束拦截）
-            logger.warn(e) { "好友关系已存在，幂等返回: fromUid=$fromUid, toUid=${req.toUid}" }
-            val smaller = minOf(fromUid, req.toUid)
-            val larger = maxOf(fromUid, req.toUid)
-            val existingFriendship = friendService.findFriendshipBetween(smaller, larger)
-            if (existingFriendship != null && existingFriendship.deleted == 0) {
-                // 已存在未删除的好友关系 → 直接返回 ALREADY_FRIEND
+        // Service 内部事务（D-79 + D-80）
+        // PersistenceException 幂等 catch 处理双向竞赛
+        val result = try {
+            friendService.addFriend(req, fromUid)
+        } catch (e: PersistenceException) {
+            val isConstraintViolation = e.message?.contains("Duplicate", ignoreCase = true) == true ||
+                e.message?.contains("ConstraintViolation", ignoreCase = true) == true
+            if (isConstraintViolation) {
+                // D-80: UK 冲突表示好友关系已存在（双向竞赛中的并行请求被 DB 唯一约束拦截）
+                logger.warn(e) { "好友关系已存在，幂等返回: fromUid=$fromUid, toUid=${req.toUid}" }
+                val smaller = minOf(fromUid, req.toUid)
+                val larger = maxOf(fromUid, req.toUid)
+                val existingFriendship = friendService.findFriendshipBetween(smaller, larger)
+                if (existingFriendship != null && existingFriendship.deleted == 0) {
+                    // 已存在未删除的好友关系 → 直接返回 ALREADY_FRIEND
+                    throw FriendException(BizCode.ALREADY_FRIEND)
+                }
+                // 防御性编程：UK 冲突意味着 DB 中已存在记录，若走到此处说明出现异常状态
+                // （如 existingFriendship==null 或 deleted!=0），按冲突处理返回 ALREADY_FRIEND
                 throw FriendException(BizCode.ALREADY_FRIEND)
             }
-            // 防御性编程：UK 冲突意味着 DB 中已存在记录，若走到此处说明出现异常状态
-            // （如 existingFriendship==null 或 deleted!=0），按冲突处理返回 ALREADY_FRIEND
-            throw FriendException(BizCode.ALREADY_FRIEND)
+            throw e
         }
 
         if (result.isMutualAccept) {

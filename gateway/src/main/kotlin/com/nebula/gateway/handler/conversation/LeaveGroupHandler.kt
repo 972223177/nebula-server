@@ -10,37 +10,30 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 
 /**
  * 退群/解散群 Handler — method = "conversation/leave_group"（D-04, D-09, D-19）。
  *
  * 职责：
- * - 委托 ConversationService 处理退群/解散群业务逻辑
- * - 群主退群 → 解散群：更新 status + 批量软删除 → 推送 GROUP_DISSOLVED
- * - 普通成员退群 → 软删除自己 → 推送 MEMBER_LEFT
+ * - 使用会话级互斥锁（ConversationLockManager）保证退群串行执行（D-19）
+ * - 委托 ConversationService 处理退群/解散群业务逻辑（Service 内部已通过 JpaTxRunner 包裹事务）
+ * - 群主退群 → 解散群：推送 GROUP_DISSOLVED
+ * - 普通成员退群 → 软删除自己：推送 MEMBER_LEFT
  *
  * @param conversationService 会话业务服务
  * @param lockManager 会话级互斥锁管理器
- * @param transactionTemplate 编程式事务模板
  * @param pushService 推送服务
  */
 class LeaveGroupHandler(
     private val conversationService: ConversationService,
     private val lockManager: ConversationLockManager,
-    private val transactionTemplate: org.springframework.transaction.support.TransactionTemplate,
     private val pushService: PushService
 ) : Handler<LeaveGroupReq, Response> {
 
     override val method: String = "conversation/leave_group"
 
     companion object {
-        /** 群聊已解散状态常量 */
-        private const val STATUS_DISSOLVED = 1
-
         /** 群主角色常量 */
         private const val ROLE_OWNER = "owner"
     }
@@ -54,16 +47,9 @@ class LeaveGroupHandler(
 
         if (selfMember != null && selfMember.role == ROLE_OWNER) {
             // 群主退群 → 解散群（D-09）
-            // D-79/H18: 事务包裹确保 member 删除 + conversation 更新原子性
-            // 修复（2026-06-20）：withContext(Dispatchers.IO) 释放调用者协程
-            withContext(Dispatchers.IO) {
-                lockManager.withLock(convId) {
-                    transactionTemplate.execute {
-                        runBlocking {
-                            conversationService.dissolveGroup(convId)
-                        }
-                    }
-                }
+            // 会话级锁 + Service 内置事务
+            lockManager.withLock(convId) {
+                conversationService.dissolveGroup(convId)
             }
 
             // 推送 GROUP_DISSOLVED（D-09）
@@ -77,16 +63,9 @@ class LeaveGroupHandler(
             )
         } else {
             // 普通成员退群（D-04）
-            // D-79/H18: 事务包裹确保 member 删除 + memberCount 原子性
-            // 修复（2026-06-20）：withContext(Dispatchers.IO) 释放调用者协程
-            withContext(Dispatchers.IO) {
-                lockManager.withLock(convId) {
-                    transactionTemplate.execute {
-                        runBlocking {
-                            conversationService.leaveGroup(req, session.userId)
-                        }
-                    }
-                }
+            // 会话级锁 + Service 内置事务
+            lockManager.withLock(convId) {
+                conversationService.leaveGroup(req, session.userId)
             }
 
             // 推送 MEMBER_LEFT 给剩余成员（排除退群者自己）

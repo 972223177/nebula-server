@@ -1,7 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.jpa)
-    alias(libs.plugins.kotlin.allopen)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -28,12 +26,11 @@ dependencies {
     implementation(project(":common"))
     implementation(project(":proto"))
 
-    // JPA + Hibernate ORM (D-01)
+    // Hibernate ORM（直接使用 EntityManager API，不再依赖 Spring Data JPA）
     implementation(libs.hibernate.core)
-    implementation(libs.spring.data.jpa)
-    implementation(libs.spring.tx)
+    // jakarta.persistence-api 由 hibernate-core 间接提供，不再单独声明
 
-    // Kotlin 反射 — Spring Data JPA 需要用于 Kotlin 协程/挂起函数检测
+    // Kotlin 反射 — Hibernate Kotlin 增强（KFunction/JvmStatic）需要
     implementation(libs.kotlin.reflect)
 
     // 日志框架
@@ -72,12 +69,4 @@ dependencies {
 }
 repositories {
     mavenCentral()
-}
-allOpen {
-    annotation("javax.persistence.Entity")
-    annotation("javax.persistence.Embeddable")
-    annotation("javax.persistence.MappedSuperclass")
-    annotation("jakarta.persistence.Entity")
-    annotation("jakarta.persistence.Embeddable")
-    annotation("jakarta.persistence.MappedSuperclass")
 }

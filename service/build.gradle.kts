@@ -26,10 +26,6 @@ dependencies {
     // Koin DI — 模块聚合需要 org.koin.core.module.Module 类型
     implementation(libs.koin.core)
 
-    // Spring Data JPA — 访问 Repository 接口（JpaRepository 超类）
-    implementation(libs.spring.data.jpa)
-    implementation(libs.spring.tx)
-
     // Jakarta Persistence — OptimisticLockException 等异常类型
     implementation(libs.jakarta.persistence.api)
 
@@ -48,6 +44,9 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.kotlin.test)
+    // BCryptPasswordEncoder 运行时需要 commons-logging（spring-security-crypto 的传递依赖，
+    // 在 application 阶段不直接引用时需要显式声明以确保测试可见）
+    testImplementation("commons-logging:commons-logging:1.3.2")
 
     // Testcontainers — Redis 集成测试容器
     testImplementation(libs.testcontainers.core)

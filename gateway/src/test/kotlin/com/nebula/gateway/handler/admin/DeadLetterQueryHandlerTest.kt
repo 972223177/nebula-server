@@ -4,6 +4,7 @@ import com.nebula.chat.admin.DeadLetterQueryReq
 import com.nebula.chat.admin.DeadLetterQueryResp
 import com.nebula.service.admin.DeadLetterDTO
 import com.nebula.service.admin.DeadLetterService
+import com.nebula.service.admin.ListPage
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -11,8 +12,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.PageImpl
-import org.springframework.data.domain.PageRequest
 
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -60,10 +59,9 @@ class DeadLetterQueryHandlerTest {
     @Test
     fun handleShouldReturnPagedResults() = runTest {
         // 准备：分页数据包含一条死信记录
-        val page = PageImpl(
-            listOf(testEntity),
-            PageRequest.of(0, 20),
-            1L
+        val page = ListPage(
+            items = listOf(testEntity),
+            total = 1L
         )
         coEvery { deadLetterService.query(any(), any(), any()) } returns page
 
@@ -164,10 +162,9 @@ class DeadLetterQueryHandlerTest {
             status = "pending",
             createdAt = 0L
         )
-        val page = PageImpl(
-            listOf(nullEntity),
-            PageRequest.of(0, 20),
-            1L
+        val page = ListPage(
+            items = listOf(nullEntity),
+            total = 1L
         )
         coEvery { deadLetterService.query(any(), any(), any()) } returns page
 
@@ -205,10 +202,9 @@ class DeadLetterQueryHandlerTest {
     @Test
     fun handleShouldReturnEmptyResultForNoMatchingRecords() = runTest {
         // 准备：空结果分页
-        val emptyPage = PageImpl<DeadLetterDTO>(
-            emptyList(),
-            PageRequest.of(0, 20),
-            0L
+        val emptyPage = ListPage<DeadLetterDTO>(
+            items = emptyList(),
+            total = 0L
         )
         coEvery { deadLetterService.query(any(), any(), any()) } returns emptyPage
 

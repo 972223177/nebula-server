@@ -1,10 +1,10 @@
 package com.nebula.common.init
 
 /**
- * 死信回调接口 — 消息异步刷盘失败时创建死信记录的回调。
+ * 死信桥接回调接口（D-28 跨模块桥接）。
  *
- * 放置于 common 模块，供 repository 模块（定义回调点）和
- * service 模块（实现回调逻辑）共享，避免模块间循环依赖（D-28）。
+ * 当消息持久化失败时由 repository 模块调用，由 service 层实现并注册到 Koin 容器。
+ * 函数声明为 suspend，调用方需在协程上下文中执行。
  */
 interface DeadLetterCallback {
     /**
@@ -19,7 +19,7 @@ interface DeadLetterCallback {
      * @param clientTs 客户端时间戳
      * @param reason 失败原因
      */
-    fun onMessageFailed(
+    suspend fun onMessageFailed(
         convId: String,
         senderUid: Long,
         msgType: Int,

@@ -1,23 +1,22 @@
 package com.nebula.repository.config
 
 import com.nebula.common.datasource.DataSourceProvider
-import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.flywaydb.core.Flyway
 import org.hibernate.cfg.AvailableSettings
-import org.springframework.data.jpa.repository.support.JpaRepositoryFactory
-import org.springframework.orm.jpa.JpaTransactionManager
-import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean
-import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter
-import org.springframework.transaction.support.TransactionTemplate
+import org.hibernate.cfg.Configuration
 import javax.sql.DataSource
 
 /**
- * JPA + Flyway 引导配置。
+ * JPA + Flyway 引导配置（纯 Hibernate，移除 Spring 依赖）。
  *
  * Flyway 迁移在 EntityManagerFactory 创建前执行（D-02）。
  * Hibernate 以 validate 模式启动，校验实体与表结构一致（D-01）。
- * 事务由 Service 层管理（D-09）。
+ *
+ * 事务由 Service 层管理（D-09）：通过 [com.nebula.repository.dao.JpaTxRunner] 提供。
+ *
+ * 构造说明：使用 Hibernate 原生 [Configuration] API 代替 Spring 的
+ * `LocalContainerEntityManagerFactoryBean`（方案 A：去除 Spring Data JPA / Spring ORM）。
  */
 class JpaConfig(
     private val dataSourceProvider: DataSourceProvider
@@ -26,66 +25,54 @@ class JpaConfig(
     val entityManagerFactory: EntityManagerFactory by lazy {
         val dataSource = dataSourceProvider.getDataSource()
         runFlywayMigrations(dataSource)
+        buildEntityManagerFactory(dataSource)
+    }
 
-        val emfBean = LocalContainerEntityManagerFactoryBean().apply {
-            setDataSource(dataSource)
-            setPackagesToScan("com.nebula.repository.entity")
-            jpaVendorAdapter = HibernateJpaVendorAdapter().apply {
-                setShowSql(false)
-                setGenerateDdl(false) // Flyway 负责 DDL（D-02）
+    /**
+     * 构建 EntityManagerFactory — 通过 Hibernate 原生 Configuration API。
+     *
+     * @param dataSource 已执行 Flyway 迁移的数据源
+     * @return 已配置的 [EntityManagerFactory]
+     */
+    private fun buildEntityManagerFactory(dataSource: DataSource): EntityManagerFactory {
+        val configuration = Configuration()
+        // 连接池由 DataSourceProvider 提供（HikariCP）
+        // 直接使用 "hibernate.connection.datasource" 而非 AvailableSettings.DATASOURCE，
+        // 后者在 Hibernate 6.6 已被弃用并计划移除（参见 HHH-17800）
+        configuration.properties["hibernate.connection.datasource"] = dataSource
+        // 校验实体与表结构一致（D-01）
+        configuration.properties[AvailableSettings.HBM2DDL_AUTO] = "validate"
+        // JDBC 批量大小
+        configuration.properties[AvailableSettings.STATEMENT_BATCH_SIZE] = "30"
+        // 批量插入/更新排序优化
+        configuration.properties[AvailableSettings.ORDER_INSERTS] = "true"
+        configuration.properties[AvailableSettings.ORDER_UPDATES] = "true"
+        // 命名策略：Hibernate 6 推荐的 CamelCase → snake_case 转换
+        configuration.properties[AvailableSettings.PHYSICAL_NAMING_STRATEGY] =
+            "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy"
+        // 关闭 SQL 打印
+        configuration.properties[AvailableSettings.SHOW_SQL] = "false"
+
+        // 扫描 com.nebula.repository.entity 包下所有 @Entity 类
+        configuration.addPackage("com.nebula.repository.entity")
+        val entityClassNames = listOf(
+            "com.nebula.repository.entity.UserEntity",
+            "com.nebula.repository.entity.ConversationEntity",
+            "com.nebula.repository.entity.ConversationMemberEntity",
+            "com.nebula.repository.entity.MessageEntity",
+            "com.nebula.repository.entity.FriendRequestEntity",
+            "com.nebula.repository.entity.FriendshipEntity",
+            "com.nebula.repository.entity.DeadLetterEntity"
+        )
+        entityClassNames.forEach { className ->
+            try {
+                configuration.addAnnotatedClass(Class.forName(className))
+            } catch (e: ClassNotFoundException) {
+                throw IllegalStateException("Failed to load entity class: $className", e)
             }
-            jpaPropertyMap = mapOf(
-                AvailableSettings.HBM2DDL_AUTO to "validate",       // 校验实体与表结构一致
-                AvailableSettings.STATEMENT_BATCH_SIZE to "30",     // JDBC 批量大小
-                AvailableSettings.ORDER_INSERTS to "true",           // 批量插入排序优化
-                AvailableSettings.ORDER_UPDATES to "true",            // 批量更新排序优化
-                AvailableSettings.PHYSICAL_NAMING_STRATEGY to
-                        "org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy"
-            )
         }
-        emfBean.afterPropertiesSet()
-        emfBean.getObject() ?: error("EntityManagerFactory 未初始化")
-    }
 
-    /** 复用 EntityManager 实例，避免每次 getRepository 创建后不关闭导致的连接泄漏 */
-    private lateinit var entityManager: EntityManager
-
-    /**
-     * 获取 Spring Data JPA Repository 代理。
-     *
-     * @param repositoryInterface JPA Repository 接口类
-     * @return Repository 代理实例
-     */
-    fun <T> getRepository(repositoryInterface: Class<T>): T {
-        if (!::entityManager.isInitialized) {
-            entityManager = entityManagerFactory.createEntityManager()
-        }
-        val factory = JpaRepositoryFactory(entityManager)
-        return factory.getRepository(repositoryInterface)
-    }
-
-    /**
-     * 创建编程式事务模板（D-19 事务策略）。
-     *
-     * 基于 entityManagerFactory 创建 JpaTransactionManager，
-     * 用于编写多表事务（如创建群聊：插入 ConversationEntity + 批量插入 ConversationMemberEntity）。
-     * TransactionTemplate 通过 Koin DI 注入，在 Handler 中配合 ConversationLockManager 用于保证原子性。
-     *
-     * @return TransactionTemplate 实例
-     */
-    fun transactionTemplate(): TransactionTemplate {
-        val transactionManager = JpaTransactionManager(entityManagerFactory)
-        transactionManager.afterPropertiesSet()
-        return TransactionTemplate(transactionManager)
-    }
-
-    /**
-     * 关闭复用的 EntityManager（应用关闭时调用）。
-     */
-    fun close() {
-        if (::entityManager.isInitialized) {
-            entityManager.close()
-        }
+        return configuration.buildSessionFactory()
     }
 }
 

@@ -1,19 +1,19 @@
 package com.nebula.repository.redis
 
-import com.nebula.repository.entity.UserEntity
-import com.nebula.repository.repository.UserRepository
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.UserDao
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * 用户隐私设置缓存操作（D-09, D-11）。
@@ -28,12 +28,14 @@ import kotlinx.serialization.encodeToString
  * 此权衡已被接受。
  *
  * @param connection 共享 Redis 连接实例
- * @param userRepository MySQL 用户数据仓库，用于回退读取和异步刷写
+ * @param userDao MySQL 用户数据访问对象，用于回退读取和异步刷写
+ * @param txRunner JPA 事务运行器，承载 MySQL 读写事务
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class PrivacyRepository(
     private val connection: StatefulRedisConnection<String, String>,
-    private val userRepository: UserRepository
+    private val userDao: UserDao,
+    private val txRunner: JpaTxRunner
 ) {
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 
@@ -68,7 +70,7 @@ class PrivacyRepository(
      *
      * 查询顺序：Redis → MySQL（回退）。
      * Redis 命中时反序列化 PrivacyData 并返回 hideOnlineStatus。
-     * Redis 未命中时从 MySQL UserRepository 读取 privacyStatus，
+     * Redis 未命中时从 MySQL UserDao 读取 privacyStatus，
      * 写回 Redis 后返回。
      *
      * @param userId 用户 ID
@@ -84,9 +86,9 @@ class PrivacyRepository(
                 }
             }
             // Redis 未命中，从 MySQL 回退读取
-            val entity = withContext(Dispatchers.IO) { userRepository.findById(userId) }
-            if (entity.isPresent) {
-                val hide = entity.get().privacyStatus == PRIVACY_HIDDEN
+            val entity = txRunner.execute { em -> userDao.findById(em, userId) }
+            if (entity != null) {
+                val hide = entity.privacyStatus == PRIVACY_HIDDEN
                 // 写回 Redis
                 withTimeout(REDIS_TIMEOUT_MS) {
                     redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, json.encodeToString(PrivacyData(hide)))
@@ -97,8 +99,8 @@ class PrivacyRepository(
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Redis getHideOnlineStatus timeout for userId=$userId, falling back to MySQL" }
             // 超时后从 MySQL 回退
-            val entity = withContext(Dispatchers.IO) { userRepository.findById(userId) }
-            return if (entity.isPresent) entity.get().privacyStatus == PRIVACY_HIDDEN else false
+            val entity = txRunner.execute { em -> userDao.findById(em, userId) }
+            return if (entity != null) entity.privacyStatus == PRIVACY_HIDDEN else false
         } catch (e: Exception) {
             logger.error(e) { "Redis getHideOnlineStatus failed for userId=$userId" }
             false
@@ -119,18 +121,15 @@ class PrivacyRepository(
                 redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, json.encodeToString(PrivacyData(hide)))
             }
             // Redis 写成功后，异步刷 MySQL（best-effort 模式）
-            withContext(Dispatchers.IO) {
-                try {
-                    val entity = userRepository.findById(userId)
-                    if (entity.isPresent) {
-                        val user = entity.get()
-                        user.privacyStatus = if (hide) PRIVACY_HIDDEN else PRIVACY_VISIBLE
-                        userRepository.save(user)
-                    }
-                } catch (e: Exception) {
-                    logger.error(e) { "Async MySQL privacy update failed for userId=$userId" }
-                    throw e  // M26: 重新抛出异常，而非静默吞掉，确保调用方可感知失败
+            try {
+                txRunner.execute { em ->
+                    val entity = userDao.findById(em, userId) ?: return@execute
+                    entity.privacyStatus = if (hide) PRIVACY_HIDDEN else PRIVACY_VISIBLE
+                    userDao.update(em, entity)
                 }
+            } catch (e: Exception) {
+                logger.error(e) { "Async MySQL privacy update failed for userId=$userId" }
+                throw e  // M26: 重新抛出异常，而非静默吞掉，确保调用方可感知失败
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Redis setHideOnlineStatus timeout for userId=$userId" }

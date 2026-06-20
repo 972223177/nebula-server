@@ -7,8 +7,9 @@ import com.nebula.gateway.delivery.RedisDeliveryTracker
 import com.nebula.gateway.handler.admin.AdminHandlerCollector
 import com.nebula.gateway.handler.admin.DeadLetterQueryHandler
 import com.nebula.gateway.handler.admin.RetryDeadLetterHandler
+import com.nebula.repository.dao.DeadLetterDao
+import com.nebula.repository.dao.JpaTxRunner
 import com.nebula.repository.redis.MessageQueueRepository
-import com.nebula.repository.repository.DeadLetterRepository
 import com.nebula.service.admin.DeadLetterService
 import com.nebula.service.sequence.SeqService
 import io.lettuce.core.api.StatefulRedisConnection
@@ -38,8 +39,9 @@ class MessageReliabilityModuleTest {
 
     /** 外部 mock 依赖 */
     private val redisConnection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
-    private val deadLetterRepo = mockk<DeadLetterRepository>()
+    private val deadLetterDao = mockk<DeadLetterDao>()
     private val messageQueueRepo = mockk<MessageQueueRepository>()
+    private val txRunner = mockk<JpaTxRunner>()
     private val idGenerator = mockk<SnowflakeIdGenerator>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val deadLetterService = mockk<DeadLetterService>()
@@ -50,8 +52,9 @@ class MessageReliabilityModuleTest {
      */
     private fun buildExternalModule() = module {
         single { redisConnection as StatefulRedisConnection<String, String> }
-        single { deadLetterRepo }
+        single { deadLetterDao }
         single { messageQueueRepo }
+        single { txRunner }
         single { idGenerator }
         single { deadLetterService }
         single { seqService }

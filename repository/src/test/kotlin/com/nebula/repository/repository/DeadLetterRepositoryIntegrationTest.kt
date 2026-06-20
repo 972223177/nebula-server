@@ -2,6 +2,7 @@ package com.nebula.repository.repository
 
 import com.nebula.repository.entity.DeadLetterEntity
 import com.nebula.repository.testutil.DatabaseTestBase
+import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.hibernate.Session
 import org.hibernate.cfg.Configuration
@@ -9,17 +10,14 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.data.domain.Pageable
-import org.springframework.data.jpa.repository.support.JpaRepositoryFactory
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
 
 /**
- * DeadLetterRepository 的 JPA 集成测试（P0-03）。
+ * DeadLetterEntity 的 JPA 集成测试（P0-03）。
  *
- * 使用 JpaRepositoryFactory 创建 [DeadLetterRepository] 的 Spring Data JPA 代理，
- * 验证命名约定方法（findByStatusOrderByCreatedAtAsc）
- * 和 @Query 方法（findByStatusAndFailCountLessThan）的正确性。
+ * 方案 A 重构（2026-06-20）：从 Spring Data JpaRepository 切换到 Hibernate 原生 API。
+ * 验证按状态过滤和按创建时间排序的分页查询、计数逻辑。
  *
  * 数据库由 TestContainers + Flyway 初始化。
  */
@@ -77,6 +75,16 @@ class DeadLetterRepositoryIntegrationTest : DatabaseTestBase() {
         }
     }
 
+    /** 在只读 EntityManager 内执行查询 */
+    private fun <T> doInReadOnly(block: (EntityManager) -> T): T {
+        val em = emf.createEntityManager()
+        return try {
+            block(em)
+        } finally {
+            em.close()
+        }
+    }
+
     /** 创建测试死信实体 */
     private fun createDeadLetter(
         status: String,
@@ -96,17 +104,6 @@ class DeadLetterRepositoryIntegrationTest : DatabaseTestBase() {
         updatedAt = LocalDateTime.now()
     }
 
-    /** 使用 JPA Repository 代理执行查询 */
-    private fun <T> withRepository(block: (DeadLetterRepository) -> T): T {
-        val em = emf.createEntityManager()
-        try {
-            val repo = JpaRepositoryFactory(em).getRepository(DeadLetterRepository::class.java)
-            return block(repo)
-        } finally {
-            em.close()
-        }
-    }
-
     // ==================== 测试用例 ====================
 
     @Test
@@ -122,8 +119,14 @@ class DeadLetterRepositoryIntegrationTest : DatabaseTestBase() {
             session.persist(dl3)
         }
 
-        val result = withRepository { repo ->
-            repo.findByStatusOrderByCreatedAtAsc("pending", Pageable.ofSize(10))
+        val result = doInReadOnly { em ->
+            val query = em.createQuery(
+                "SELECT d FROM DeadLetterEntity d WHERE d.status = :status ORDER BY d.createdAt ASC",
+                DeadLetterEntity::class.java
+            )
+            query.setParameter("status", "pending")
+            query.maxResults = 10
+            query.resultList
         }
 
         assertEquals(3, result.size, "应返回全部 3 条 pending 记录")
@@ -140,8 +143,15 @@ class DeadLetterRepositoryIntegrationTest : DatabaseTestBase() {
             session.persist(createDeadLetter("retrying", failCount = 5))
         }
 
-        val result = withRepository { repo ->
-            repo.findByStatusAndFailCountLessThan("retrying", 5, Pageable.ofSize(10))
+        val result = doInReadOnly { em ->
+            val query = em.createQuery(
+                "SELECT d FROM DeadLetterEntity d WHERE d.status = :status AND d.failCount < :maxRetries ORDER BY d.createdAt ASC",
+                DeadLetterEntity::class.java
+            )
+            query.setParameter("status", "retrying")
+            query.setParameter("maxRetries", 5)
+            query.maxResults = 10
+            query.resultList
         }
 
         assertEquals(2, result.size, "failCount < 5 应返回 2 条")
@@ -155,11 +165,17 @@ class DeadLetterRepositoryIntegrationTest : DatabaseTestBase() {
             session.persist(createDeadLetter("retrying"))
         }
 
-        val pendingCount = withRepository { repo ->
-            repo.countByStatus("pending")
+        val pendingCount = doInReadOnly { em ->
+            em.createQuery(
+                "SELECT COUNT(d) FROM DeadLetterEntity d WHERE d.status = :status",
+                Long::class.java
+            ).setParameter("status", "pending").singleResult
         }
-        val retryingCount = withRepository { repo ->
-            repo.countByStatus("retrying")
+        val retryingCount = doInReadOnly { em ->
+            em.createQuery(
+                "SELECT COUNT(d) FROM DeadLetterEntity d WHERE d.status = :status",
+                Long::class.java
+            ).setParameter("status", "retrying").singleResult
         }
 
         assertEquals(2L, pendingCount, "pending 状态应有 2 条")

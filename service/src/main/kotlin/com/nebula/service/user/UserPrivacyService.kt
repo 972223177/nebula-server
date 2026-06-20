@@ -5,7 +5,6 @@ import com.nebula.chat.user.GetPrivacyResp
 import com.nebula.chat.user.SetPrivacyReq
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.FriendshipRepository
 
 /**
  * 用户隐私设置业务服务（D-09, D-11, D-57）。
@@ -15,8 +14,7 @@ import com.nebula.repository.repository.FriendshipRepository
  */
 class UserPrivacyService(
     private val privacyRepository: PrivacyRepository,
-    private val onlineStatusRepository: OnlineStatusRepository,
-    private val friendshipRepository: FriendshipRepository
+    private val onlineStatusRepository: OnlineStatusRepository
 ) {
 
     /**

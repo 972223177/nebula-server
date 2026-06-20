@@ -10,29 +10,23 @@ import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.friend.FriendService
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
-import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 接受好友申请 Handler（D-43, D-45, D-52）。
  *
  * 职责：
- * - 委托 FriendService 处理接受申请业务逻辑
+ * - 委托 FriendService 处理接受申请业务逻辑（Service 内部已通过 JpaTxRunner 包裹事务）
  * - 推送 FRIEND_ACCEPTED 给双方
  *
  * @param friendService 好友业务服务
  * @param pushService 推送服务
- * @param lockManager 会话级互斥锁管理器
- * @param transactionTemplate 编程式事务模板（D-79）
+ * @param lockManager 会话级互斥锁管理器（保留以维持 API 兼容）
  */
 class FriendAcceptHandler(
     private val friendService: FriendService,
     private val pushService: PushService,
-    private val lockManager: ConversationLockManager,
-    private val transactionTemplate: TransactionTemplate
+    @Suppress("unused") private val lockManager: ConversationLockManager
 ) : Handler<FriendAcceptReq, Response> {
 
     override val method: String = "friend/accept"
@@ -40,15 +34,8 @@ class FriendAcceptHandler(
     override suspend fun handle(req: FriendAcceptReq): Response {
         val session = currentCoroutineContext().requireSession()
 
-        // D-79/H16: 事务包裹确保跨 Repository 写入原子性
-        // 修复（2026-06-20）：包裹 withContext(Dispatchers.IO) 释放调用者协程
-        val result = withContext(Dispatchers.IO) {
-            transactionTemplate.execute {
-                runBlocking {
-                    friendService.acceptFriendRequest(req, session.userId)
-                }
-            }!!
-        }
+        // Service 内部事务
+        val result = friendService.acceptFriendRequest(req, session.userId)
 
         // 推送 FRIEND_ACCEPTED 给双方
         val acceptedPayload = FriendAcceptedPayload.newBuilder()
