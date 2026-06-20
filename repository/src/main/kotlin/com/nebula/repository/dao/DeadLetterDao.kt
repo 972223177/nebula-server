@@ -120,4 +120,42 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         query.maxResults = limit
         return query.resultList
     }
+
+    /**
+     * 分页查询所有死信记录（按创建时间升序，无状态过滤）。
+     *
+     * 替代 [DeadLetterService.query] 全量分支中直接使用 `em.createQuery` 的临时实现，
+     * 统一 DAO 入口，便于测试和缓存。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param offset 跳过的记录数
+     * @param limit 返回行数限制
+     * @return 死信记录列表
+     */
+    suspend fun findAllOrderByCreatedAtAsc(
+        em: EntityManager,
+        offset: Int,
+        limit: Int
+    ): List<DeadLetterEntity> {
+        val query = em.createQuery(
+            "SELECT d FROM DeadLetterEntity d ORDER BY d.createdAt ASC",
+            DeadLetterEntity::class.java
+        )
+        query.firstResult = offset
+        query.maxResults = limit
+        return query.resultList
+    }
+
+    /**
+     * 统计所有死信记录数（无状态过滤）。
+     *
+     * 配合 [findAllOrderByCreatedAtAsc] 在全量分页查询时使用。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @return 死信记录总数
+     */
+    suspend fun countAll(em: EntityManager): Long = count(
+        em,
+        "SELECT COUNT(d) FROM DeadLetterEntity d"
+    )
 }

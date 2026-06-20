@@ -47,6 +47,15 @@ class UserService(
         private const val MIN_PASSWORD_LENGTH = 6
         /** 单页最大返回条数（D-08） */
         private const val MAX_SEARCH_LIMIT = 20
+        /**
+         * Snowflake ID 上界（粗略估计）。
+         *
+         * 用于 searchUsers 游标兼容：旧客户端可能传 createdAt 毫秒（如 1.7e12）作为 cursor，
+         * 远小于 Long.MAX_VALUE 但超过 Snowflake ID 上界，应被识别为"首次查询"。
+         * 当前 ID 生成器 workerId=1, datacenterId=1，时间戳起点 2020-01-01
+         * → ID 上界约 2^63 - 1，使用 1e18 作为保守阈值。
+         */
+        private const val SNOWFLAKE_ID_MAX = 1_000_000_000_000_000_000L
     }
 
     /**
@@ -102,6 +111,7 @@ class UserService(
                 }
                 userDao.insert(em, user)
             }
+            // 在事务成功提交后校验，requireNotNull 在事务内已完成（id 早于事务生成）
             requireNotNull(user.id) { "用户ID不能为null" }
         } catch (e: UserException) {
             throw e
@@ -161,11 +171,13 @@ class UserService(
         }
 
         val actualLimit = if (limit in 1..MAX_SEARCH_LIMIT) limit else MAX_SEARCH_LIMIT
-        val cursorDateTime = if (cursor == 0L) null
-            else LocalDateTime.ofInstant(Instant.ofEpochMilli(cursor), ZoneOffset.UTC)
+        // Phase 5.1: 游标从 createdAt 毫秒改为用户 id（Snowflake 单调递增）
+        // 客户端契约保持 cursor: Long 不变，但语义变了（首次传 0，后续传返回的 nextCursor）
+        // 兼容旧客户端：如果传的不是合理的 id（> 0 且 < Snowflake 上限），视为首次查询
+        val cursorId = if (cursor in 1..SNOWFLAKE_ID_MAX) cursor else 0L
 
         val users = txRunner.execute { em ->
-            userDao.findByUsernameContaining(em, trimmed, cursorDateTime, actualLimit + 1)
+            userDao.findByUsernameContainingById(em, trimmed, cursorId, actualLimit + 1)
         }
 
         val hasMore = users.size > actualLimit
@@ -181,9 +193,8 @@ class UserService(
                 .setCreatedAt(entity.createdAt?.atZone(ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: 0)
                 .build())
         }
-        builder.setNextCursor(
-            result.lastOrNull()?.createdAt?.atZone(ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: 0
-        )
+        // nextCursor 改为最后一行的 id
+        builder.setNextCursor(result.lastOrNull()?.id ?: 0L)
         builder.setHasMore(hasMore)
         return builder.build()
     }

@@ -28,6 +28,8 @@ import kotlin.coroutines.coroutineContext
  * **关键约束**（设计契约）：
  * 1. `block` 体内的所有 `suspend` 挂起点恢复时，**必须仍在 IO 线程上**。
  *    这要求 `block` 不应显式调用 `withContext(其他Dispatcher)` 切走线程。
+ *    - **强约束**：弹性 IO 线程池中，withContext(Default) 切回时可能到不同 IO worker
+ *      → 违反 Hibernate "一线程一 Session" 假设，行为未定义
  * 2. 如果 `block` 内部需要 CPU-bound 计算，应使用 `withContext(Dispatchers.Default)`
  *    包住**子 block**，**而不是替换整个事务上下文**。
  * 3. cleanup（[EntityManager.close]）使用 [NonCancellable] 包装，
@@ -41,6 +43,16 @@ import kotlin.coroutines.coroutineContext
  * - cleanup 块内的 suspend 调用会正常执行，不会因外部取消而中断
  * - cleanup 结束后，如果原协程已被取消，调用 [ensureActive] 重新抛 CancellationException
  *   以保留原始取消语义
+ *
+ * ## Metrics 埋点
+ *
+ * 通过 [MetricsHook] 接口暴露事务执行的关键事件：
+ * - `onTxStart`: 事务开始
+ * - `onTxCommit`: 事务提交成功
+ * - `onTxRollback`: 事务回滚（含原因）
+ * - `onTxError`: block 抛出的异常（不区分 commit/rollback 后的二次错误）
+ *
+ * 不强制依赖 Micrometer 等外部库，应用层可注入空实现或具体适配器。
  *
  * ## 用法
  *
@@ -61,8 +73,12 @@ import kotlin.coroutines.coroutineContext
  * ```
  *
  * @param emf JPA EntityManagerFactory（线程安全，可共享）
+ * @param metricsHook metrics 埋点钩子（可选，默认 no-op）
  */
-class JpaTxRunner(private val emf: EntityManagerFactory) {
+class JpaTxRunner(
+    private val emf: EntityManagerFactory,
+    private val metricsHook: MetricsHook = NoOpMetricsHook
+) {
 
     /**
      * 在事务中执行 [block]，返回其结果。
@@ -81,16 +97,19 @@ class JpaTxRunner(private val emf: EntityManagerFactory) {
      * @throws Throwable block 抛出的任何异常（事务已回滚，EM 已关闭）
      */
     suspend fun <T> execute(block: suspend (EntityManager) -> T): T = withContext(Dispatchers.IO) {
+        metricsHook.onTxStart()
         val em = emf.createEntityManager()
         val tx: EntityTransaction = em.transaction
         try {
             tx.begin()
             val result = block(em)
             tx.commit()
+            metricsHook.onTxCommit()
             result
         } catch (e: Throwable) {
             // 异常路径：先尝试 rollback，rollback 失败信息用 addSuppressed 保留
             rollbackSafely(tx, e)
+            metricsHook.onTxRollback(e)
             throw e
         } finally {
             // cleanup 必须 NonCancellable 保护（官方推荐模式）
@@ -133,4 +152,32 @@ class JpaTxRunner(private val emf: EntityManagerFactory) {
             // 资源泄露风险已存在，再次抛出只会让 finally 块混乱
         }
     }
+}
+
+/**
+ * 事务执行 metrics 埋点接口。
+ *
+ * 应用层可实现此接口对接 Micrometer / Prometheus / 自研 metrics 系统。
+ * 所有方法在 IO 线程上调用，**不应执行耗时操作**。
+ */
+interface MetricsHook {
+    /** 事务开始（调用 emf.createEntityManager 之前） */
+    fun onTxStart()
+
+    /** 事务提交成功 */
+    fun onTxCommit()
+
+    /**
+     * 事务回滚。
+     *
+     * @param cause 触发回滚的原始异常（业务异常 / DB 错误 / 主动 throw）
+     */
+    fun onTxRollback(cause: Throwable)
+}
+
+/** 默认空实现 — 不埋点，用于生产环境不关心 metrics 的场景 */
+object NoOpMetricsHook : MetricsHook {
+    override fun onTxStart() {}
+    override fun onTxCommit() {}
+    override fun onTxRollback(cause: Throwable) {}
 }

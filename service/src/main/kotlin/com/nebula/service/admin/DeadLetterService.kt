@@ -7,7 +7,7 @@ import com.nebula.repository.dao.JpaTxRunner
 import com.nebula.repository.entity.DeadLetterEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jakarta.persistence.OptimisticLockException
+import jakarta.persistence.OptimisticLockException  // 保留供其他方法使用（如 retry）
 import java.time.ZoneOffset
 
 /**
@@ -247,20 +247,9 @@ class DeadLetterService(
 
         return txRunner.execute { em ->
             if (status.isNullOrBlank()) {
-                // 全量查询：findAll 不可用，改用 findAllById 不实用
-                // 简化实现：直接查 findAllByStatus 不过滤，但 DeadLetterEntity 没有 findAll
-                // 用 Hibernate 的 criteria 不可行，所以这里用 em.createQuery 查全部
-                val allItems = em.createQuery(
-                    "SELECT d FROM DeadLetterEntity d ORDER BY d.createdAt ASC",
-                    DeadLetterEntity::class.java
-                ).apply {
-                    firstResult = offset
-                    maxResults = actualPageSize
-                }.resultList
-                val total = em.createQuery(
-                    "SELECT COUNT(d) FROM DeadLetterEntity d",
-                    Long::class.java
-                ).singleResult
+                // 全量查询：使用 DAO 统一入口（避免 Service 内嵌 JPQL）
+                val allItems = deadLetterDao.findAllOrderByCreatedAtAsc(em, offset, actualPageSize)
+                val total = deadLetterDao.countAll(em)
                 ListPage(allItems.map { it.toDTO() }, total)
             } else {
                 // M15: 使用 countByStatus 获取精确的过滤后总数，而非未过滤的 findAll().totalElements
@@ -300,20 +289,23 @@ class DeadLetterService(
      */
     suspend fun markPermanentFailed() {
         // M16: failCount >= MAX_COMPENSATE_RETRIES 才标记永久失败，修复 failCount < 0 死查询
-        val expiredItems = txRunner.execute { em ->
-            deadLetterDao.findByStatusAndFailCountGreaterThanEqual(
-                em, STATUS_RETRYING, MAX_COMPENSATE_RETRIES, offset = 0, limit = BATCH_SIZE
+        // 性能优化（Phase 4.4）：用单条 JPQL UPDATE 一次性批量更新所有超限记录，
+        // 避免逐条循环 + 每条一个独立事务（之前的实现 N 个超限记录 = N 个事务 = N 次连接获取）
+        val affectedRows = txRunner.execute { em ->
+            deadLetterDao.executeUpdate(
+                em,
+                """
+                UPDATE DeadLetterEntity d
+                SET d.status = :permanentFailed
+                WHERE d.status = :retrying AND d.failCount >= :maxRetries
+                """.trimIndent(),
+                "permanentFailed" to STATUS_PERMANENT_FAILED,
+                "retrying" to STATUS_RETRYING,
+                "maxRetries" to MAX_COMPENSATE_RETRIES
             )
         }
-
-        for (item in expiredItems) {
-            try {
-                item.status = STATUS_PERMANENT_FAILED
-                txRunner.execute { em -> deadLetterDao.update(em, item) }
-                logger.warn { "死信已达最大重试次数，标记为永久失败: id=${item.id}" }
-            } catch (e: OptimisticLockException) {
-                logger.warn(e) { "标记永久失败并发冲突，跳过 id=${item.id}" }
-            }
+        if (affectedRows > 0) {
+            logger.warn { "死信已达最大重试次数，标记为永久失败: count=$affectedRows" }
         }
     }
 }

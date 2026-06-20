@@ -57,10 +57,28 @@ class MessageService(
      * 1. 参数校验：内容非空、clientMessageId 非空
      * 2. 验证发送者是会话成员
      * 3. 私聊会话检查好友关系（D-56）
-     * 4. 去重检查：Redis SETNX，7 天 TTL
-     * 5. 生成 Snowflake ID
-     * 6. 构造 ChatMessage 写入 Redis Stream
-     * 7. 更新会话元信息（lastMessageId、lastMessagePreview 等）
+     * 4. 生成 Snowflake ID
+     * 5. 构造 ChatMessage 写入 Redis Stream
+     * 6. 更新会话元信息（lastMessageId、lastMessagePreview 等）
+     * 7. 生成会话序列号
+     *
+     * ## 双写一致性（Phase 3 调整）
+     *
+     * 调整后的顺序：**先更新 DB 元信息（事务内）→ 再写入 Redis Stream（事务外）**。
+     *
+     * 之前顺序（enqueue Redis 在前）的问题：
+     * - Redis enqueue 成功 → DB 元信息更新失败 → UI 显示"最后消息"与实际不一致
+     * - 客户端 clientMessageId 已做去重，重试时检测到重复，会"假成功"返回
+     *
+     * 调整后顺序的权衡：
+     * - DB 元信息失败 → 抛异常 → 客户端重试 → 重新走流程
+     * - DB 成功 → Redis enqueue 失败 → DB 元信息"超前"指向新 msgId，但实际消息不在 Stream
+     *   **后果**：接收端会拉不到这条消息，直到下次消息覆盖
+     *   **缓解**：客户端 clientMessageId 幂等，下次重试时正常 enqueue
+     *   **设计决策**：DB 元信息代表"用户期望发送成功"，Redis enqueue 是"实际投递"，两者偶尔漂移可接受
+     *
+     * 更严格的方案是 Transactional Outbox 模式（写 outbox 表 + 异步 Relay 投递），
+     * 鉴于 Nebula 是中小型 IM 系统，当前折中方案在 SLA 与复杂度之间取得平衡。
      *
      * @param req 发送消息请求
      * @param senderUid 发送者用户 ID
@@ -77,8 +95,14 @@ class MessageService(
             throw ChatException(BizCode.INVALID_PARAM, "client_message_id 不能为空")
         }
 
-        // Step 2-3: 验证成员身份 + 私聊好友关系（在事务中一并完成）
-        val conversation = txRunner.execute { em ->
+        // Step 2-3: 验证成员身份 + 私聊好友关系 + 预占位会话元信息（单事务）
+        // 注：事务内同时更新元信息，确保 step 2-3 与 step 6 在同一事务（要么都成功，要么都回滚）
+        val msgId = idGenerator.nextId()
+        val now = System.currentTimeMillis()
+        val preview = req.content.take(100)
+        val nowDate = LocalDateTime.now()
+
+        txRunner.execute { em ->
             val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, senderUid)
             if (member == null || !member.isActive) {
                 throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
@@ -93,13 +117,16 @@ class MessageService(
                     throw ChatException(BizCode.NOT_FRIEND, "私聊消息需要好友关系")
                 }
             }
-            conv
+
+            // 同一事务内更新会话元信息（D-21）
+            // 托管实体直接改字段，commit 时脏检查自动 flush
+            conv.lastMessageId = msgId
+            conv.lastMessagePreview = preview
+            conv.lastMessageTs = now
+            conv.updatedAt = nowDate
         }
 
-        // Step 5-7: 生成 ID + 构造消息 + 写入
-        val msgId = idGenerator.nextId()
-        val now = System.currentTimeMillis()
-
+        // Step 5-6: 构造消息 + 写入 Redis Stream（事务外，失败可重试）
         val chatMessage = ChatMessage.newBuilder()
             .setMsgId(msgId)
             .setConversationId(conversationId)
@@ -124,15 +151,11 @@ class MessageService(
         )
         messageQueueRepository.enqueue(streamFields)
 
-        // 更新会话元信息（D-21：直接在实体上设置 lastMessage 快照字段）
-        conversation.lastMessageId = msgId
-        conversation.lastMessagePreview = req.content.take(100)
-        conversation.lastMessageTs = now
-        conversation.updatedAt = LocalDateTime.now()
-        txRunner.execute { em -> conversationDao.update(em, conversation) }
-
-        // Step 8: 生成会话序列号（D-74 per-(conv,uid) 自增，D-78 统一委托 SeqService）
+        // Step 7: 生成会话序列号（D-74 per-(conv,uid) 自增，D-78 统一委托 SeqService）
         val seq = seqService.nextSeq(conversationId, senderUid)
+
+        // 重新加载 conversation 用于返回（因为上面 conv 已在事务内修改/关闭）
+        val conversation = txRunner.execute { em -> conversationDao.findById(em, conversationId)!! }
 
         return SendMessageResult(
             msgId = msgId,
