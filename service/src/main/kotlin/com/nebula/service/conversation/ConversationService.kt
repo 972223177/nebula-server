@@ -262,9 +262,9 @@ class ConversationService(
 
                 if (existing != null && !existing.isActive) {
                     // 恢复已退出成员，不增加成员计数（原本已计入）
+                    // 直接改字段，commit 时脏检查自动 UPDATE
                     existing.deleted = 0
                     existing.joinedAt = now
-                    conversationMemberDao.update(em, existing)
                     // 注意：不添加到 newMemberUids，避免重复计数
                 } else {
                     // 创建新成员记录
@@ -344,9 +344,8 @@ class ConversationService(
                 throw ConversationException(BizCode.GROUP_DISSOLVED)
             }
 
-            // 标记群组为已解散
+            // 标记群组为已解散（直接改字段，commit 时脏检查自动 UPDATE）
             conv.status = STATUS_DISSOLVED
-            conversationDao.update(em, conv)
 
             // 软删除所有群成员
             conversationMemberDao.softDeleteAllByConversationId(em, convId)
@@ -420,8 +419,7 @@ class ConversationService(
                 conv.avatar = req.avatarUrl
             }
             conv.updatedAt = LocalDateTime.now()
-
-            conversationDao.update(em, conv)
+            // 直接改字段，commit 时脏检查自动 UPDATE
         }
     }
 
@@ -435,7 +433,9 @@ class ConversationService(
     suspend fun getGroupMembers(req: GroupMembersReq, userId: Long): GroupMembersResp {
         val convId = req.conversationId
 
-        val (members, uidList) = txRunner.execute { em ->
+        // 单事务内完成：成员验证 + 成员列表 + 批量用户信息查询
+        // 避免拆成两个事务导致的快照不一致问题
+        val (members, userMap) = txRunner.execute { em ->
             // 验证成员身份
             val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, userId)
             if (member == null || !member.isActive) {
@@ -444,13 +444,12 @@ class ConversationService(
 
             val allMembers = conversationMemberDao.findByConversationId(em, convId)
                 .filter { it.isActive }
-            allMembers to allMembers.map { it.userId }
+            val uidList = allMembers.map { it.userId }
+            val users = if (uidList.isNotEmpty()) {
+                userDao.findAllById(em, uidList).associateBy { it.id }
+            } else emptyMap()
+            allMembers to users
         }
-
-        val userMap = if (uidList.isNotEmpty()) {
-            txRunner.execute { em -> userDao.findAllById(em, uidList) }
-                .associateBy { it.id }
-        } else emptyMap()
 
         val builder = GroupMembersResp.newBuilder()
         members.forEach { m ->

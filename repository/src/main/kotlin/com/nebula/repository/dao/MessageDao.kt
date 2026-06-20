@@ -25,7 +25,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
         conversationId: String,
         cursor: Long,
         limit: Int
-    ): List<MessageEntity> = io {
+    ): List<MessageEntity> {
         val query = em.createQuery(
             """
             SELECT m FROM MessageEntity m
@@ -37,7 +37,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
         query.setParameter("convId", conversationId)
         query.setParameter("cursor", cursor)
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 
     /**
@@ -54,7 +54,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
         conversationId: String,
         cursor: Long,
         limit: Int
-    ): List<MessageEntity> = io {
+    ): List<MessageEntity> {
         val query = em.createQuery(
             """
             SELECT m FROM MessageEntity m
@@ -66,7 +66,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
         query.setParameter("convId", conversationId)
         query.setParameter("cursor", cursor)
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 
     /**
