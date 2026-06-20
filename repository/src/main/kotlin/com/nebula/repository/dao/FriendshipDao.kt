@@ -44,7 +44,7 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
         userId: Long,
         cursor: Long,
         limit: Int
-    ): List<FriendshipEntity> = io {
+    ): List<FriendshipEntity> {
         val query = em.createQuery(
             """
             SELECT f FROM FriendshipEntity f
@@ -57,6 +57,6 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
         query.setParameter("userId", userId)
         query.setParameter("cursor", cursor)
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 }

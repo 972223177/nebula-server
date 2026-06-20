@@ -27,7 +27,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         maxRetries: Int,
         offset: Int,
         limit: Int
-    ): List<DeadLetterEntity> = io {
+    ): List<DeadLetterEntity> {
         val query = em.createQuery(
             """
             SELECT d FROM DeadLetterEntity d
@@ -40,7 +40,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         query.setParameter("maxRetries", maxRetries)
         query.firstResult = offset
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 
     /**
@@ -57,7 +57,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         status: String,
         offset: Int,
         limit: Int
-    ): List<DeadLetterEntity> = io {
+    ): List<DeadLetterEntity> {
         val query = em.createQuery(
             "SELECT d FROM DeadLetterEntity d WHERE d.status = :status ORDER BY d.createdAt ASC",
             DeadLetterEntity::class.java
@@ -65,7 +65,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         query.setParameter("status", status)
         query.firstResult = offset
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 
     /**
@@ -105,7 +105,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         minFailCount: Int,
         offset: Int,
         limit: Int
-    ): List<DeadLetterEntity> = io {
+    ): List<DeadLetterEntity> {
         val query = em.createQuery(
             """
             SELECT d FROM DeadLetterEntity d
@@ -118,6 +118,6 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
         query.setParameter("minFailCount", minFailCount)
         query.firstResult = offset
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 }

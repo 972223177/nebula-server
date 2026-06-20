@@ -2,8 +2,6 @@ package com.nebula.repository.dao
 
 import com.nebula.repository.entity.UserEntity
 import jakarta.persistence.EntityManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 
 /**
@@ -44,7 +42,7 @@ class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
         keyword: String,
         cursor: LocalDateTime?,
         limit: Int
-    ): List<UserEntity> = withContext(Dispatchers.IO) {
+    ): List<UserEntity> {
         val query = em.createQuery(
             "SELECT u FROM UserEntity u " +
                 "WHERE u.username LIKE :keyword " +
@@ -55,6 +53,6 @@ class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
         query.setParameter("keyword", "%$keyword%")
         query.setParameter("cursor", cursor)
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 }

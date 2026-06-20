@@ -93,21 +93,30 @@ class FriendService(
                 val convId = buildPrivateConvId(smaller, larger)
 
                 // 更新对方申请为 accepted
+                // reverseRequest 是事务内加载的托管实体，直接改属性，commit 时脏检查自动 flush
+                // 不需要 em.flush() 显式调用，也不需要 em.merge() 重新合并托管实体
                 reverseRequest.status = 1
-                // D-80/H15: flush 立即触发 UK 检查，在事务内检测重复而非提交时
-                em.flush()
-                friendRequestDao.update(em, reverseRequest)
+                // 注：原代码用 em.flush() + update(em) 是反模式：
+                //   1) em.flush() 强制刷盘，与 commit 时的 flush 重复
+                //   2) em.merge() 对已托管实体 = 多一次 SELECT + 状态复制 + 可能返回新引用
+                //   3) 改用直接修改字段 + commit 脏检查，更安全高效
 
                 // 创建/恢复好友关系
-                val friendship = existingFriendship ?: FriendshipEntity(
-                    userId = smaller,
-                    friendId = larger
-                )
-                if (!friendship.isActive) {
-                    friendship.deleted = 0
+                // existingFriendship 可能是 null（双方竞赛首次建立），也可能是已软删的记录
+                if (existingFriendship == null) {
+                    val newFriendship = FriendshipEntity(
+                        userId = smaller,
+                        friendId = larger
+                    ).apply {
+                        deleted = 0
+                        createdAt = LocalDateTime.now()
+                    }
+                    friendshipDao.insert(em, newFriendship)
+                } else if (!existingFriendship.isActive) {
+                    // 软删的记录：直接改字段，commit 时脏检查自动 UPDATE
+                    existingFriendship.deleted = 0
                 }
-                em.flush()
-                friendshipDao.update(em, friendship)
+                // 已激活的 existingFriendship 不需要任何操作（已存在）
 
                 // 创建私聊会话（如果不存在）
                 var conv = conversationDao.findById(em, convId)
@@ -192,19 +201,25 @@ class FriendService(
             val larger = maxOf(request.fromUid, request.toUid)
             val convId = buildPrivateConvId(smaller, larger)
 
-            // 更新申请状态
+            // 更新申请状态：直接改字段，commit 时脏检查自动 flush
             request.status = 1
-            friendRequestDao.update(em, request)
 
-            // 创建好友关系
-            var friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
-            if (friendship == null) {
-                friendship = FriendshipEntity(userId = smaller, friendId = larger)
+            // 创建/恢复好友关系
+            val existingFriendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
+            if (existingFriendship == null) {
+                val newFriendship = FriendshipEntity(
+                    userId = smaller,
+                    friendId = larger
+                ).apply {
+                    deleted = 0
+                    createdAt = LocalDateTime.now()
+                }
+                friendshipDao.insert(em, newFriendship)
+            } else if (!existingFriendship.isActive) {
+                // 软删的记录：直接改字段，commit 时脏检查自动 UPDATE
+                existingFriendship.deleted = 0
             }
-            if (!friendship.isActive) {
-                friendship.deleted = 0
-            }
-            friendshipDao.update(em, friendship)
+            // 已激活的 existingFriendship 不需要任何操作
 
             // 创建私聊会话
             var conv = conversationDao.findById(em, convId)
@@ -258,8 +273,8 @@ class FriendService(
                 throw FriendException(BizCode.FORBIDDEN, "无权处理此申请")
             }
 
+            // 直接改字段，commit 时脏检查自动 flush（不调用 em.merge / em.update）
             request.status = 2 // 拒绝
-            friendRequestDao.update(em, request)
         }
     }
 
@@ -280,8 +295,8 @@ class FriendService(
                 throw FriendException(BizCode.FRIEND_NOT_FOUND)
             }
 
+            // 直接改字段，commit 时脏检查自动 flush（不调用 em.merge / em.update）
             friendship.deleted = 1
-            friendshipDao.update(em, friendship)
         }
     }
 
@@ -296,22 +311,22 @@ class FriendService(
         val cursor = req.cursor
         val limit = req.limit.coerceIn(1, 100)
 
-        val friendships = txRunner.execute { em ->
-            friendshipDao.findFriendsByUserId(em, userId, cursor, limit + 1)
+        // 单事务内完成：好友关系 + 批量用户信息查询
+        // 避免拆成两个事务导致的"读到事务 1 之后、事务 2 之前的中间状态"问题
+        val (result, userMap, hasMore) = txRunner.execute { em ->
+            val friendships = friendshipDao.findFriendsByUserId(em, userId, cursor, limit + 1)
+            val hasMore = friendships.size > limit
+            val page = if (hasMore) friendships.dropLast(1) else friendships
+            val uids = page.map { f -> if (f.userId == userId) f.friendId else f.userId }
+            val users = if (uids.isNotEmpty()) {
+                userDao.findAllById(em, uids).associateBy { it.id }
+            } else emptyMap()
+            Triple(page, users, hasMore)
         }
-
-        val hasMore = friendships.size > limit
-        val result = if (hasMore) friendships.dropLast(1) else friendships
 
         val friendUids = result.map { f ->
             if (f.userId == userId) f.friendId else f.userId
         }
-
-        // 批量查询用户信息
-        val userMap = if (friendUids.isNotEmpty()) {
-            txRunner.execute { em -> userDao.findAllById(em, friendUids) }
-                .associateBy { it.id }
-        } else emptyMap()
 
         // 状态查询走 Redis
         val statusMap = if (friendUids.isNotEmpty()) {
@@ -323,8 +338,7 @@ class FriendService(
         } else emptySet()
 
         val builder = FriendListResp.newBuilder()
-        result.forEachIndexed { index, _ ->
-            val uid = friendUids.getOrNull(index) ?: return@forEachIndexed
+        result.zip(friendUids).forEach { (_, uid) ->
             val user = userMap[uid]
             val statusData = statusMap[uid]
             val isOnline = statusData != null

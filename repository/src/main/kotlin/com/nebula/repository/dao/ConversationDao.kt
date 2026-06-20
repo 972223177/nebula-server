@@ -28,7 +28,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
         userId: Long,
         cursor: LocalDateTime?,
         limit: Int
-    ): List<ConversationEntity> = io {
+    ): List<ConversationEntity> {
         val query = em.createQuery(
             """
             SELECT c FROM ConversationEntity c
@@ -44,7 +44,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
         query.setParameter("userId", userId)
         query.setParameter("cursor", cursor)
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 
     /**
@@ -62,8 +62,8 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
         em: EntityManager,
         conversationId: String,
         delta: Int
-    ): Int = io {
-        em.createQuery(
+    ): Int {
+        return em.createQuery(
             """
             UPDATE ConversationEntity c
             SET c.memberCount = c.memberCount + :delta,
@@ -93,7 +93,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
         status: Int,
         offset: Int,
         limit: Int
-    ): List<ConversationEntity> = io {
+    ): List<ConversationEntity> {
         val query = em.createQuery(
             "SELECT c FROM ConversationEntity c WHERE c.status = :status",
             ConversationEntity::class.java
@@ -101,6 +101,6 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
         query.setParameter("status", status)
         query.firstResult = offset
         query.maxResults = limit
-        query.resultList
+        return query.resultList
     }
 }
