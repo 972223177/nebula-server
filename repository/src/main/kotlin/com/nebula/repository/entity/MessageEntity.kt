@@ -45,6 +45,24 @@ class MessageEntity(
     /** 服务端接收时间戳（毫秒） */
     var serverTs: Long
 ) {
+    /**
+     * JPA 必需的受保护无参构造函数。
+     *
+     * refactor 后移除 kotlin-jpa/kotlin-allopen 插件，必须显式声明供 Hibernate 通过反射调用。
+     * 字段保持默认空值，由 Hibernate 反序列化时通过 setter/反射填充。
+     */
+    @Suppress("unused")
+    protected constructor() : this(
+        conversationId = "",
+        senderUid = 0,
+        messageType = 0,
+        content = "",
+        payload = null,
+        clientMessageId = null,
+        clientTs = 0,
+        serverTs = 0
+    )
+
     @Id
     @Column(nullable = false)
     var id: Long? = null

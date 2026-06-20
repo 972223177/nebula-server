@@ -51,6 +51,26 @@ class ConversationEntity(
     @Column(nullable = false)
     var lastMessageTs: Long = 0
 ) {
+    /**
+     * JPA 必需的受保护无参构造函数。
+     *
+     * refactor 后移除 kotlin-jpa/kotlin-allopen 插件，必须显式声明供 Hibernate 通过反射调用。
+     * 字段保持默认空值，由 Hibernate 反序列化时通过 setter/反射填充。
+     */
+    @Suppress("unused")
+    protected constructor() : this(
+        type = 0,
+        name = "",
+        avatar = "",
+        groupOwnerUid = null,
+        memberCount = 0,
+        maxMembers = 200,
+        status = 0,
+        lastMessageId = 0,
+        lastMessagePreview = "",
+        lastMessageTs = 0
+    )
+
     @Id
     @Column(length = 32)
     var id: String? = null

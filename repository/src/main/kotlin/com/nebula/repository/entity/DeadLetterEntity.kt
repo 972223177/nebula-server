@@ -62,6 +62,26 @@ class DeadLetterEntity(
     @Column(length = 32, nullable = false)
     var status: String = "pending"
 ) {
+    /**
+     * JPA 必需的受保护无参构造函数。
+     *
+     * refactor 后移除 kotlin-jpa/kotlin-allopen 插件，必须显式声明供 Hibernate 通过反射调用。
+     * 字段保持默认空值，由 Hibernate 反序列化时通过 setter/反射填充。
+     */
+    @Suppress("unused")
+    protected constructor() : this(
+        conversationId = "",
+        senderUid = 0,
+        messageType = 0,
+        content = "",
+        payload = null,
+        clientMsgId = null,
+        clientTs = 0,
+        failReason = "",
+        failCount = 0,
+        status = "pending"
+    )
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false)

@@ -34,6 +34,22 @@ class UserEntity(
     @Column(nullable = false)
     var privacyStatus: Int = 0
 ) {
+    /**
+     * JPA 必需的受保护无参构造函数。
+     *
+     * D-XX: refactor 后移除 kotlin-jpa/kotlin-allopen 插件，
+     * 必须显式声明供 Hibernate 通过反射调用（`Constructor.setAccessible(true)`）。
+     * 字段保持默认空值，由 Hibernate 反序列化时通过 setter/反射填充。
+     */
+    @Suppress("unused")
+    protected constructor() : this(
+        username = "",
+        passwordHash = "",
+        nickname = "",
+        avatar = "",
+        privacyStatus = 0
+    )
+
     /** 用户 ID，Snowflake 算法生成 */
     @Id
     @Column(nullable = false)
