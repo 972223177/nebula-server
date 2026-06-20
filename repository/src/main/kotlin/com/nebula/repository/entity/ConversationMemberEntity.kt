@@ -38,6 +38,22 @@ class ConversationMemberEntity(
     @Column(nullable = false)
     var deleted: Int = 0
 ) {
+    /**
+     * JPA 必需的受保护无参构造函数。
+     *
+     * refactor 后移除 kotlin-jpa/kotlin-allopen 插件，必须显式声明供 Hibernate 通过反射调用。
+     * 字段保持默认空值，由 Hibernate 反序列化时通过 setter/反射填充。
+     */
+    @Suppress("unused")
+    protected constructor() : this(
+        conversationId = "",
+        userId = 0,
+        role = "member",
+        lastReadMessageId = 0,
+        unreadCount = 0,
+        deleted = 0
+    )
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null

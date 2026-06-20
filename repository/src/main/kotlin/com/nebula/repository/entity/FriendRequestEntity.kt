@@ -27,6 +27,20 @@ class FriendRequestEntity(
     @Column(nullable = false, length = 255)
     var message: String = ""
 ) {
+    /**
+     * JPA 必需的受保护无参构造函数。
+     *
+     * refactor 后移除 kotlin-jpa/kotlin-allopen 插件，必须显式声明供 Hibernate 通过反射调用。
+     * 字段保持默认空值，由 Hibernate 反序列化时通过 setter/反射填充。
+     */
+    @Suppress("unused")
+    protected constructor() : this(
+        fromUid = 0,
+        toUid = 0,
+        status = 0,
+        message = ""
+    )
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null
