@@ -10,22 +10,17 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.ChatException
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.service.sequence.SeqService
+import com.nebula.repository.dao.ConversationDao
+import com.nebula.repository.dao.ConversationMemberDao
+import com.nebula.repository.dao.FriendshipDao
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.MessageDao
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.MessageQueueRepository
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.FriendshipRepository
-import com.nebula.repository.repository.MessageRepository
-import com.nebula.repository.repository.findByIdOrNull
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.springframework.data.domain.Pageable
-import java.time.Instant
 import java.time.LocalDateTime
-import java.time.ZoneOffset
 
 /**
  * 消息业务服务（D-04 ~ D-06, D-09, D-11, D-13, D-15, D-74, D-78）。
@@ -36,11 +31,12 @@ import java.time.ZoneOffset
  * 不依赖网关层组件（PushService、SessionRegistry 等），推送由调用方（Handler）负责。
  */
 class MessageService(
-    private val messageRepository: MessageRepository,
+    private val messageDao: MessageDao,
+    private val conversationMemberDao: ConversationMemberDao,
+    private val conversationDao: ConversationDao,
+    private val friendshipDao: FriendshipDao,
+    private val txRunner: JpaTxRunner,
     private val messageQueueRepository: MessageQueueRepository,
-    private val conversationMemberRepository: ConversationMemberRepository,
-    private val conversationRepository: ConversationRepository,
-    private val friendshipRepository: FriendshipRepository,
     private val idGenerator: SnowflakeIdGenerator,
     private val seqService: SeqService
 ) {
@@ -48,7 +44,6 @@ class MessageService(
     companion object {
         /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
-        /** 私聊类型常量 */
         /** 私聊会话类型常量（CQ-12: 1=私聊，与 SQL DDL 一致） */
         private const val CONV_TYPE_PRIVATE = 1
         /** 群聊类型常量 */
@@ -82,29 +77,24 @@ class MessageService(
             throw ChatException(BizCode.INVALID_PARAM, "client_message_id 不能为空")
         }
 
-        // Step 2: 验证成员身份
-        val member = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(conversationId, senderUid)
-        }
-        if (member == null || !member.isActive) {
-            throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
-        }
-
-        // Step 3: 私聊会话检查好友关系（D-56）
-        val conversation = withContext(Dispatchers.IO) {
-            conversationRepository.findByIdOrNull(conversationId)
-        } ?: throw ChatException(BizCode.CONV_NOT_FOUND)
-
-        if (conversation.type == CONV_TYPE_PRIVATE) {
-            val friendCheck = checkFriendshipForPrivateConv(conversationId, senderUid)
-            if (!friendCheck) {
-                throw ChatException(BizCode.NOT_FRIEND, "私聊消息需要好友关系")
+        // Step 2-3: 验证成员身份 + 私聊好友关系（在事务中一并完成）
+        val conversation = txRunner.execute { em ->
+            val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, senderUid)
+            if (member == null || !member.isActive) {
+                throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
             }
-        }
 
-        // Step 4: 去重（clientMessageId 7 天 TTL）
-        // 由调用方传入 Redis 连接执行 SETNX，或通过注入的 Redis 操作实现
-        // 此方法接收 clientMessageId 去重结果（由 Handler 层或 Step 链组件负责）
+            val conv = conversationDao.findById(em, conversationId)
+                ?: throw ChatException(BizCode.CONV_NOT_FOUND)
+
+            if (conv.type == CONV_TYPE_PRIVATE) {
+                val friendCheck = checkFriendshipForPrivateConv(em, conversationId, senderUid)
+                if (!friendCheck) {
+                    throw ChatException(BizCode.NOT_FRIEND, "私聊消息需要好友关系")
+                }
+            }
+            conv
+        }
 
         // Step 5-7: 生成 ID + 构造消息 + 写入
         val msgId = idGenerator.nextId()
@@ -132,18 +122,14 @@ class MessageService(
             "serverTs" to now.toString(),
             "payload" to (if (req.payload.size() > 0) java.util.Base64.getEncoder().encodeToString(req.payload.toByteArray()) else "")
         )
-        withContext(Dispatchers.IO) {
-            messageQueueRepository.enqueue(streamFields)
-        }
+        messageQueueRepository.enqueue(streamFields)
 
         // 更新会话元信息（D-21：直接在实体上设置 lastMessage 快照字段）
         conversation.lastMessageId = msgId
         conversation.lastMessagePreview = req.content.take(100)
         conversation.lastMessageTs = now
         conversation.updatedAt = LocalDateTime.now()
-        withContext(Dispatchers.IO) {
-            conversationRepository.save(conversation)
-        }
+        txRunner.execute { em -> conversationDao.update(em, conversation) }
 
         // Step 8: 生成会话序列号（D-74 per-(conv,uid) 自增，D-78 统一委托 SeqService）
         val seq = seqService.nextSeq(conversationId, senderUid)
@@ -168,20 +154,17 @@ class MessageService(
      */
     suspend fun pullMessages(req: PullMessagesReq, userId: Long): PullMessagesResp {
         val conversationId = req.conversationId
-
-        // 验证成员身份
-        val member = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
-        }
-        if (member == null || !member.isActive) {
-            throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
-        }
-
         val limit = req.limit.coerceIn(1, 100)
         val cursor = if (req.cursor == 0L) Long.MAX_VALUE else req.cursor
 
-        val messages = withContext(Dispatchers.IO) {
-            messageRepository.findMessagesBackward(conversationId, cursor, Pageable.ofSize(limit + 1))
+        val messages = txRunner.execute { em ->
+            // 验证成员身份
+            val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
+            if (member == null || !member.isActive) {
+                throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
+            }
+
+            messageDao.findMessagesBackward(em, conversationId, cursor, limit + 1)
         }
 
         val hasMore = messages.size > limit
@@ -205,17 +188,16 @@ class MessageService(
         val conversationId = req.conversationId
         val lastReadMsgId = req.lastReadMsgId
 
-        // 验证成员身份
-        val member = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
-        }
-        if (member == null || !member.isActive) {
-            throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
-        }
+        // 验证成员身份 + 更新已读回执
+        txRunner.execute { em ->
+            val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
+            if (member == null || !member.isActive) {
+                throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
+            }
 
-        // 更新已读回执
-        withContext(Dispatchers.IO) {
-            conversationMemberRepository.updateReadReceipt(
+            // 更新已读回执
+            conversationMemberDao.updateReadReceipt(
+                em,
                 conversationId = conversationId,
                 userId = userId,
                 lastReadMsgId = lastReadMsgId
@@ -230,8 +212,8 @@ class MessageService(
      * @return 消息总数
      */
     suspend fun countByConversationId(conversationId: String): Long {
-        return withContext(Dispatchers.IO) {
-            messageRepository.countByConversationId(conversationId)
+        return txRunner.execute { em ->
+            messageDao.countByConversationId(em, conversationId)
         }
     }
 
@@ -253,8 +235,8 @@ class MessageService(
      * @param senderUid 发送者用户 ID（该用户不递增未读）
      */
     suspend fun incrementUnreadCount(conversationId: String, senderUid: Long) {
-        withContext(Dispatchers.IO) {
-            conversationMemberRepository.incrementUnreadCount(conversationId, senderUid)
+        txRunner.execute { em ->
+            conversationMemberDao.incrementUnreadCount(em, conversationId, senderUid)
         }
     }
 
@@ -265,7 +247,11 @@ class MessageService(
      * @param senderUid 发送者 UID
      * @return true=是好友，false=非好友
      */
-    private suspend fun checkFriendshipForPrivateConv(conversationId: String, senderUid: Long): Boolean {
+    private suspend fun checkFriendshipForPrivateConv(
+        em: jakarta.persistence.EntityManager,
+        conversationId: String,
+        senderUid: Long
+    ): Boolean {
         // 从 "private:smaller:larger" 格式提取两个 UID
         val parts = conversationId.split(":")
         if (parts.size != 3) return true // 非标准格式，放行
@@ -273,9 +259,7 @@ class MessageService(
         val smaller = parts[1].toLongOrNull() ?: return true
         val larger = parts[2].toLongOrNull() ?: return true
 
-        val friendship = withContext(Dispatchers.IO) {
-            friendshipRepository.findByUserIdAndFriendId(smaller, larger)
-        }
+        val friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
         return friendship != null && friendship.isActive
     }
 

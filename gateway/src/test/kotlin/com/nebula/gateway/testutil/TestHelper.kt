@@ -20,10 +20,7 @@ import com.nebula.service.conversation.ConversationInfo
 import com.nebula.service.conversation.ConversationMemberInfo
 import com.nebula.service.friend.FriendshipInfo
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
-import org.springframework.transaction.support.TransactionCallback
-import org.springframework.transaction.support.TransactionTemplate
 
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -101,22 +98,13 @@ fun mockLockManager(): ConversationLockManager {
 }
 
 /**
- * 创建 Mock TransactionTemplate。
- *
- * `execute()` 在模拟事务中执行回调，跳过真实事务提交。
- *
- * @return Mock 的 TransactionTemplate
+ * Mock Factory：Repository save 返回自身的 mock（answers { firstArg() }）无法提取为独立函数，
+ * 因为 MockK 的 firstArg() 是 MockKMatcherScope 的扩展函数，只能在 answers {} 块内调用。
+ * 请在各测试中直接使用：every { repo.save(any<T>()) } answers { firstArg() }
  */
-fun mockTransactionTemplate(): TransactionTemplate {
-    val transactionTemplate = mockk<TransactionTemplate>()
-    every { transactionTemplate.execute<Any?>(any()) } answers {
-        @Suppress("UNCHECKED_CAST")
-        (args[0] as TransactionCallback<Any?>).doInTransaction(mockk(relaxed = true))
-    }
-    return transactionTemplate
-}
 
-// 注意：Repository save 返回自身的 mock（answers { firstArg() }）无法提取为独立函数，
+// 注：方案 A 重构后，Handler 不再依赖 TransactionTemplate（事务由 Service 内部 JpaTxRunner 管理）。
+// 因此 mockTransactionTemplate 已移除 — Handler 测试中不再需要事务包装。
 // 因为 MockK 的 firstArg() 是 MockKMatcherScope 的扩展函数，只能在 answers {} 块内调用。
 // 请在各测试中直接使用：every { repo.save(any<T>()) } answers { firstArg() }
 

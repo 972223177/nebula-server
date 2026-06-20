@@ -37,15 +37,13 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.kotlin.reflect)
     implementation(libs.kotlin.logging)
+    implementation(libs.slf4j.api)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.protobuf.java)
     implementation(libs.kotlinx.serialization.json)
 
     // Phase 5: User Authentication — BCrypt 密码哈希（T-05-SC）
     implementation(libs.spring.security.crypto)
-
-    // Phase 5: UserRepository 编译时依赖（repository 模块只以 implementation 导出 spring-data-jpa）
-    implementation(libs.spring.data.jpa)
 
     // Phase 6: JPA EntityManagerFactory — 手动事务管理（D-09）
     implementation(libs.jakarta.persistence.api)

@@ -24,7 +24,6 @@ import com.nebula.gateway.testutil.buildTestDispatcher
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.gateway.testutil.mockLockManager
-import com.nebula.gateway.testutil.mockTransactionTemplate
 import com.nebula.service.conversation.ConversationMemberInfo
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.conversation.CreateGroupResult
@@ -68,22 +67,21 @@ class ConversationSmokeTest {
     @Test
     fun fullFlowShouldCreateGroupThroughAllOperations() = runTest {
         val lockManager = mockLockManager()
-        val transactionTemplate = mockTransactionTemplate()
 
         // 预创建所有 Handler
         val createHandler = CreateGroupHandler(
-            conversationService, transactionTemplate, pushService
+            conversationService, pushService
         )
         val membersHandler = GroupMembersHandler(conversationService)
         val editHandler = EditGroupHandler(conversationService, pushService)
         val inviteHandler = InviteMemberHandler(
-            conversationService, lockManager, transactionTemplate, pushService
+            conversationService, lockManager, pushService
         )
         val kickHandler = KickMemberHandler(
-            conversationService, lockManager, transactionTemplate, pushService
+            conversationService, lockManager, pushService
         )
         val leaveHandler = LeaveGroupHandler(
-            conversationService, lockManager, transactionTemplate, pushService
+            conversationService, lockManager, pushService
         )
 
         // 注册所有 Handler

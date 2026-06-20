@@ -1,20 +1,20 @@
 package com.nebula.repository.repository.impl
 
 import com.nebula.common.init.DeadLetterCallback
+import com.nebula.repository.dao.JpaTxRunner
 import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.redis.MessageQueueRepository
-import com.nebula.repository.repository.MessageRepository
 import com.nebula.repository.repository.MessageWriteRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.EntityManagerFactory
+import jakarta.persistence.PersistenceException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import org.springframework.dao.DataIntegrityViolationException
+import org.hibernate.exception.ConstraintViolationException
 
 /**
  * 消息写入路径实现（DB-03, D-11）。
@@ -25,13 +25,13 @@ import org.springframework.dao.DataIntegrityViolationException
  * - 刷写失败的消息保留在 Redis Stream 中，下次定时任务重试
  *
  * @param messageQueue Redis Stream 消息队列操作封装
- * @param jpaMessageRepo JPA 消息仓库（用于游标分页查询）
- * @param emf JPA EntityManagerFactory
+ * @param jpaTxRunner JPA 事务运行器（协程友好）
+ * @param emf JPA EntityManagerFactory（保留引用以保持 EMF 生命周期由本类负责）
  */
 class MessageRepositoryImpl(
     private val messageQueue: MessageQueueRepository,
-    private val jpaMessageRepo: MessageRepository,
-    private val emf: EntityManagerFactory
+    private val jpaTxRunner: JpaTxRunner,
+    @Suppress("unused") private val emf: EntityManagerFactory
 ) : MessageWriteRepository {
 
     private val logger = KotlinLogging.logger {}
@@ -83,33 +83,36 @@ class MessageRepositoryImpl(
         // 解析 StreamMessage 为 MessageEntity
         val messages = entries.mapNotNull { entry -> parseToEntity(entry) }
 
-        val em = emf.createEntityManager()
         try {
-            em.transaction.begin()
-            var count = 0
-            for (msg in messages) {
-                em.persist(msg)
-                count++
-                if (count % 30 == 0) {
-                    em.flush()
-                    em.clear()
+            // 使用 JpaTxRunner 在事务中批量持久化消息
+            jpaTxRunner.execute { em ->
+                var count = 0
+                for (msg in messages) {
+                    em.persist(msg)
+                    count++
+                    if (count % 30 == 0) {
+                        em.flush()
+                        em.clear()
+                    }
                 }
             }
-            em.transaction.commit()
 
             // XACK 所有成功写入的消息
             entries.forEach { messageQueue.acknowledge(it.id) }
             return messages.size
-        } catch (e: DataIntegrityViolationException) {
-            logger.warn(e) { "唯一索引冲突，为冲突消息创建死信记录" }
+        } catch (e: PersistenceException) {
             // M11: UK 冲突时为每条消息创建死信记录，而非静默跳过
-            val handler = onDeadLetter
-            if (handler != null) {
-                entries.forEach { entry ->
-                    val parsed = parseToEntity(entry)
-                    if (parsed != null) {
-                        try {
-                            runBlocking {
+            val isConstraintViolation = e.cause is ConstraintViolationException ||
+                (e.message?.contains("Duplicate", ignoreCase = true) == true) ||
+                (e.message?.contains("ConstraintViolation", ignoreCase = true) == true)
+            if (isConstraintViolation) {
+                logger.warn(e) { "唯一索引冲突，为冲突消息创建死信记录" }
+                val handler = onDeadLetter
+                if (handler != null) {
+                    entries.forEach { entry ->
+                        val parsed = parseToEntity(entry)
+                        if (parsed != null) {
+                            try {
                                 handler.onMessageFailed(
                                     parsed.conversationId,
                                     parsed.senderUid,
@@ -120,22 +123,23 @@ class MessageRepositoryImpl(
                                     parsed.clientTs,
                                     "UK 冲突: client_msg_id=${parsed.clientMessageId}"
                                 )
+                            } catch (dlEx: Exception) {
+                                logger.error(dlEx) { "创建死信记录失败: clientMsgId=${parsed.clientMessageId}" }
                             }
-                        } catch (dlEx: Exception) {
-                            logger.error(dlEx) { "创建死信记录失败: clientMsgId=${parsed.clientMessageId}" }
                         }
                     }
                 }
+                // 仍然 XACK 避免 Redis 中重复消费
+                entries.forEach { messageQueue.acknowledge(it.id) }
+                return 0
             }
-            // 仍然 XACK 避免 Redis 中重复消费
-            entries.forEach { messageQueue.acknowledge(it.id) }
+            logger.error(e) { "批量刷写消息失败" }
+            // 失败的消息保留在 Redis Stream 中，下次重试
             return 0
         } catch (e: Exception) {
             logger.error(e) { "批量刷写消息失败" }
             // 失败的消息保留在 Redis Stream 中，下次重试
             return 0
-        } finally {
-            em.close()
         }
     }
 

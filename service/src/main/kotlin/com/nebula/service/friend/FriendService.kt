@@ -13,6 +13,12 @@ import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendBrief
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
+import com.nebula.repository.dao.ConversationDao
+import com.nebula.repository.dao.ConversationMemberDao
+import com.nebula.repository.dao.FriendRequestDao
+import com.nebula.repository.dao.FriendshipDao
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.UserDao
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.FriendRequestEntity
@@ -20,14 +26,6 @@ import com.nebula.repository.entity.FriendshipEntity
 import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.FriendRequestRepository
-import com.nebula.repository.repository.FriendshipRepository
-import com.nebula.repository.repository.UserRepository
-import com.nebula.repository.repository.findByIdOrNull
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 
 /**
@@ -36,13 +34,16 @@ import java.time.LocalDateTime
  * 提供好友申请、接受、拒绝、删除、列表等业务逻辑。
  * 不依赖网关层组件（PushService、ConversationLockManager 等），
  * 并发控制和推送由调用方（Handler）负责。
+ *
+ * 事务通过 [JpaTxRunner] 管理（替代原 Spring TransactionTemplate）。
  */
 class FriendService(
-    private val friendRequestRepository: FriendRequestRepository,
-    private val friendshipRepository: FriendshipRepository,
-    private val conversationRepository: ConversationRepository,
-    private val conversationMemberRepository: ConversationMemberRepository,
-    private val userRepository: UserRepository,
+    private val friendRequestDao: FriendRequestDao,
+    private val friendshipDao: FriendshipDao,
+    private val conversationDao: ConversationDao,
+    private val conversationMemberDao: ConversationMemberDao,
+    private val userDao: UserDao,
+    private val txRunner: JpaTxRunner,
     private val onlineStatusRepository: OnlineStatusRepository,
     private val privacyRepository: PrivacyRepository
 ) {
@@ -78,100 +79,91 @@ class FriendService(
         val smaller = minOf(fromUid, toUid)
         val larger = maxOf(fromUid, toUid)
 
-        // 检查是否已是好友
-        val existingFriendship = withContext(Dispatchers.IO) {
-            friendshipRepository.findByUserIdAndFriendId(smaller, larger)
-        }
-        if (existingFriendship != null && existingFriendship.isActive) {
-            throw FriendException(BizCode.ALREADY_FRIEND)
-        }
+        return txRunner.execute { em ->
+            // 检查是否已是好友
+            val existingFriendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
+            if (existingFriendship != null && existingFriendship.isActive) {
+                throw FriendException(BizCode.ALREADY_FRIEND)
+            }
 
-        // 双向竞赛检测：对方是否已发送 pending 申请
-        val reverseRequest = withContext(Dispatchers.IO) {
-            friendRequestRepository.findByFromUidAndToUidAndStatus(toUid, fromUid, 0)
-        }
-        if (reverseRequest != null) {
-            // 双向竞赛：自动创建好友关系 + 私聊会话
-            val convId = buildPrivateConvId(smaller, larger)
+            // 双向竞赛检测：对方是否已发送 pending 申请
+            val reverseRequest = friendRequestDao.findByFromUidAndToUidAndStatus(em, toUid, fromUid, 0)
+            if (reverseRequest != null) {
+                // 双向竞赛：自动创建好友关系 + 私聊会话
+                val convId = buildPrivateConvId(smaller, larger)
 
-            // 更新对方申请为 accepted
-            reverseRequest.status = 1
-            // D-80/H15: saveAndFlush 立即触发 UK 检查，在事务内检测重复而非提交时
-            withContext(Dispatchers.IO) { friendRequestRepository.saveAndFlush(reverseRequest) }
+                // 更新对方申请为 accepted
+                reverseRequest.status = 1
+                // D-80/H15: flush 立即触发 UK 检查，在事务内检测重复而非提交时
+                em.flush()
+                friendRequestDao.update(em, reverseRequest)
 
-            // 创建/恢复好友关系
-            val friendship = existingFriendship ?: FriendshipEntity(
-                userId = smaller,
-                friendId = larger
+                // 创建/恢复好友关系
+                val friendship = existingFriendship ?: FriendshipEntity(
+                    userId = smaller,
+                    friendId = larger
+                )
+                if (!friendship.isActive) {
+                    friendship.deleted = 0
+                }
+                em.flush()
+                friendshipDao.update(em, friendship)
+
+                // 创建私聊会话（如果不存在）
+                var conv = conversationDao.findById(em, convId)
+                if (conv == null) {
+                    conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
+                    conv.id = convId
+                    conv.createdAt = LocalDateTime.now()
+                    conv.updatedAt = LocalDateTime.now()
+                    conversationDao.insert(em, conv)
+                }
+
+                // 创建双方会话成员
+                listOf(smaller, larger).forEach { uid ->
+                    val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
+                    if (existingMember == null) {
+                        val member = ConversationMemberEntity(
+                            conversationId = convId,
+                            userId = uid
+                        )
+                        member.joinedAt = LocalDateTime.now()
+                        conversationMemberDao.insert(em, member)
+                    }
+                }
+
+                return@execute FriendAddResult(
+                    requestId = reverseRequest.id ?: 0L,
+                    isMutualAccept = true,
+                    convId = convId,
+                    fromUid = fromUid,
+                    toUid = toUid
+                )
+            }
+
+            // 检查是否已有待处理申请
+            val existingRequest = friendRequestDao.findByFromUidAndToUidAndStatus(em, fromUid, toUid, 0)
+            if (existingRequest != null) {
+                throw FriendException(BizCode.REQUEST_HANDLED, "已存在待处理的好友申请")
+            }
+
+            // 创建好友申请
+            val requestEntity = FriendRequestEntity(
+                fromUid = fromUid,
+                toUid = toUid,
+                status = 0,
+                message = req.message
             )
-            if (!friendship.isActive) {
-                friendship.deleted = 0
-            }
-            // D-80/H15: saveAndFlush 立即触发 UK 检查，在事务内检测重复
-            withContext(Dispatchers.IO) { friendshipRepository.saveAndFlush(friendship) }
+            val savedRequest = friendRequestDao.insert(em, requestEntity)
 
-            // 创建私聊会话（如果不存在）
-            var conv = withContext(Dispatchers.IO) {
-                conversationRepository.findByIdOrNull(convId)
-            }
-            if (conv == null) {
-                conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
-                conv.id = convId
-                conv.createdAt = LocalDateTime.now()
-                conv.updatedAt = LocalDateTime.now()
-                withContext(Dispatchers.IO) { conversationRepository.save(conv) }
-            }
-
-            // 创建双方会话成员
-            listOf(smaller, larger).forEach { uid ->
-                val existingMember = withContext(Dispatchers.IO) {
-                    conversationMemberRepository.findByConversationIdAndUserId(convId, uid)
-                }
-                if (existingMember == null) {
-                    val member = ConversationMemberEntity(
-                        conversationId = convId,
-                        userId = uid
-                    )
-                    member.joinedAt = LocalDateTime.now()
-                    withContext(Dispatchers.IO) { conversationMemberRepository.save(member) }
-                }
-            }
-
-            return FriendAddResult(
-                requestId = reverseRequest.id ?: 0L,
-                isMutualAccept = true,
-                convId = convId,
+            FriendAddResult(
+                requestId = savedRequest.id ?: 0L,
+                isMutualAccept = false,
+                convId = null,
                 fromUid = fromUid,
                 toUid = toUid
             )
         }
-
-        // 检查是否已有待处理申请
-        val existingRequest = withContext(Dispatchers.IO) {
-            friendRequestRepository.findByFromUidAndToUidAndStatus(fromUid, toUid, 0)
-        }
-        if (existingRequest != null) {
-            throw FriendException(BizCode.REQUEST_HANDLED, "已存在待处理的好友申请")
-        }
-
-        // 创建好友申请
-        val requestEntity = FriendRequestEntity(
-            fromUid = fromUid,
-            toUid = toUid,
-            status = 0,
-            message = req.message
-        )
-        val savedRequest = withContext(Dispatchers.IO) {
-            friendRequestRepository.save(requestEntity)
-        }
-
-        return FriendAddResult(
-            requestId = savedRequest.id ?: 0L,
-            isMutualAccept = false,
-            convId = null,
-            fromUid = fromUid,
-            toUid = toUid
-        )
     }
 
     /**
@@ -183,70 +175,66 @@ class FriendService(
      */
     suspend fun acceptFriendRequest(req: FriendAcceptReq, userId: Long): FriendAcceptResult {
         val requestId = req.requestId
-        val request = withContext(Dispatchers.IO) {
-            friendRequestRepository.findById(requestId).orElse(null)
-        } ?: throw FriendException(BizCode.REQUEST_NOT_FOUND)
 
-        if (request.status != 0) {
-            throw FriendException(BizCode.REQUEST_HANDLED)
-        }
+        return txRunner.execute { em ->
+            val request = friendRequestDao.findById(em, requestId)
+                ?: throw FriendException(BizCode.REQUEST_NOT_FOUND)
 
-        if (request.toUid != userId) {
-            throw FriendException(BizCode.FORBIDDEN, "无权处理此申请")
-        }
-
-        val smaller = minOf(request.fromUid, request.toUid)
-        val larger = maxOf(request.fromUid, request.toUid)
-        val convId = buildPrivateConvId(smaller, larger)
-
-        // 更新申请状态
-        request.status = 1
-        withContext(Dispatchers.IO) { friendRequestRepository.save(request) }
-
-        // 创建好友关系
-        var friendship = withContext(Dispatchers.IO) {
-            friendshipRepository.findByUserIdAndFriendId(smaller, larger)
-        }
-        if (friendship == null) {
-            friendship = FriendshipEntity(userId = smaller, friendId = larger)
-        }
-        if (!friendship.isActive) {
-            friendship.deleted = 0
-        }
-        withContext(Dispatchers.IO) { friendshipRepository.save(friendship) }
-
-        // 创建私聊会话
-        var conv = withContext(Dispatchers.IO) {
-            conversationRepository.findById(convId).orElse(null)
-        }
-        if (conv == null) {
-            conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
-            conv.id = convId
-            conv.createdAt = LocalDateTime.now()
-            conv.updatedAt = LocalDateTime.now()
-            withContext(Dispatchers.IO) { conversationRepository.save(conv) }
-        }
-
-        // 创建双方会话成员
-        listOf(smaller, larger).forEach { uid ->
-            val existingMember = withContext(Dispatchers.IO) {
-                conversationMemberRepository.findByConversationIdAndUserId(convId, uid)
+            if (request.status != 0) {
+                throw FriendException(BizCode.REQUEST_HANDLED)
             }
-            if (existingMember == null) {
-                val member = ConversationMemberEntity(
-                    conversationId = convId,
-                    userId = uid
-                )
-                member.joinedAt = LocalDateTime.now()
-                withContext(Dispatchers.IO) { conversationMemberRepository.save(member) }
-            }
-        }
 
-        return FriendAcceptResult(
-            fromUid = request.fromUid,
-            toUid = request.toUid,
-            convId = convId
-        )
+            if (request.toUid != userId) {
+                throw FriendException(BizCode.FORBIDDEN, "无权处理此申请")
+            }
+
+            val smaller = minOf(request.fromUid, request.toUid)
+            val larger = maxOf(request.fromUid, request.toUid)
+            val convId = buildPrivateConvId(smaller, larger)
+
+            // 更新申请状态
+            request.status = 1
+            friendRequestDao.update(em, request)
+
+            // 创建好友关系
+            var friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
+            if (friendship == null) {
+                friendship = FriendshipEntity(userId = smaller, friendId = larger)
+            }
+            if (!friendship.isActive) {
+                friendship.deleted = 0
+            }
+            friendshipDao.update(em, friendship)
+
+            // 创建私聊会话
+            var conv = conversationDao.findById(em, convId)
+            if (conv == null) {
+                conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
+                conv.id = convId
+                conv.createdAt = LocalDateTime.now()
+                conv.updatedAt = LocalDateTime.now()
+                conversationDao.insert(em, conv)
+            }
+
+            // 创建双方会话成员
+            listOf(smaller, larger).forEach { uid ->
+                val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
+                if (existingMember == null) {
+                    val member = ConversationMemberEntity(
+                        conversationId = convId,
+                        userId = uid
+                    )
+                    member.joinedAt = LocalDateTime.now()
+                    conversationMemberDao.insert(em, member)
+                }
+            }
+
+            FriendAcceptResult(
+                fromUid = request.fromUid,
+                toUid = request.toUid,
+                convId = convId
+            )
+        }
     }
 
     /**
@@ -257,20 +245,22 @@ class FriendService(
      */
     suspend fun rejectFriendRequest(req: FriendRejectReq, userId: Long) {
         val requestId = req.requestId
-        val request = withContext(Dispatchers.IO) {
-            friendRequestRepository.findById(requestId).orElse(null)
-        } ?: throw FriendException(BizCode.REQUEST_NOT_FOUND)
 
-        if (request.status != 0) {
-            throw FriendException(BizCode.REQUEST_HANDLED)
+        txRunner.execute { em ->
+            val request = friendRequestDao.findById(em, requestId)
+                ?: throw FriendException(BizCode.REQUEST_NOT_FOUND)
+
+            if (request.status != 0) {
+                throw FriendException(BizCode.REQUEST_HANDLED)
+            }
+
+            if (request.toUid != userId) {
+                throw FriendException(BizCode.FORBIDDEN, "无权处理此申请")
+            }
+
+            request.status = 2 // 拒绝
+            friendRequestDao.update(em, request)
         }
-
-        if (request.toUid != userId) {
-            throw FriendException(BizCode.FORBIDDEN, "无权处理此申请")
-        }
-
-        request.status = 2 // 拒绝
-        withContext(Dispatchers.IO) { friendRequestRepository.save(request) }
     }
 
     /**
@@ -284,15 +274,15 @@ class FriendService(
         val smaller = minOf(userId, targetUid)
         val larger = maxOf(userId, targetUid)
 
-        val friendship = withContext(Dispatchers.IO) {
-            friendshipRepository.findByUserIdAndFriendId(smaller, larger)
-        }
-        if (friendship == null || !friendship.isActive) {
-            throw FriendException(BizCode.FRIEND_NOT_FOUND)
-        }
+        txRunner.execute { em ->
+            val friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
+            if (friendship == null || !friendship.isActive) {
+                throw FriendException(BizCode.FRIEND_NOT_FOUND)
+            }
 
-        friendship.deleted = 1
-        withContext(Dispatchers.IO) { friendshipRepository.save(friendship) }
+            friendship.deleted = 1
+            friendshipDao.update(em, friendship)
+        }
     }
 
     /**
@@ -306,12 +296,8 @@ class FriendService(
         val cursor = req.cursor
         val limit = req.limit.coerceIn(1, 100)
 
-        val friendships = withContext(Dispatchers.IO) {
-            friendshipRepository.findFriendsByUserId(
-                userId = userId,
-                cursor = cursor,
-                pageable = org.springframework.data.domain.PageRequest.of(0, limit + 1)
-            )
+        val friendships = txRunner.execute { em ->
+            friendshipDao.findFriendsByUserId(em, userId, cursor, limit + 1)
         }
 
         val hasMore = friendships.size > limit
@@ -321,26 +307,20 @@ class FriendService(
             if (f.userId == userId) f.friendId else f.userId
         }
 
-        // 批量查询用户信息和在线状态
+        // 批量查询用户信息
         val userMap = if (friendUids.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                userRepository.findAllById(friendUids.map { it })
-            }.associateBy { it.id }
-        } else {
-            emptyMap()
-        }
+            txRunner.execute { em -> userDao.findAllById(em, friendUids) }
+                .associateBy { it.id }
+        } else emptyMap()
 
+        // 状态查询走 Redis
         val statusMap = if (friendUids.isNotEmpty()) {
             onlineStatusRepository.batchGetStatus(friendUids)
-        } else {
-            emptyMap()
-        }
+        } else emptyMap()
 
         val hiddenUids = if (friendUids.isNotEmpty()) {
             privacyRepository.batchGetHideOnlineStatus(friendUids)
-        } else {
-            emptySet()
-        }
+        } else emptySet()
 
         val builder = FriendListResp.newBuilder()
         result.forEachIndexed { index, _ ->
@@ -376,18 +356,15 @@ class FriendService(
      * @return 申请列表响应
      */
     suspend fun getFriendRequests(req: FriendRequestsReq, userId: Long): FriendRequestsResp {
-        val requests = withContext(Dispatchers.IO) {
-            friendRequestRepository.findByToUidAndStatus(userId, 0)
+        val requests = txRunner.execute { em ->
+            friendRequestDao.findByToUidAndStatus(em, userId, 0)
         }
 
         val fromUids = requests.map { it.fromUid }.distinct()
         val userMap = if (fromUids.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                userRepository.findAllById(fromUids.map { it })
-            }.associateBy { it.id }
-        } else {
-            emptyMap()
-        }
+            txRunner.execute { em -> userDao.findAllById(em, fromUids) }
+                .associateBy { it.id }
+        } else emptyMap()
 
         val builder = FriendRequestsResp.newBuilder()
         requests.forEach { reqEntity ->
@@ -416,12 +393,8 @@ class FriendService(
      * @return 好友关系信息 DTO 列表
      */
     suspend fun findFriendsByUserId(userId: Long): List<FriendshipInfo> {
-        val entities = withContext(Dispatchers.IO) {
-            friendshipRepository.findFriendsByUserId(
-                userId = userId,
-                cursor = 0,
-                pageable = org.springframework.data.domain.PageRequest.of(0, Int.MAX_VALUE)
-            )
+        val entities = txRunner.execute { em ->
+            friendshipDao.findFriendsByUserId(em, userId, 0, Int.MAX_VALUE)
         }
         return entities.map { FriendshipInfo(userId = it.userId, friendId = it.friendId, deleted = it.deleted) }
     }
@@ -437,11 +410,8 @@ class FriendService(
      * @return 好友关系信息 DTO，不存在时返回 null
      */
     suspend fun findFriendshipBetween(userId1: Long, userId2: Long): FriendshipInfo? {
-        val entity = withContext(Dispatchers.IO) {
-            friendshipRepository.findByUserIdAndFriendId(
-                minOf(userId1, userId2),
-                maxOf(userId1, userId2)
-            )
+        val entity = txRunner.execute { em ->
+            friendshipDao.findByUserIdAndFriendId(em, minOf(userId1, userId2), maxOf(userId1, userId2))
         }
         return entity?.let { FriendshipInfo(userId = it.userId, friendId = it.friendId, deleted = it.deleted) }
     }

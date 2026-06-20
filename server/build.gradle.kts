@@ -49,10 +49,9 @@ dependencies {
     // 保留显式声明可防止 gateway 依赖结构变化导致编译断裂（S8 保留）。
     implementation(libs.kotlinx.coroutines.core)
 
-    // S8: 以下依赖仅为测试代码编译保留（KoinVerificationTest 需要 StatefulRedisConnection / TransactionTemplate 类型），
+    // S8: 以下依赖仅为测试代码编译保留（KoinVerificationTest 需要 StatefulRedisConnection 类型），
     // 生产代码不直接使用。使用 testImplementation 而非 implementation 隔离编译作用域。
     testImplementation(libs.lettuce.core)
-    testImplementation(libs.spring.tx)
 
     // Phase 4: Handler Framework — Koin 启动
     implementation(libs.koin.core)

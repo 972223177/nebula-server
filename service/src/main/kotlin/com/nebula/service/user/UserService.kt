@@ -12,13 +12,12 @@ import com.nebula.chat.user.UserBrief
 import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.UserDao
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.repository.UserRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.springframework.dao.DataIntegrityViolationException
+import jakarta.persistence.PersistenceException
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import java.time.Instant
 import java.time.LocalDateTime
@@ -29,9 +28,12 @@ import java.time.ZoneOffset
  *
  * 提供用户注册、登录、搜索、资料查询、批量查询等核心业务逻辑。
  * 不依赖网关层组件（SessionRegistry、PushService 等），由调用方（Handler）负责 Session 管理和推送。
+ *
+ * 事务通过 [JpaTxRunner] 管理（替代原 Spring TransactionTemplate）。
  */
 class UserService(
-    private val userRepository: UserRepository,
+    private val userDao: UserDao,
+    private val txRunner: JpaTxRunner,
     private val idGenerator: SnowflakeIdGenerator,
     private val onlineStatusRepository: OnlineStatusRepository
 ) {
@@ -61,7 +63,7 @@ class UserService(
      * 用户注册（D-01, D-02, AUTH-01）。
      *
      * 校验用户名唯一性 → 校验密码强度 → BCrypt 哈希密码 → 生成 Snowflake ID → 持久化。
-     * 使用独立 EntityManager + 显式事务确保写入成功（D-09），由调用方传入 emf 参数。
+     * 写入与唯一性检查在同一事务中完成（D-09），由 [JpaTxRunner] 承载。
      *
      * @param req 注册请求（含 username, password, nickname, avatar）
      * @return 注册响应（含 uid）
@@ -78,12 +80,6 @@ class UserService(
             throw UserException(BizCode.INVALID_PARAM, "用户名不能为空")
         }
 
-        // 校验用户名唯一性
-        if (withContext(Dispatchers.IO) { userRepository.findByUsername(username) } != null) {
-            throw UserException(BizCode.USERNAME_EXISTS)
-        }
-
-        // BCrypt 哈希密码
         val passwordHash = passwordEncoder.encode(password)
 
         val user = UserEntity(
@@ -98,13 +94,26 @@ class UserService(
         user.updatedAt = now
 
         // 持久化用户（DB UNIQUE KEY uk_username 兜底，catch 异常转为业务错误）
-        try {
-            withContext(Dispatchers.IO) { userRepository.save(user) }
-        } catch (e: DataIntegrityViolationException) {
-            throw UserException(BizCode.USERNAME_EXISTS, "用户名已存在")
+        return try {
+            txRunner.execute { em ->
+                // 事务内再次校验唯一性，避免两个并发请求同时通过前置检查
+                if (userDao.findByUsername(em, username) != null) {
+                    throw UserException(BizCode.USERNAME_EXISTS)
+                }
+                userDao.insert(em, user)
+            }
+            requireNotNull(user.id) { "用户ID不能为null" }
+        } catch (e: UserException) {
+            throw e
+        } catch (e: PersistenceException) {
+            // 检测唯一约束冲突（多种实现，Hibernate 抛 ConstraintViolationException 被 JPA 包装为 PersistenceException）
+            if (e.message?.contains("Duplicate", ignoreCase = true) == true ||
+                e.message?.contains("ConstraintViolation", ignoreCase = true) == true ||
+                e.message?.contains("uk_username", ignoreCase = true) == true) {
+                throw UserException(BizCode.USERNAME_EXISTS, "用户名已存在")
+            }
+            throw e
         }
-
-        return requireNotNull(user.id) { "用户ID不能为null" }
     }
 
     /**
@@ -125,7 +134,7 @@ class UserService(
         val username = req.username ?: throw UserException(BizCode.INVALID_PARAM, "用户名不能为空")
         val password = req.password ?: throw UserException(BizCode.INVALID_PARAM, "密码不能为空")
 
-        val user = withContext(Dispatchers.IO) { userRepository.findByUsername(username) }
+        val user = txRunner.execute { em -> userDao.findByUsername(em, username) }
             ?: throw UserException(BizCode.USER_NOT_FOUND)
 
         if (!verifyPassword(password, user.passwordHash)) {
@@ -155,12 +164,8 @@ class UserService(
         val cursorDateTime = if (cursor == 0L) null
             else LocalDateTime.ofInstant(Instant.ofEpochMilli(cursor), ZoneOffset.UTC)
 
-        val users = withContext(Dispatchers.IO) {
-            userRepository.findByUsernameContaining(
-                keyword = trimmed,
-                cursor = cursorDateTime,
-                limit = actualLimit + 1
-            )
+        val users = txRunner.execute { em ->
+            userDao.findByUsernameContaining(em, trimmed, cursorDateTime, actualLimit + 1)
         }
 
         val hasMore = users.size > actualLimit
@@ -191,7 +196,7 @@ class UserService(
      * @throws UserException 用户不存在
      */
     suspend fun getProfile(uid: Long): GetProfileResp {
-        val user = withContext(Dispatchers.IO) { userRepository.findById(uid).orElse(null) }
+        val user = txRunner.execute { em -> userDao.findById(em, uid) }
             ?: throw UserException(BizCode.USER_NOT_FOUND)
 
         return GetProfileResp.newBuilder()
@@ -215,9 +220,8 @@ class UserService(
             return BatchGetUserResp.getDefaultInstance()
         }
 
-        val users = withContext(Dispatchers.IO) {
-            userRepository.findAllById(uidList.map { it })
-        }.associateBy { it.id }
+        val users = txRunner.execute { em -> userDao.findAllById(em, uidList) }
+            .associateBy { it.id }
 
         val builder = BatchGetUserResp.newBuilder()
         uidList.forEach { uid ->

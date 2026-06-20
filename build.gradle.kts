@@ -1,7 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
-    alias(libs.plugins.kotlin.jpa) apply false
-    alias(libs.plugins.kotlin.allopen) apply false
     alias(libs.plugins.protobuf) apply false
     alias(libs.plugins.kotlin.serialization) apply false
 }

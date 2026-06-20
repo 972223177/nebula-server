@@ -2,18 +2,12 @@ package com.nebula.service.admin
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.common.init.DeadLetterCallback
+import com.nebula.repository.dao.DeadLetterDao
+import com.nebula.repository.dao.JpaTxRunner
 import com.nebula.repository.entity.DeadLetterEntity
 import com.nebula.repository.redis.MessageQueueRepository
-import com.nebula.repository.repository.DeadLetterRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.OptimisticLockException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
-import org.springframework.data.domain.Page
-import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.PageImpl
-import org.springframework.data.domain.Pageable
 import java.time.ZoneOffset
 
 /**
@@ -26,12 +20,11 @@ import java.time.ZoneOffset
  * - 分页查询：支持按状态过滤的死信记录查询
  * - 永久失败标记：将失败次数超过阈值的死信标记为 permanent_failed
  *
- * @param deadLetterRepository 死信 JPA 仓库
- * @param messageQueueRepository 消息队列仓库，用于 compensate 时重新入队
- * @param idGenerator Snowflake ID 生成器
+ * 事务通过 [JpaTxRunner] 管理（替代原 Spring TransactionTemplate）。
  */
 class DeadLetterService(
-    private val deadLetterRepository: DeadLetterRepository,
+    private val deadLetterDao: DeadLetterDao,
+    private val txRunner: JpaTxRunner,
     private val messageQueueRepository: MessageQueueRepository,
     private val idGenerator: SnowflakeIdGenerator
 ) : DeadLetterCallback {
@@ -66,9 +59,9 @@ class DeadLetterService(
      * 死信回调实现（D-28 跨层桥接）。
      *
      * 由 repository 模块在消息异步刷盘失败时调用，
-     * 创建死信记录。使用 runBlocking 桥接 suspend 方法到同步回调。
+     * 创建死信记录。
      */
-    override fun onMessageFailed(
+    override suspend fun onMessageFailed(
         convId: String,
         senderUid: Long,
         msgType: Int,
@@ -78,18 +71,16 @@ class DeadLetterService(
         clientTs: Long,
         reason: String
     ) {
-        runBlocking {
-            create(
-                conversationId = convId,
-                senderUid = senderUid,
-                messageType = msgType,
-                content = content,
-                payload = payload,
-                clientMsgId = clientMsgId,
-                clientTs = clientTs,
-                failReason = reason
-            )
-        }
+        create(
+            conversationId = convId,
+            senderUid = senderUid,
+            messageType = msgType,
+            content = content,
+            payload = payload,
+            clientMsgId = clientMsgId,
+            clientTs = clientTs,
+            failReason = reason
+        )
     }
 
     /**
@@ -130,9 +121,7 @@ class DeadLetterService(
             failCount = 0,
             status = STATUS_PENDING
         )
-        val saved = withContext(Dispatchers.IO) {
-            deadLetterRepository.save(entity)
-        }
+        val saved = txRunner.execute { em -> deadLetterDao.insert(em, entity) }
         logger.warn { "死信记录已创建: id=${saved.id}, conv=$conversationId, reason=$failReason" }
         return saved.toDTO()
     }
@@ -147,9 +136,9 @@ class DeadLetterService(
      * @return 本次补偿处理的死信数量
      */
     suspend fun compensate(): Int {
-        val pendingItems = withContext(Dispatchers.IO) {
-            deadLetterRepository.findByStatusAndFailCountLessThan(
-                STATUS_PENDING, MAX_COMPENSATE_RETRIES, Pageable.ofSize(BATCH_SIZE)
+        val pendingItems = txRunner.execute { em ->
+            deadLetterDao.findByStatusAndFailCountLessThan(
+                em, STATUS_PENDING, MAX_COMPENSATE_RETRIES, offset = 0, limit = BATCH_SIZE
             )
         }
         if (pendingItems.isEmpty()) return 0
@@ -160,9 +149,7 @@ class DeadLetterService(
                 // 乐观锁更新状态为 retrying
                 item.status = STATUS_RETRYING
                 item.failCount = item.failCount + 1
-                withContext(Dispatchers.IO) {
-                    deadLetterRepository.save(item)
-                }
+                txRunner.execute { em -> deadLetterDao.update(em, item) }
 
                 // 重新写入 Redis Stream（M09: payload 从 DeadLetterEntity 恢复为 Base64）
                 val streamFields = mapOf(
@@ -176,15 +163,11 @@ class DeadLetterService(
                     "server_ts" to System.currentTimeMillis().toString(),
                     "payload" to (item.payload?.let { java.util.Base64.getEncoder().encodeToString(it) } ?: "")
                 )
-                withContext(Dispatchers.IO) {
-                    messageQueueRepository.enqueue(streamFields)
-                }
+                messageQueueRepository.enqueue(streamFields)
 
                 // 更新状态为重试成功
                 item.status = STATUS_RETRY_SUCCESS
-                withContext(Dispatchers.IO) {
-                    deadLetterRepository.save(item)
-                }
+                txRunner.execute { em -> deadLetterDao.update(em, item) }
                 processedCount++
             } catch (e: OptimisticLockException) {
                 // 并发冲突，跳过此条由其他补偿任务处理
@@ -211,9 +194,7 @@ class DeadLetterService(
      * @return true 重试成功，false 失败（死信不存在或状态不允许）
      */
     suspend fun retry(id: Long): Boolean {
-        val entity = withContext(Dispatchers.IO) {
-            deadLetterRepository.findById(id).orElse(null)
-        } ?: return false
+        val entity = txRunner.execute { em -> deadLetterDao.findById(em, id) } ?: return false
 
         if (entity.status == STATUS_RETRY_SUCCESS) {
             logger.warn { "死信已重试成功，跳过 id=$id" }
@@ -223,9 +204,7 @@ class DeadLetterService(
         return try {
             entity.status = STATUS_RETRYING
             entity.failCount = entity.failCount + 1
-            withContext(Dispatchers.IO) {
-                deadLetterRepository.save(entity)
-            }
+            txRunner.execute { em -> deadLetterDao.update(em, entity) }
 
             // 重新写入 Redis Stream（M10: payload 从 DeadLetterEntity 恢复为 Base64）
             val streamFields = mapOf(
@@ -239,14 +218,10 @@ class DeadLetterService(
                 "server_ts" to System.currentTimeMillis().toString(),
                 "payload" to (entity.payload?.let { java.util.Base64.getEncoder().encodeToString(it) } ?: "")
             )
-            withContext(Dispatchers.IO) {
-                messageQueueRepository.enqueue(streamFields)
-            }
+            messageQueueRepository.enqueue(streamFields)
 
             entity.status = STATUS_RETRY_SUCCESS
-            withContext(Dispatchers.IO) {
-                deadLetterRepository.save(entity)
-            }
+            txRunner.execute { em -> deadLetterDao.update(em, entity) }
             true
         } catch (e: OptimisticLockException) {
             logger.warn(e) { "手动重试并发冲突，跳过 id=$id" }
@@ -265,22 +240,37 @@ class DeadLetterService(
      * @param status 过滤状态（为空时查询全部）
      * @return DTO 分页结果
      */
-    suspend fun query(page: Int, pageSize: Int, status: String?): Page<DeadLetterDTO> {
-        val pageable = PageRequest.of(page - 1, pageSize)
-        return withContext(Dispatchers.IO) {
+    suspend fun query(page: Int, pageSize: Int, status: String?): ListPage<DeadLetterDTO> {
+        val actualPage = maxOf(1, page)
+        val actualPageSize = pageSize.coerceIn(1, 100)
+        val offset = (actualPage - 1) * actualPageSize
+
+        return txRunner.execute { em ->
             if (status.isNullOrBlank()) {
-                deadLetterRepository.findAll(pageable)
+                // 全量查询：findAll 不可用，改用 findAllById 不实用
+                // 简化实现：直接查 findAllByStatus 不过滤，但 DeadLetterEntity 没有 findAll
+                // 用 Hibernate 的 criteria 不可行，所以这里用 em.createQuery 查全部
+                val allItems = em.createQuery(
+                    "SELECT d FROM DeadLetterEntity d ORDER BY d.createdAt ASC",
+                    DeadLetterEntity::class.java
+                ).apply {
+                    firstResult = offset
+                    maxResults = actualPageSize
+                }.resultList
+                val total = em.createQuery(
+                    "SELECT COUNT(d) FROM DeadLetterEntity d",
+                    Long::class.java
+                ).singleResult
+                ListPage(allItems.map { it.toDTO() }, total)
             } else {
                 // M15: 使用 countByStatus 获取精确的过滤后总数，而非未过滤的 findAll().totalElements
-                deadLetterRepository.findByStatusOrderByCreatedAtAsc(status, pageable)
-                    .let { items ->
-                        val total = withContext(Dispatchers.IO) {
-                            deadLetterRepository.countByStatus(status)
-                        }
-                        PageImpl(items, pageable, total)
-                    }
+                val items = deadLetterDao.findByStatusOrderByCreatedAtAsc(
+                    em, status, offset = offset, limit = actualPageSize
+                )
+                val total = deadLetterDao.countByStatus(em, status)
+                ListPage(items.map { it.toDTO() }, total)
             }
-        }.map { it.toDTO() }
+        }
     }
 
     /**
@@ -310,18 +300,16 @@ class DeadLetterService(
      */
     suspend fun markPermanentFailed() {
         // M16: failCount >= MAX_COMPENSATE_RETRIES 才标记永久失败，修复 failCount < 0 死查询
-        val expiredItems = withContext(Dispatchers.IO) {
-            deadLetterRepository.findByStatusAndFailCountGreaterThanEqual(
-                STATUS_RETRYING, MAX_COMPENSATE_RETRIES, Pageable.ofSize(BATCH_SIZE)
+        val expiredItems = txRunner.execute { em ->
+            deadLetterDao.findByStatusAndFailCountGreaterThanEqual(
+                em, STATUS_RETRYING, MAX_COMPENSATE_RETRIES, offset = 0, limit = BATCH_SIZE
             )
         }
 
         for (item in expiredItems) {
             try {
                 item.status = STATUS_PERMANENT_FAILED
-                withContext(Dispatchers.IO) {
-                    deadLetterRepository.save(item)
-                }
+                txRunner.execute { em -> deadLetterDao.update(em, item) }
                 logger.warn { "死信已达最大重试次数，标记为永久失败: id=${item.id}" }
             } catch (e: OptimisticLockException) {
                 logger.warn(e) { "标记永久失败并发冲突，跳过 id=${item.id}" }
@@ -329,3 +317,11 @@ class DeadLetterService(
         }
     }
 }
+
+/**
+ * 简化版分页结果 — 替代 Spring Data 的 Page 接口，避免依赖。
+ */
+data class ListPage<T>(
+    val items: List<T>,
+    val total: Long
+)

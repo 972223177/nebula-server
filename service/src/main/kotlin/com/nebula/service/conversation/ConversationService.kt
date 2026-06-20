@@ -13,16 +13,14 @@ import com.nebula.chat.conversation.LeaveGroupReq
 import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
+import com.nebula.repository.dao.ConversationDao
+import com.nebula.repository.dao.ConversationMemberDao
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.UserDao
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.isActive
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.UserRepository
-import com.nebula.repository.repository.findByIdOrNull
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -34,11 +32,14 @@ import java.util.UUID
  * 提供群组创建、成员管理、会话列表等业务逻辑。
  * 不依赖网关层组件（PushService、ConversationLockManager 等），
  * 并发控制和推送由调用方（Handler）负责。
+ *
+ * 事务通过 [JpaTxRunner] 管理（替代原 Spring TransactionTemplate）。
  */
 class ConversationService(
-    private val conversationRepository: ConversationRepository,
-    private val conversationMemberRepository: ConversationMemberRepository,
-    private val userRepository: UserRepository
+    private val conversationDao: ConversationDao,
+    private val conversationMemberDao: ConversationMemberDao,
+    private val userDao: UserDao,
+    private val txRunner: JpaTxRunner
 ) {
 
     companion object {
@@ -46,7 +47,6 @@ class ConversationService(
         private val logger = KotlinLogging.logger {}
         /** 群聊最大成员数 */
         private const val MAX_MEMBERS = 200
-        /** 私聊会话类型常量 */
         /** 私聊会话类型常量（CQ-12: 1=私聊，与 SQL DDL 一致） */
         private const val CONV_TYPE_PRIVATE = 1
         /** 群聊会话类型常量 */
@@ -122,10 +122,11 @@ class ConversationService(
             member
         }
 
-        withContext(Dispatchers.IO) {
-            conversationRepository.save(conv)
-            conversationMemberRepository.save(ownerMember)
-            memberEntities.forEach { conversationMemberRepository.save(it) }
+        // 同一事务内原子写入：会话 + 群主 + 批量成员
+        txRunner.execute { em ->
+            conversationDao.insert(em, conv)
+            conversationMemberDao.insert(em, ownerMember)
+            memberEntities.forEach { conversationMemberDao.insert(em, it) }
         }
 
         return CreateGroupResult(
@@ -149,25 +150,18 @@ class ConversationService(
         val cursorDateTime = if (cursor == 0L) null
             else LocalDateTime.ofInstant(Instant.ofEpochMilli(cursor), ZoneOffset.UTC)
 
-        val conversations = withContext(Dispatchers.IO) {
-            conversationRepository.findConversationsByUserId(
-                userId = userId,
-                cursor = cursorDateTime,
-                pageable = org.springframework.data.domain.PageRequest.of(0, actualLimit + 1)
-            )
+        val (conversations, memberMap) = txRunner.execute { em ->
+            val convs = conversationDao.findConversationsByUserId(em, userId, cursorDateTime, actualLimit + 1)
+            val convIds = convs.map { requireNotNull(it.id) { "会话ID不能为null" } }
+            val members = if (convIds.isNotEmpty()) {
+                conversationMemberDao.findByConversationIdsAndUserId(em, convIds, userId)
+                    .associateBy { it.conversationId }
+            } else emptyMap()
+            convs to members
         }
 
         val hasMore = conversations.size > actualLimit
         val result = if (hasMore) conversations.dropLast(1) else conversations
-
-        val convIds = result.map { requireNotNull(it.id) { "会话ID不能为null" } }
-        val memberMap = if (convIds.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                conversationMemberRepository.findByConversationIdsAndUserId(convIds, userId)
-            }.associateBy { it.conversationId }
-        } else {
-            emptyMap()
-        }
 
         val builder = ConvListResp.newBuilder()
         result.forEach { entity ->
@@ -191,20 +185,19 @@ class ConversationService(
     /**
      * 流式分页获取所有未解散的会话（status=0）— 仅返回 (id, type) 元组（D-81/H21 序列号恢复）。
      *
-     * 内部按 [RECOVERY_PAGE_SIZE] 分批调用 repository，避免一次性加载全表。
+     * 内部按 [RECOVERY_PAGE_SIZE] 分批调用 dao，避免一次性加载全表。
      * 调用方通过多次调用 nextBatch 推进游标直到返回空列表。
      *
      * @param offset 已跳过的记录数（首次传 0）
      * @return 当前页的 (conversationId, type) 元组列表，到达末尾时为空
      */
     suspend fun getActiveConversationsBatch(offset: Int): List<Pair<String, Int>> {
-        return withContext(Dispatchers.IO) {
-            conversationRepository.findAllByStatus(
+        return txRunner.execute { em ->
+            conversationDao.findAllByStatus(
+                em,
                 status = 0, // 0=正常
-                pageable = org.springframework.data.domain.PageRequest.of(
-                    offset / RECOVERY_PAGE_SIZE,
-                    RECOVERY_PAGE_SIZE
-                )
+                offset = offset,
+                limit = RECOVERY_PAGE_SIZE
             ).map { entity -> requireNotNull(entity.id) to entity.type }
         }
     }
@@ -244,54 +237,54 @@ class ConversationService(
      */
     suspend fun inviteMember(req: InviteMemberReq, operatorUid: Long): List<Long> {
         val convId = req.conversationId
-        val conv = conversationRepository.findByIdOrNull(convId)
-            ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
-
-        // 验证操作者是群主
-        val operatorMember = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid)
-        }
-        if (operatorMember == null || operatorMember.role != ROLE_OWNER) {
-            throw ConversationException(BizCode.GROUP_PERM_DENIED, "仅群主可邀请成员")
-        }
-
-        val newMemberUids = mutableListOf<Long>()
         val now = LocalDateTime.now()
 
-        // D-83/M13: 前置批量查询替代 N+1 循环
-        val existingMap = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserIds(convId, req.uidsList)
-        }.associateBy { it.userId }
+        return txRunner.execute { em ->
+            val conv = conversationDao.findById(em, convId)
+                ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        for (uid in req.uidsList) {
-            val existing = existingMap[uid]
-            if (existing != null && existing.isActive) continue // 已在群中
-
-            if (existing != null && !existing.isActive) {
-                // 恢复已退出成员，不增加成员计数（原本已计入）
-                existing.deleted = 0
-                existing.joinedAt = now
-                withContext(Dispatchers.IO) { conversationMemberRepository.save(existing) }
-                // 注意：不添加到 newMemberUids，避免重复计数
-            } else {
-                // 创建新成员记录
-                val member = ConversationMemberEntity(
-                    conversationId = convId,
-                    userId = uid,
-                    role = ROLE_MEMBER
-                )
-                member.joinedAt = now
-                withContext(Dispatchers.IO) { conversationMemberRepository.save(member) }
-                newMemberUids.add(uid)
+            // 验证操作者是群主
+            val operatorMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, operatorUid)
+            if (operatorMember == null || operatorMember.role != ROLE_OWNER) {
+                throw ConversationException(BizCode.GROUP_PERM_DENIED, "仅群主可邀请成员")
             }
-        }
 
-        // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
-        withContext(Dispatchers.IO) {
-            conversationRepository.incrementMemberCount(convId, newMemberUids.size)
-        }
+            val newMemberUids = mutableListOf<Long>()
 
-        return newMemberUids
+            // D-83/M13: 前置批量查询替代 N+1 循环
+            val existingMap = conversationMemberDao
+                .findByConversationIdAndUserIds(em, convId, req.uidsList)
+                .associateBy { it.userId }
+
+            for (uid in req.uidsList) {
+                val existing = existingMap[uid]
+                if (existing != null && existing.isActive) continue // 已在群中
+
+                if (existing != null && !existing.isActive) {
+                    // 恢复已退出成员，不增加成员计数（原本已计入）
+                    existing.deleted = 0
+                    existing.joinedAt = now
+                    conversationMemberDao.update(em, existing)
+                    // 注意：不添加到 newMemberUids，避免重复计数
+                } else {
+                    // 创建新成员记录
+                    val member = ConversationMemberEntity(
+                        conversationId = convId,
+                        userId = uid,
+                        role = ROLE_MEMBER
+                    )
+                    member.joinedAt = now
+                    conversationMemberDao.insert(em, member)
+                    newMemberUids.add(uid)
+                }
+            }
+
+            // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
+            if (newMemberUids.isNotEmpty()) {
+                conversationDao.incrementMemberCount(em, convId, newMemberUids.size)
+            }
+            newMemberUids
+        }
     }
 
     /**
@@ -302,72 +295,61 @@ class ConversationService(
      */
     suspend fun leaveGroup(req: LeaveGroupReq, userId: Long) {
         val convId = req.conversationId
-        val conv = conversationRepository.findByIdOrNull(convId)
-            ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        val member = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, userId)
-        }
-        if (member == null) {
-            throw ConversationException(BizCode.NOT_MEMBER)
-        }
+        txRunner.execute { em ->
+            val conv = conversationDao.findById(em, convId)
+                ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        // 查询当前活跃成员数
-        val memberCount = withContext(Dispatchers.IO) {
-            conversationMemberRepository.countActiveByConversationId(convId)
-        }
+            val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, userId)
+                ?: throw ConversationException(BizCode.NOT_MEMBER)
 
-        // 最后一个成员退群时，直接解散群组
-        if (memberCount == 1L) {
-            withContext(Dispatchers.IO) {
-                conversationRepository.delete(conv)
-                conversationMemberRepository.delete(member)
+            // 查询当前活跃成员数
+            val memberCount = conversationMemberDao.countActiveByConversationId(em, convId)
+
+            // 最后一个成员退群时，直接解散群组
+            if (memberCount == 1L) {
+                conversationDao.deleteById(em, convId)
+                conversationMemberDao.delete(em, member)
+                return@execute
             }
-            return
-        }
 
-        // 多成员场景，群主退群逻辑
-        if (member.role == ROLE_OWNER) {
-            throw ConversationException(BizCode.GROUP_PERM_DENIED, "群主不能直接离开，请先转让群主或解散群组")
-        }
+            // 多成员场景，群主退群逻辑
+            if (member.role == ROLE_OWNER) {
+                throw ConversationException(BizCode.GROUP_PERM_DENIED, "群主不能直接离开，请先转让群主或解散群组")
+            }
 
-        // 软删除成员记录
-        withContext(Dispatchers.IO) {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, userId)
-        }
+            // 软删除成员记录
+            conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, userId)
 
-        // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
-        withContext(Dispatchers.IO) {
-            conversationRepository.incrementMemberCount(convId, -1)
+            // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
+            conversationDao.incrementMemberCount(em, convId, -1)
         }
     }
 
     /**
      * 解散群组 — 群主操作，标记会话为已解散并软删除所有成员。
      *
-     * 调用方（Handler）应在事务和锁保护下调用此方法，
+     * 调用方（Handler）应在锁保护下调用此方法，
      * 确保 status 更新与成员删除的原子性。
      *
      * @param convId 群组会话 ID
      */
     suspend fun dissolveGroup(convId: String) {
-        val conv = conversationRepository.findByIdOrNull(convId)
-            ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
+        txRunner.execute { em ->
+            val conv = conversationDao.findById(em, convId)
+                ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        // 检查群组是否已解散
-        if (conv.status == STATUS_DISSOLVED) {
-            throw ConversationException(BizCode.GROUP_DISSOLVED)
-        }
+            // 检查群组是否已解散
+            if (conv.status == STATUS_DISSOLVED) {
+                throw ConversationException(BizCode.GROUP_DISSOLVED)
+            }
 
-        // 标记群组为已解散
-        conv.status = STATUS_DISSOLVED
-        withContext(Dispatchers.IO) {
-            conversationRepository.save(conv)
-        }
+            // 标记群组为已解散
+            conv.status = STATUS_DISSOLVED
+            conversationDao.update(em, conv)
 
-        // 软删除所有群成员
-        withContext(Dispatchers.IO) {
-            conversationMemberRepository.softDeleteAllByConversationId(convId)
+            // 软删除所有群成员
+            conversationMemberDao.softDeleteAllByConversationId(em, convId)
         }
     }
 
@@ -382,39 +364,31 @@ class ConversationService(
         val convId = req.conversationId
         val targetUid = req.uid
 
-        val conv = conversationRepository.findByIdOrNull(convId)
-            ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
+        return txRunner.execute { em ->
+            val conv = conversationDao.findById(em, convId)
+                ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        // 验证操作者是群主
-        val operatorMember = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid)
-        }
-        if (operatorMember == null || operatorMember.role != ROLE_OWNER) {
-            throw ConversationException(BizCode.GROUP_PERM_DENIED, "仅群主可踢人")
-        }
+            // 验证操作者是群主
+            val operatorMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, operatorUid)
+            if (operatorMember == null || operatorMember.role != ROLE_OWNER) {
+                throw ConversationException(BizCode.GROUP_PERM_DENIED, "仅群主可踢人")
+            }
 
-        // 不能踢群主
-        val targetMember = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, targetUid)
-        }
-        if (targetMember == null) {
-            throw ConversationException(BizCode.NOT_MEMBER)
-        }
-        if (targetMember.role == ROLE_OWNER) {
-            throw ConversationException(BizCode.GROUP_PERM_DENIED, "不能踢群主")
-        }
+            // 不能踢群主
+            val targetMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, targetUid)
+                ?: throw ConversationException(BizCode.NOT_MEMBER)
+            if (targetMember.role == ROLE_OWNER) {
+                throw ConversationException(BizCode.GROUP_PERM_DENIED, "不能踢群主")
+            }
 
-        // 软删除被踢成员
-        withContext(Dispatchers.IO) {
-            conversationMemberRepository.softDeleteByConversationIdAndUserId(convId, targetUid)
-        }
+            // 软删除被踢成员
+            conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, targetUid)
 
-        // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
-        withContext(Dispatchers.IO) {
-            conversationRepository.incrementMemberCount(convId, -1)
-        }
+            // D-82/H22: JPQL 原子更新替代非原子的 loadCount → set → save 模式
+            conversationDao.incrementMemberCount(em, convId, -1)
 
-        return targetUid
+            targetUid
+        }
     }
 
     /**
@@ -425,29 +399,30 @@ class ConversationService(
      */
     suspend fun editGroupInfo(req: EditGroupReq, operatorUid: Long) {
         val convId = req.conversationId
-        val conv = conversationRepository.findByIdOrNull(convId)
-            ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        // 验证操作者是群主
-        val member = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, operatorUid)
-        }
-        if (member == null || member.role != ROLE_OWNER) {
-            throw ConversationException(BizCode.GROUP_PERM_DENIED, "仅群主可编辑群信息")
-        }
+        txRunner.execute { em ->
+            val conv = conversationDao.findById(em, convId)
+                ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
-        if (req.hasName()) {
-            if (req.name.isBlank()) {
-                throw ConversationException(BizCode.INVALID_PARAM, "群名称不能为空")
+            // 验证操作者是群主
+            val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, operatorUid)
+            if (member == null || member.role != ROLE_OWNER) {
+                throw ConversationException(BizCode.GROUP_PERM_DENIED, "仅群主可编辑群信息")
             }
-            conv.name = req.name
-        }
-        if (req.hasAvatarUrl()) {
-            conv.avatar = req.avatarUrl
-        }
-        conv.updatedAt = LocalDateTime.now()
 
-        withContext(Dispatchers.IO) { conversationRepository.save(conv) }
+            if (req.hasName()) {
+                if (req.name.isBlank()) {
+                    throw ConversationException(BizCode.INVALID_PARAM, "群名称不能为空")
+                }
+                conv.name = req.name
+            }
+            if (req.hasAvatarUrl()) {
+                conv.avatar = req.avatarUrl
+            }
+            conv.updatedAt = LocalDateTime.now()
+
+            conversationDao.update(em, conv)
+        }
     }
 
     /**
@@ -460,26 +435,22 @@ class ConversationService(
     suspend fun getGroupMembers(req: GroupMembersReq, userId: Long): GroupMembersResp {
         val convId = req.conversationId
 
-        // 验证成员身份
-        val member = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(convId, userId)
-        }
-        if (member == null || !member.isActive) {
-            throw ConversationException(BizCode.NOT_MEMBER)
+        val (members, uidList) = txRunner.execute { em ->
+            // 验证成员身份
+            val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, userId)
+            if (member == null || !member.isActive) {
+                throw ConversationException(BizCode.NOT_MEMBER)
+            }
+
+            val allMembers = conversationMemberDao.findByConversationId(em, convId)
+                .filter { it.isActive }
+            allMembers to allMembers.map { it.userId }
         }
 
-        val members = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationId(convId)
-        }.filter { it.isActive }
-
-        val uidList = members.map { it.userId }
         val userMap = if (uidList.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                userRepository.findAllById(uidList.map { it })
-            }.associateBy { it.id }
-        } else {
-            emptyMap()
-        }
+            txRunner.execute { em -> userDao.findAllById(em, uidList) }
+                .associateBy { it.id }
+        } else emptyMap()
 
         val builder = GroupMembersResp.newBuilder()
         members.forEach { m ->
@@ -506,10 +477,9 @@ class ConversationService(
      * @return 会话信息 DTO，不存在时返回 null
      */
     suspend fun getConversation(conversationId: String): ConversationInfo? {
-        val entity = withContext(Dispatchers.IO) {
-            conversationRepository.findByIdOrNull(conversationId)
-        }
-        return entity?.let { ConversationInfo(id = requireNotNull(it.id), type = it.type) }
+        val entity = txRunner.execute { em -> conversationDao.findById(em, conversationId) }
+            ?: return null
+        return ConversationInfo(id = requireNotNull(entity.id), type = entity.type)
     }
 
     /**
@@ -522,8 +492,8 @@ class ConversationService(
      * @return 会话成员信息 DTO 列表
      */
     suspend fun getConversationMembers(conversationId: String): List<ConversationMemberInfo> {
-        val entities = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationId(conversationId)
+        val entities = txRunner.execute { em ->
+            conversationMemberDao.findByConversationId(em, conversationId)
         }
         return entities.map { ConversationMemberInfo(userId = it.userId, role = it.role) }
     }
@@ -539,10 +509,10 @@ class ConversationService(
      * @return 成员信息 DTO，不存在时返回 null
      */
     suspend fun getMemberRole(conversationId: String, userId: Long): ConversationMemberInfo? {
-        val entity = withContext(Dispatchers.IO) {
-            conversationMemberRepository.findByConversationIdAndUserId(conversationId, userId)
-        }
-        return entity?.let { ConversationMemberInfo(userId = it.userId, role = it.role) }
+        val entity = txRunner.execute { em ->
+            conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
+        } ?: return null
+        return ConversationMemberInfo(userId = entity.userId, role = entity.role)
     }
 }
 

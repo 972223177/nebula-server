@@ -32,9 +32,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * 用法：
  * ```
  * conversationLockManager.withLock(conversationId) {
- *     transactionTemplate.execute {
- *         // 事务内的成员操作
- *     }
+ *     // 调用 Service 层方法，事务由 Service 内部 JpaTxRunner 管理
+ *     conversationService.inviteMember(req, operatorUid)
  * }
  * ```
  */

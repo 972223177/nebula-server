@@ -6,38 +6,43 @@ import com.nebula.chat.user.RegisterReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.UserDao
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.repository.UserRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
+import jakarta.persistence.EntityManager
+import jakarta.persistence.PersistenceException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.dao.DataIntegrityViolationException
 import java.time.LocalDateTime
-import java.util.Optional
-import kotlin.requireNotNull
 import kotlin.test.assertFailsWith
 
 /**
- * UserService 单元测试。
+ * UserService 单元测试（方案 A 重构版 — 2026-06-20）。
  *
- * 使用 MockK 模拟所有依赖（UserRepository、SnowflakeIdGenerator、OnlineStatusRepository），
+ * 使用 MockK 模拟 DAO + JpaTxRunner：
+ * - txRunner.execute 提取传入的 EntityManager 透传给 DAO 调用
+ * - DAO 方法接收 EM 参数并返回 mock 设置的值
+ *
  * 覆盖注册、登录、搜索、资料查询、批量查询的全部关键路径与异常场景。
  */
 class UserServiceTest {
 
-    private lateinit var userRepository: UserRepository
+    private lateinit var userDao: UserDao
+    private lateinit var txRunner: JpaTxRunner
     private lateinit var idGenerator: SnowflakeIdGenerator
     private lateinit var onlineStatusRepository: OnlineStatusRepository
     private lateinit var userService: UserService
+    private lateinit var em: EntityManager
 
     /** 测试用固定用户 ID */
     private val mockUserId = 10001L
@@ -50,10 +55,18 @@ class UserServiceTest {
 
     @BeforeEach
     fun setup() {
-        userRepository = mockk()
+        userDao = mockk()
+        txRunner = mockk()
         idGenerator = mockk()
         onlineStatusRepository = mockk()
-        userService = spyk(UserService(userRepository, idGenerator, onlineStatusRepository))
+        em = mockk(relaxed = true)
+        userService = spyk(UserService(userDao, txRunner, idGenerator, onlineStatusRepository))
+
+        // 默认 txRunner.execute 直接执行传入的 lambda
+        coEvery { txRunner.execute<Any>(any()) } coAnswers {
+            @Suppress("UNCHECKED_CAST")
+            (args[0] as suspend (EntityManager) -> Any).invoke(em)
+        }
 
         // 默认模拟 idGenerator.nextId() 返回固定值
         coEvery { idGenerator.nextId() } returns mockUserId
@@ -63,9 +76,6 @@ class UserServiceTest {
     // register — 用户注册
     // ═══════════════════════════════════════
 
-    /**
-     * 注册：密码长度不足 6 位时抛出 INVALID_PARAM。
-     */
     @Test
     fun registerShouldThrowInvalidParamWhenPasswordLengthLessThan6() = runTest {
         val req = RegisterReq.newBuilder()
@@ -79,9 +89,6 @@ class UserServiceTest {
         assertEquals(BizCode.INVALID_PARAM, ex.bizCode)
     }
 
-    /**
-     * 注册：用户名为空（纯空格）时抛出 INVALID_PARAM。
-     */
     @Test
     fun registerShouldThrowInvalidParamWhenUsernameIsBlank() = runTest {
         val req = RegisterReq.newBuilder()
@@ -95,16 +102,14 @@ class UserServiceTest {
         assertEquals(BizCode.INVALID_PARAM, ex.bizCode)
     }
 
-    /**
-     * 注册：用户名已存在时抛出 USERNAME_EXISTS。
-     */
     @Test
     fun registerShouldThrowUsernameExistsWhenUsernameAlreadyTaken() = runTest {
         val req = RegisterReq.newBuilder()
             .setUsername(testUsername)
             .setPassword(validPassword)
             .build()
-        coEvery { userRepository.findByUsername(testUsername) } returns mockk()
+        // 事务内校验已存在
+        coEvery { userDao.findByUsername(em, testUsername) } returns mockk()
 
         val ex = assertFailsWith<UserException> {
             userService.register(req)
@@ -112,9 +117,6 @@ class UserServiceTest {
         assertEquals(BizCode.USERNAME_EXISTS, ex.bizCode)
     }
 
-    /**
-     * 注册：正常流程创建用户，生成 Snowflake ID、BCrypt 加密密码、持久化并返回 ID。
-     */
     @Test
     fun registerShouldCreateUserWithBCryptHashAndSnowflakeId() = runTest {
         val nickname = "测试昵称"
@@ -125,23 +127,20 @@ class UserServiceTest {
             .setNickname(nickname)
             .setAvatar(avatar)
             .build()
-        coEvery { userRepository.findByUsername(testUsername) } returns null
-        coEvery { userRepository.save(any()) } returns mockk()
+        coEvery { userDao.findByUsername(em, testUsername) } returns null
+        // userDao.insert(em, entity) — answers 提取第二个参数（entity）
+        coEvery { userDao.insert(em, any()) } answers { args[1] as UserEntity }
 
         val result = userService.register(req)
 
         assertEquals(mockUserId, result)
-
-        // 验证 Snowflake ID 被生成
         coVerify { idGenerator.nextId() }
-
-        // 验证 userRepository.save() 被调用，且 Entity 字段正确
         coVerify {
-            userRepository.save(match {
+            userDao.insert(em, match {
                 it.username == testUsername &&
                     it.nickname == nickname &&
                     it.avatar == avatar &&
-                    it.passwordHash.startsWith("\$2a\$") && // BCrypt 哈希前缀
+                    it.passwordHash.startsWith("\$2a\$") &&
                     it.id == mockUserId &&
                     it.createdAt != null &&
                     it.updatedAt != null
@@ -149,9 +148,6 @@ class UserServiceTest {
         }
     }
 
-    /**
-     * 注册：未提供昵称时，自动使用用户名作为昵称。
-     */
     @Test
     fun registerShouldUseUsernameAsNicknameWhenNicknameIsBlank() = runTest {
         val req = RegisterReq.newBuilder()
@@ -159,20 +155,16 @@ class UserServiceTest {
             .setPassword(validPassword)
             .setNickname("")
             .build()
-        coEvery { userRepository.findByUsername(testUsername) } returns null
-        coEvery { userRepository.save(any()) } returns mockk()
+        coEvery { userDao.findByUsername(em, testUsername) } returns null
+        coEvery { userDao.insert(em, any()) } answers { args[1] as UserEntity }
 
-        val result = userService.register(req)
+        userService.register(req)
 
-        assertEquals(mockUserId, result)
         coVerify {
-            userRepository.save(match { it.nickname == testUsername })
+            userDao.insert(em, match { it.nickname == testUsername })
         }
     }
 
-    /**
-     * 注册：未提供头像时，默认使用空字符串。
-     */
     @Test
     fun registerShouldSetEmptyAvatarWhenAvatarIsBlank() = runTest {
         val req = RegisterReq.newBuilder()
@@ -180,31 +172,42 @@ class UserServiceTest {
             .setPassword(validPassword)
             .setAvatar("")
             .build()
-        coEvery { userRepository.findByUsername(testUsername) } returns null
-        coEvery { userRepository.save(any()) } returns mockk()
+        coEvery { userDao.findByUsername(em, testUsername) } returns null
+        coEvery { userDao.insert(em, any()) } answers { args[1] as UserEntity }
 
         userService.register(req)
 
         coVerify {
-            userRepository.save(match { it.avatar == "" })
+            userDao.insert(em, match { it.avatar == "" })
         }
+    }
+
+    @Test
+    fun registerShouldHandleDuplicateKeyAsUsernameExists() = runTest {
+        val req = RegisterReq.newBuilder()
+            .setUsername(testUsername)
+            .setPassword(validPassword)
+            .build()
+        coEvery { userDao.findByUsername(em, testUsername) } returns null
+        coEvery { userDao.insert(em, any()) } throws
+            PersistenceException("Duplicate entry 'testuser' for key 'uk_username'")
+
+        val ex = assertFailsWith<UserException> {
+            userService.register(req)
+        }
+        assertEquals(BizCode.USERNAME_EXISTS, ex.bizCode)
     }
 
     // ═══════════════════════════════════════
     // loginByPassword — 密码登录
     // ═══════════════════════════════════════
 
-    /**
-     * 登录：用户名为空字符串时查询不到用户，抛出 USER_NOT_FOUND。
-     * Protobuf 未设置字符串字段默认返回空字符串而非 null。
-     */
     @Test
     fun loginByPasswordShouldThrowUserNotFoundWhenUsernameIsEmpty() = runTest {
         val req = LoginReq.newBuilder()
             .setPassword(validPassword)
-            .build() // username 为空字符串
-
-        coEvery { userRepository.findByUsername(any()) } returns null
+            .build()
+        coEvery { userDao.findByUsername(em, any()) } returns null
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -212,18 +215,13 @@ class UserServiceTest {
         assertEquals(BizCode.USER_NOT_FOUND, ex.bizCode)
     }
 
-    /**
-     * 登录：密码为空字符串时查询到用户但密码不匹配，抛出 AUTH_FAILED。
-     * Protobuf 未设置字符串字段默认返回空字符串而非 null。
-     */
     @Test
     fun loginByPasswordShouldThrowAuthFailedWhenPasswordIsEmpty() = runTest {
         val req = LoginReq.newBuilder()
             .setUsername(testUsername)
-            .build() // password 为空字符串
-
+            .build()
         val user = UserEntity(username = testUsername, passwordHash = "hash", nickname = testUsername).apply { id = 1L }
-        coEvery { userRepository.findByUsername(testUsername) } returns user
+        coEvery { userDao.findByUsername(em, testUsername) } returns user
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -231,16 +229,13 @@ class UserServiceTest {
         assertEquals(BizCode.AUTH_FAILED, ex.bizCode)
     }
 
-    /**
-     * 登录：用户不存在时抛出 USER_NOT_FOUND。
-     */
     @Test
     fun loginByPasswordShouldThrowUserNotFoundWhenUserDoesNotExist() = runTest {
         val req = LoginReq.newBuilder()
             .setUsername(testUsername)
             .setPassword(validPassword)
             .build()
-        coEvery { userRepository.findByUsername(testUsername) } returns null
+        coEvery { userDao.findByUsername(em, testUsername) } returns null
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -248,9 +243,6 @@ class UserServiceTest {
         assertEquals(BizCode.USER_NOT_FOUND, ex.bizCode)
     }
 
-    /**
-     * 登录：密码不匹配时抛出 AUTH_FAILED。
-     */
     @Test
     fun loginByPasswordShouldThrowAuthFailedWhenPasswordDoesNotMatch() = runTest {
         val req = LoginReq.newBuilder()
@@ -262,8 +254,7 @@ class UserServiceTest {
             passwordHash = "storedHash",
             nickname = testUsername
         ).apply { id = mockUserId }
-        coEvery { userRepository.findByUsername(testUsername) } returns userEntity
-        // 默认 verifyPassword 返回 false，因此无需额外设置
+        coEvery { userDao.findByUsername(em, testUsername) } returns userEntity
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -271,9 +262,6 @@ class UserServiceTest {
         assertEquals(BizCode.AUTH_FAILED, ex.bizCode)
     }
 
-    /**
-     * 登录：正常流程返回用户 ID。
-     */
     @Test
     fun loginByPasswordShouldReturnUserIdOnSuccess() = runTest {
         val req = LoginReq.newBuilder()
@@ -285,23 +273,19 @@ class UserServiceTest {
             passwordHash = "storedHash",
             nickname = testUsername
         ).apply { id = mockUserId }
-        coEvery { userRepository.findByUsername(testUsername) } returns userEntity
-        // 覆写 verifyPassword 使其返回 true，跳过 BCrypt 校验
+        coEvery { userDao.findByUsername(em, testUsername) } returns userEntity
         every { userService.verifyPassword(validPassword, "storedHash") } returns true
 
         val result = userService.loginByPassword(req)
 
         assertEquals(mockUserId, result)
-        coVerify { userRepository.findByUsername(testUsername) }
+        coVerify { userDao.findByUsername(em, testUsername) }
     }
 
     // ═══════════════════════════════════════
     // searchUsers — 搜索用户
     // ═══════════════════════════════════════
 
-    /**
-     * 搜索：关键词为空时返回空响应。
-     */
     @Test
     fun searchUsersShouldReturnEmptyResponseWhenKeywordIsBlank() = runTest {
         val resp = userService.searchUsers("   ", 0L, 10)
@@ -311,9 +295,6 @@ class UserServiceTest {
         assertFalse(resp.hasMore)
     }
 
-    /**
-     * 搜索：正常分页查询，返回用户列表及 hasMore 标记。
-     */
     @Test
     fun searchUsersShouldReturnPaginatedResultsWithHasMore() = runTest {
         val keyword = "test"
@@ -323,10 +304,10 @@ class UserServiceTest {
         val users = listOf(
             createUserEntity(10001L, "testuser1", now.minusMinutes(1)),
             createUserEntity(10002L, "testuser2", now.minusMinutes(2)),
-            createUserEntity(10003L, "testuser3", now.minusMinutes(3)) // 多取一条用于判断 hasMore
+            createUserEntity(10003L, "testuser3", now.minusMinutes(3))
         )
         coEvery {
-            userRepository.findByUsernameContaining(keyword, null, limit + 1)
+            userDao.findByUsernameContaining(em, keyword, null, limit + 1)
         } returns users
 
         val resp = userService.searchUsers(keyword, 0L, limit)
@@ -341,9 +322,6 @@ class UserServiceTest {
         )
     }
 
-    /**
-     * 搜索：返回结果未超限时 hasMore 为 false。
-     */
     @Test
     fun searchUsersShouldSetHasMoreToFalseWhenResultsWithinLimit() = runTest {
         val keyword = "test"
@@ -355,7 +333,7 @@ class UserServiceTest {
             createUserEntity(10002L, "testuser2", now.minusMinutes(2))
         )
         coEvery {
-            userRepository.findByUsernameContaining(keyword, null, limit + 1)
+            userDao.findByUsernameContaining(em, keyword, null, limit + 1)
         } returns users
 
         val resp = userService.searchUsers(keyword, 0L, limit)
@@ -364,19 +342,15 @@ class UserServiceTest {
         assertFalse(resp.hasMore)
     }
 
-    /**
-     * 搜索：limit 超限时自动降级为 MAX_SEARCH_LIMIT。
-     */
     @Test
     fun searchUsersShouldCapLimitToMaxSearchLimitWhenExceeded() = runTest {
         val keyword = "test"
         val now = LocalDateTime.now()
-        // MAX_SEARCH_LIMIT = 20, 传入 100 应降级为 20，所以多取一条判断 hasMore
         val users = (1..21).map { i ->
             createUserEntity(10000L + i, "testuser$i", now.minusMinutes(i.toLong()))
         }
         coEvery {
-            userRepository.findByUsernameContaining(keyword, null, 21) // limit+1 = 20+1
+            userDao.findByUsernameContaining(em, keyword, null, 21)
         } returns users
 
         val resp = userService.searchUsers(keyword, 0L, 100)
@@ -389,12 +363,9 @@ class UserServiceTest {
     // getProfile — 获取用户资料
     // ═══════════════════════════════════════
 
-    /**
-     * 获取资料：用户不存在时抛出 USER_NOT_FOUND。
-     */
     @Test
     fun getProfileShouldThrowUserNotFoundWhenUserDoesNotExist() = runTest {
-        coEvery { userRepository.findById(mockUserId) } returns Optional.empty()
+        coEvery { userDao.findById(em, mockUserId) } returns null
 
         val ex = assertFailsWith<UserException> {
             userService.getProfile(mockUserId)
@@ -402,9 +373,6 @@ class UserServiceTest {
         assertEquals(BizCode.USER_NOT_FOUND, ex.bizCode)
     }
 
-    /**
-     * 获取资料：正常返回用户资料，包含所有字段。
-     */
     @Test
     fun getProfileShouldReturnProfileWithAllFields() = runTest {
         val now = LocalDateTime.now()
@@ -418,7 +386,7 @@ class UserServiceTest {
             createdAt = now
             updatedAt = now
         }
-        coEvery { userRepository.findById(mockUserId) } returns Optional.of(userEntity)
+        coEvery { userDao.findById(em, mockUserId) } returns userEntity
 
         val resp = userService.getProfile(mockUserId)
 
@@ -436,9 +404,6 @@ class UserServiceTest {
     // batchGetUsers — 批量查询用户
     // ═══════════════════════════════════════
 
-    /**
-     * 批量查询：空 uid 列表时返回空响应。
-     */
     @Test
     fun batchGetUsersShouldReturnEmptyResponseForEmptyUidList() = runTest {
         val req = BatchIdRequest.getDefaultInstance()
@@ -448,13 +413,10 @@ class UserServiceTest {
         assertEquals(0, resp.usersCount)
     }
 
-    /**
-     * 批量查询：仅返回存在的用户（部分结果）。
-     */
     @Test
     fun batchGetUsersShouldReturnOnlyFoundUsersForPartialResults() = runTest {
         val uid1 = 10001L
-        val uid2 = 10002L // 不存在的用户
+        val uid2 = 10002L
         val uid3 = 10003L
 
         val req = BatchIdRequest.newBuilder()
@@ -473,7 +435,7 @@ class UserServiceTest {
             nickname = "用户3"
         ).apply { id = uid3 }
 
-        coEvery { userRepository.findAllById(listOf(uid1, uid2, uid3)) } returns listOf(user1, user3)
+        coEvery { userDao.findAllById(em, listOf(uid1, uid2, uid3)) } returns listOf(user1, user3)
 
         val resp = userService.batchGetUsers(req)
 
@@ -482,9 +444,6 @@ class UserServiceTest {
         assertEquals(uid3, resp.getUsers(1).uid)
     }
 
-    /**
-     * 批量查询：所有 uid 都存在时返回完整结果。
-     */
     @Test
     fun batchGetUsersShouldReturnAllUsersWhenAllExist() = runTest {
         val uid1 = 10001L
@@ -501,7 +460,7 @@ class UserServiceTest {
             UserEntity(username = "user3", passwordHash = "h3", nickname = "用户3").apply { id = uid3 }
         )
 
-        coEvery { userRepository.findAllById(listOf(uid1, uid2, uid3)) } returns users
+        coEvery { userDao.findAllById(em, listOf(uid1, uid2, uid3)) } returns users
 
         val resp = userService.batchGetUsers(req)
 
@@ -525,29 +484,5 @@ class UserServiceTest {
             this.createdAt = createdAt
             this.updatedAt = createdAt
         }
-    }
-
-    // ═══════════════════════════════════════
-    // register DataIntegrityViolationException（P1-12）
-    // ═══════════════════════════════════════
-
-    /**
-     * 注册：用户名唯一键冲突时（DataIntegrityViolationException），应回退或抛出业务异常。
-     */
-    @Test
-    fun registerShouldHandleDataIntegrityViolation() = runTest {
-        val req = RegisterReq.newBuilder()
-            .setUsername(testUsername)
-            .setPassword(validPassword)
-            .build()
-        coEvery { userRepository.findByUsername(testUsername) } returns null
-        coEvery { userRepository.save(any()) } throws DataIntegrityViolationException("uk_username conflict")
-
-        val ex = assertFailsWith<Exception> {
-            userService.register(req)
-        }
-        // 验证返回的业务异常或回退行为
-        assertTrue(ex is UserException || ex is DataIntegrityViolationException,
-            "应抛出 UserException 或 DataIntegrityViolationException")
     }
 }

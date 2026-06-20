@@ -3,6 +3,7 @@ package com.nebula.gateway.di
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.common.session.SessionStore
 import com.nebula.gateway.codec.ProtoCodec
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.chat.ChatHandlerCollector
@@ -36,19 +37,20 @@ import com.nebula.gateway.handler.user.RegisterHandler
 import com.nebula.gateway.handler.user.SearchUserHandler
 import com.nebula.gateway.handler.user.SetPrivacyHandler
 import com.nebula.gateway.handler.user.UserHandlerCollector
-import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
+import com.nebula.repository.dao.ConversationDao
+import com.nebula.repository.dao.ConversationMemberDao
+import com.nebula.repository.dao.DeadLetterDao
+import com.nebula.repository.dao.FriendRequestDao
+import com.nebula.repository.dao.FriendshipDao
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.MessageDao
+import com.nebula.repository.dao.UserDao
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
-import com.nebula.repository.repository.ConversationMemberRepository
-import com.nebula.repository.repository.ConversationRepository
-import com.nebula.repository.repository.FriendRequestRepository
-import com.nebula.repository.repository.FriendshipRepository
-import com.nebula.repository.repository.MessageRepository
-import com.nebula.repository.repository.UserRepository
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.friend.FriendService
@@ -56,7 +58,6 @@ import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.user.UserService
 import io.lettuce.core.api.StatefulRedisConnection
-import jakarta.persistence.EntityManagerFactory
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,30 +72,32 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
 import org.koin.test.get
-import org.springframework.transaction.support.TransactionTemplate
 import kotlin.test.assertNotNull
 
 /**
  * GatewayModule Koin 模块装配测试（D-23, D-24）。
+ *
+ * 方案 A 重构（2026-06-20）：Service/Handler 不再依赖 Spring Data Repository 与 TransactionTemplate，
+ * 改用 DAO + JpaTxRunner 注入。
  */
 @TestInstance(TestInstance.Lifecycle.PER_METHOD)
 class GatewayModuleTest {
 
     /** Mock 依赖 */
     private val sessionRepo = mockk<SessionRepository>()
-    private val userRepo = mockk<UserRepository>()
     private val onlineStatusRepo = mockk<OnlineStatusRepository>()
     private val idGenerator = mockk<SnowflakeIdGenerator>()
     private val privacyRepo = mockk<PrivacyRepository>()
     private val redisConnection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
-    private val conversationMemberRepo = mockk<ConversationMemberRepository>()
-    private val conversationRepo = mockk<ConversationRepository>()
-    private val messageRepo = mockk<MessageRepository>()
     private val messageQueueRepo = mockk<MessageQueueRepository>()
-    private val friendshipRepo = mockk<FriendshipRepository>()
-    private val friendRequestRepo = mockk<FriendRequestRepository>()
-    private val emf = mockk<EntityManagerFactory>()
-    private val transactionTemplate = mockk<TransactionTemplate>()
+    private val txRunner = mockk<JpaTxRunner>()
+    private val userDao = mockk<UserDao>()
+    private val conversationDao = mockk<ConversationDao>()
+    private val conversationMemberDao = mockk<ConversationMemberDao>()
+    private val messageDao = mockk<MessageDao>()
+    private val friendshipDao = mockk<FriendshipDao>()
+    private val friendRequestDao = mockk<FriendRequestDao>()
+    private val deadLetterDao = mockk<DeadLetterDao>()
     private val deliveryTrackingService = mockk<DeliveryTrackingService>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -113,19 +116,19 @@ class GatewayModuleTest {
         single { sessionRepo }
         // SessionRepository 实现 SessionStore 接口，需要注册为 SessionStore 以供 SessionRegistry 注入
         single<SessionStore> { sessionRepo }
-        single { userRepo }
         single { onlineStatusRepo }
         single { idGenerator }
         single { redisConnection as StatefulRedisConnection<String, String> }
         single { messageQueueRepo }
-        single { emf as EntityManagerFactory }
-        single { conversationMemberRepo }
-        single { conversationRepo }
-        single { messageRepo }
-        single { friendshipRepo }
-        single { friendRequestRepo }
+        single { txRunner }
+        single { userDao }
+        single { conversationDao }
+        single { conversationMemberDao }
+        single { messageDao }
+        single { friendshipDao }
+        single { friendRequestDao }
+        single { deadLetterDao }
         single { privacyRepo }
-        single { transactionTemplate }
         single { deliveryTrackingService }
     }
 
@@ -169,18 +172,18 @@ class GatewayModuleTest {
         single { ListConversationsHandler(conversationService) }
         single { GroupMembersHandler(conversationService) }
         single { EditGroupHandler(conversationService, get()) }
-        single { CreateGroupHandler(conversationService, get(), get()) }
-        single { InviteMemberHandler(conversationService, get(), get(), get()) }
-        single { LeaveGroupHandler(conversationService, get(), get(), get()) }
-        single { KickMemberHandler(conversationService, get(), get(), get()) }
+        single { CreateGroupHandler(conversationService, get()) }
+        single { InviteMemberHandler(conversationService, get(), get()) }
+        single { LeaveGroupHandler(conversationService, get(), get()) }
+        single { KickMemberHandler(conversationService, get(), get()) }
 
         // Phase 8: Friend
         single { FriendRejectHandler(friendService) }
         single { FriendRequestsHandler(friendService) }
         single { FriendListHandler(friendService) }
         single { FriendDeleteHandler(friendService) }
-        single { FriendAddHandler(friendService, get(), get(), get()) }
-        single { FriendAcceptHandler(friendService, get(), get(), get()) }
+        single { FriendAddHandler(friendService, get(), get()) }
+        single { FriendAcceptHandler(friendService, get(), get()) }
     }
 
     @AfterEach
