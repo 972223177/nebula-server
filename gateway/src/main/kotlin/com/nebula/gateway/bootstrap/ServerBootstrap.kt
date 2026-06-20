@@ -80,6 +80,9 @@ object ServerBootstrap {
      * 委托 SeqService.recoverSequences() 执行，通过闭包提供
      * Conversations/Message/Member 数据（从 service 层获取，避免直接访问 repository）。
      *
+     * 修复（2026-06-20）：原 conversationSupplier 返回 emptyList() 导致序列号恢复完全失效。
+     * 改为调用 ConversationService.getAllActiveConversations() 分页扫描所有未解散会话。
+     *
      * @param koin Koin 容器实例
      */
     fun recoverSequences(koin: Koin) {
@@ -90,12 +93,8 @@ object ServerBootstrap {
 
             seqService.recoverSequences(
                 conversationSupplier = {
-                    // 使用 ConversationService 获取所有会话信息
-                    // 注意：当前 ConversationService 没有 getAllConversations 方法，
-                    // 但我们通过通用的分页查询或直接使用分页偏移实现
-                    // 作为过渡方案，通过 Koin 内部的 repository 引用访问
-                    // TODO: 为 ConversationService 添加 getAllConversations() 方法
-                    emptyList()
+                    // 分页扫描所有未解散会话（status=0），由 Service 层控制批次大小
+                    conversationService.getAllActiveConversations()
                 },
                 msgCountByConv = { convId ->
                     with(kotlinx.coroutines.Dispatchers.IO) {

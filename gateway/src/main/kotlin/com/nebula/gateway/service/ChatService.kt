@@ -8,6 +8,7 @@ import com.nebula.chat.Response
 import com.nebula.chat.friend.StatusChangedPayload
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.user.LoginResp
+import com.nebula.common.BizCode
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
@@ -440,7 +441,7 @@ class ChatService(
      *
      * D-05 绑定流程：
      * 1. 调用 dispatcher.dispatch() 分发请求
-     * 2. 若响应是 user/login 且 code=200，执行 Session 绑定
+     * 2. 若响应是 user/login 且 code=BizCode.OK.code，执行 Session 绑定
      * 3. 否则直接返回响应
      */
     private suspend fun handleRequest(
@@ -452,7 +453,9 @@ class ChatService(
 
         val response = dispatcher.dispatch(envelope.request)
 
-        if (response.method == "user/login" && response.code == 200) {
+        // 修复（2026-06-20）：原硬编码 response.code == 200，与 BizCode 解耦后存在断裂风险。
+        // 改用 BizCode.OK.code 与 LogInterceptor/全项目 BizCode 编码保持一致。
+        if (response.method == "user/login" && response.code == BizCode.OK.code) {
             // D-05 拦截：登录成功，绑定 Session
             handleLoginSuccess(response, responseObserver)
         } else {
@@ -473,7 +476,7 @@ class ChatService(
      * 调用 SessionRegistry.registerWithDeviceType() 注册 Session，旧连接收到 LOGOUT 推送。
      * 同时将当前 StreamObserver 注册到 UserStreamRegistry（D-01）。
      *
-     * @param response 登录成功响应（code=200）
+     * @param response 登录成功响应（code=BizCode.OK.code）
      * @param responseObserver 当前连接的 StreamObserver
      */
     private suspend fun handleLoginSuccess(
