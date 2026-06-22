@@ -228,13 +228,20 @@ class ChatService(
                 Direction.REQUEST -> {
                     logger.info { "[stream] 收到 REQUEST requestId=${envelope.requestId}" }
                     scope.launch {
-                        handleRequest(envelope, responseObserver)
+                        // fix: 传递 ChatStreamObserver（this）而非 gRPC responseObserver，
+                        // 确保 handleLoginSuccess 中的 require(responseObserver is ChatStreamObserver) 不会失败
+                        handleRequest(envelope, this@ChatStreamObserver)
                     }
                 }
                 Direction.PING -> {
-                    // 诊断日志：打印 Envelope 所有字段，排查 proto 反序列化是否正确
-                    logger.info { "[stream] #$connId 收到 PING requestId=\"${envelope.requestId}\" protocolVersion=${envelope.protocolVersion} direction=${envelope.direction} hasRequest=${envelope.hasRequest()} hasResponse=${envelope.hasResponse()} hasMessage=${envelope.hasMessage()} payloadSize=${envelope.serializedSize}" }
-                    handlePing(envelope, responseObserver)
+                    // fix: 同上，传递 this 使得 handlePing 中 ChatStreamObserver 特有属性（userId/token/delayedOfflineJob）可用
+                    handlePing(envelope, this@ChatStreamObserver)
+                }
+                // 服务端生成的 RESPONSE / PONG / PUSH 直接转发给 gRPC 客户端，避免 ChatStreamObserver.onNext 递归
+                // PUSH: PushService 通过 UserStreamRegistry 推送消息（聊天消息/已读回执/投递确认），
+                // 由于 UserStreamRegistry 存储的是 ChatStreamObserver 实例，需在此转发到 gRPC 客户端
+                Direction.RESPONSE, Direction.PONG, Direction.PUSH -> {
+                    responseObserver.onNext(envelope)
                 }
                 else -> logger.warn { "[stream] Unexpected direction: ${envelope.direction}" }
             }
@@ -394,9 +401,10 @@ class ChatService(
          * 4. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
         fun cleanupConnection() {
-            // D-67 并发安全：使用 values.remove() 精确匹配当前 observer 实例
-            // 避免 entries.removeIf 遍历所有条目时误匹配其他线程新注册的 observer
-            tokenToObserver.values.remove(responseObserver)
+            // D-67 并发安全：使用 values.remove(this) 精确匹配当前 ChatStreamObserver 实例
+            // fix: 使用 this 而非 responseObserver 字段，因为 tokenToObserver 存储的是 ChatStreamObserver 实例，
+            // 而 responseObserver 字段是 gRPC 原生 observer（不同对象），身份比较永不匹配导致内存泄漏
+            tokenToObserver.values.remove(this)
 
             // CQ-05: 清除会话，确保重连时生成新 connectionId
             token?.let { tok ->
@@ -410,9 +418,10 @@ class ChatService(
             userId?.let { uid ->
                 // 防御性检查：仅当当前 observer 仍在注册表中时才移除
                 // 防止多设备重连场景下误删新连接的 StreamObserver（D-67）
+                // fix: 使用 this 而非 responseObserver，确保与注册时存储的实例一致
                 val currentStreams = userStreamRegistry.getStreams(uid)
-                if (currentStreams.any { it == responseObserver }) {
-                    userStreamRegistry.removeStream(uid, responseObserver)
+                if (currentStreams.any { it === this }) {
+                    userStreamRegistry.removeStream(uid, this)
                 }
             }
 
@@ -451,7 +460,15 @@ class ChatService(
         // 确保 eviction callback 已注册（首次调用时注册一次）
         ensureEvictionCallbackRegistered()
 
+        // 日志辅助排查：打印请求的 method，确认客户端实际发送的内容
+        logger.info { "[handleRequest] method=${envelope.request.method} direction=${envelope.direction} requestId=${envelope.requestId} registry=@${System.identityHashCode(registry)}" }
+
         val response = dispatcher.dispatch(envelope.request)
+
+        // 日志辅助排查：打印 dispatch 返回的 code 和 msg
+        if (response.code != BizCode.OK.code) {
+            logger.warn { "[handleRequest] 响应异常 method=${response.method} code=${response.code} msg=${response.msg}" }
+        }
 
         // 修复（2026-06-20）：原硬编码 response.code == 200，与 BizCode 解耦后存在断裂风险。
         // 改用 BizCode.OK.code 与 LogInterceptor/全项目 BizCode 编码保持一致。
@@ -533,12 +550,10 @@ class ChatService(
             // 此时旧连接可能仍在，投递到旧连接的消息在 onCompleted 后丢失。
             // 这是"防饿死"权衡：宁可丢失少量消息也不阻塞新连接。
             // 丢失的消息可通过 Phase 10 的 gap detect + auto-pull 恢复。
-            (responseObserver as? ChatStreamObserver)?.activateDelivery()
+            responseObserver.activateDelivery()
         } else {
             // 无旧连接，直接激活投递（首次登录或超时重连后旧连接已清理）
-            (responseObserver as? ChatStreamObserver)?.let {
-                it.deliveryActive = true
-            }
+            responseObserver.deliveryActive = true
         }
 
         // 发送 LoginResp Envelope 给客户端
@@ -584,9 +599,9 @@ class ChatService(
 
         try {
             responseObserver.onNext(pongEnvelope)
-            logger.info { "[heartbeat] $connId 发送 PONG requestId=\"${envelope.requestId}\"" }
+//            logger.info { "[heartbeat] $connId 发送 PONG requestId=\"${envelope.requestId}\"" }
         } catch (e: Exception) {
-            logger.error(e) { "[heartbeat] $connId 发送 PONG 失败 requestId=\"${envelope.requestId}\"，流可能已损坏" }
+//            logger.error(e) { "[heartbeat] $connId 发送 PONG 失败 requestId=\"${envelope.requestId}\"，流可能已损坏" }
             // 流已损坏，清理连接避免资源泄漏
             try {
                 (responseObserver as? ChatStreamObserver)?.cleanupPending()
