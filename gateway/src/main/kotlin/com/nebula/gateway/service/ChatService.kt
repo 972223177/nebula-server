@@ -474,7 +474,7 @@ class ChatService(
         // 改用 BizCode.OK.code 与 LogInterceptor/全项目 BizCode 编码保持一致。
         if (response.method == "user/login" && response.code == BizCode.OK.code) {
             // D-05 拦截：登录成功，绑定 Session
-            handleLoginSuccess(response, responseObserver)
+            handleLoginSuccess(response, responseObserver, envelope.requestId)
         } else {
             // 其他响应，直接返回
             val responseEnvelope = Envelope.newBuilder()
@@ -495,10 +495,12 @@ class ChatService(
      *
      * @param response 登录成功响应（code=BizCode.OK.code）
      * @param responseObserver 当前连接的 StreamObserver
+     * @param requestId 客户端请求的 requestId，透传回登录响应 Envelope 以保证客户端可关联请求-响应
      */
     private suspend fun handleLoginSuccess(
         response: Response,
-        responseObserver: StreamObserver<Envelope>
+        responseObserver: StreamObserver<Envelope>,
+        requestId: String
     ) {
         // 反序列化 LoginResp
         val loginResp = LoginResp.parseFrom(response.result.toByteArray())
@@ -559,7 +561,7 @@ class ChatService(
         // 发送 LoginResp Envelope 给客户端
         val loginRespEnvelope = Envelope.newBuilder()
             .setDirection(Direction.RESPONSE)
-            .setRequestId("")  // login 请求的 request_id 从原始 Envelope 获取（简化处理）
+            .setRequestId(requestId)
             .setResponse(response)
             .build()
         responseObserver.onNext(loginRespEnvelope)
