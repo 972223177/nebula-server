@@ -45,8 +45,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.kotlin.test)
     // BCryptPasswordEncoder 运行时需要 commons-logging（spring-security-crypto 的传递依赖，
-    // 在 application 阶段不直接引用时需要显式声明以确保测试可见）
-    testImplementation("commons-logging:commons-logging:1.3.2")
+    // 需显式声明为 implementation 以确保运行时可见）
+    implementation("commons-logging:commons-logging:1.3.2")
 
     // Testcontainers — Redis 集成测试容器
     testImplementation(libs.testcontainers.core)
