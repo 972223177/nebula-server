@@ -171,21 +171,22 @@ class ChatServiceReconnectIntegrationTest {
     /**
      * 通过反射调用 handleLoginSuccess（suspend 方法），在协程中执行。
      *
-     * suspend 函数的 JVM 签名为 handleLoginSuccess(Response, StreamObserver, Continuation) -> Object。
+     * suspend 函数的 JVM 签名为 handleLoginSuccess(Response, StreamObserver, String, Continuation) -> Object。
      * 同时处理函数未挂起（同步返回）的情况：
      * - 若 invoke 返回 COROUTINE_SUSPENDED，函数已挂起，Continuation 会在完成后被恢复
      * - 若 invoke 返回 Unit（或其他非 COROUTINE_SUSPENDED 值），函数同步执行完毕，
      *   须手动 resume Continuation 以避免测试永久挂起
      */
-    private suspend fun callHandleLoginSuccess(observer: Any, response: Response) {
+    private suspend fun callHandleLoginSuccess(observer: Any, response: Response, requestId: String = "test-request-id") {
         val method = ChatService::class.java.getDeclaredMethod(
             "handleLoginSuccess",
             Response::class.java,
             StreamObserver::class.java,
+            String::class.java,
             Continuation::class.java
         ).apply { isAccessible = true }
         suspendCoroutine<Any?> { cont ->
-            val result = method.invoke(chatService, response, observer, cont)
+            val result = method.invoke(chatService, response, observer, requestId, cont)
             // 函数未挂起（同步完成），手动恢复 Continuation
             if (result != kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
                 cont.resume(result)
