@@ -76,7 +76,14 @@ fun main() {
     val registry = koin.get<HandlerRegistry>()
     val codec = koin.get<ProtoCodec>()
     val collectors: List<HandlerCollector> = koin.getAll()
-    collectors.forEach { it.registerAll(registry) }
+    logger.info { "HandlerCollector 注册阶段: 共发现 ${collectors.size} 个 Collector，将注册到 HandlerRegistry@${System.identityHashCode(registry)}" }
+    if (collectors.isEmpty()) {
+        logger.warn { "未发现任何 HandlerCollector 实例！请检查 Koin 模块是否加载了 HandlerCollector 定义" }
+    }
+    collectors.forEach { collector ->
+        logger.info { "正在注册 Collector: ${collector::class.qualifiedName}" }
+        collector.registerAll(registry)
+    }
 
     // Step 8: ServerBootstrap 构造 ChatService（封装 repository/service 依赖）
     val chatService: ChatService = ServerBootstrap.createChatService(koin)

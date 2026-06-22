@@ -94,7 +94,7 @@ class ChatServer(private val config: ApplicationConfig) {
 
                 override fun onMessage(message: ReqT) {
                     val seq = messageCount.incrementAndGet()
-                    logger.info { "[transport] #$connId 收到消息 #$seq remote=$remoteStr messageClass=${message?.javaClass?.simpleName ?: "null"}" }
+//                    logger.info { "[transport] #$connId 收到消息 #$seq remote=$remoteStr message=${message}" }
                     super.onMessage(message)
                 }
 
