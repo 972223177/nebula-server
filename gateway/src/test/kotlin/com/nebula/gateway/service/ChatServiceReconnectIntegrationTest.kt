@@ -160,11 +160,12 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     /** 反射创建 ChatStreamObserver 实例 */
-    private fun createChatStreamObserver(responseObserver: StreamObserver<Envelope>): Any {
+    @Suppress("UNCHECKED_CAST")
+    private fun createChatStreamObserver(responseObserver: StreamObserver<Envelope>): StreamObserver<Envelope> {
         val constructor = chatStreamObserverClass.getDeclaredConstructor(
             ChatService::class.java, StreamObserver::class.java
         ).apply { isAccessible = true }
-        return constructor.newInstance(chatService, responseObserver)
+        return constructor.newInstance(chatService, responseObserver) as StreamObserver<Envelope>
     }
 
     /**
@@ -385,34 +386,36 @@ class ChatServiceReconnectIntegrationTest {
 
     @Test
     fun cleanupConnectionShouldRemoveObserverFromTokenToObserver() {
-        // Given: tokenToObserver 中包含 responseObserver
+        // Given: tokenToObserver 中包含 ChatStreamObserver 实例（与生产代码一致：
+        // handleLoginSuccess 存入的是 ChatStreamObserver，而非 gRPC 原生 observer）
         val observer = createChatStreamObserver(mockResponseObserver)
         val tokenToObserver: ConcurrentHashMap<String, StreamObserver<Envelope>> =
             getField(chatService, "tokenToObserver")
-        tokenToObserver["test-token"] = mockResponseObserver
-        assert(tokenToObserver.values.contains(mockResponseObserver)) { "Expected observer in tokenToObserver" }
+        tokenToObserver["test-token"] = observer
+        assert(tokenToObserver.values.contains(observer)) { "Expected observer in tokenToObserver" }
 
         // When: 调用 cleanupConnection()
         invokeMethod(observer, "cleanupConnection")
 
-        // Then: tokenToObserver.values 不再包含 responseObserver
-        assert(!tokenToObserver.values.contains(mockResponseObserver)) {
+        // Then: tokenToObserver.values 不再包含 observer（cleanupConnection 用 this 精确匹配）
+        assert(!tokenToObserver.values.contains(observer)) {
             "Expected observer removed from tokenToObserver"
         }
     }
 
     @Test
     fun cleanupConnectionShouldRemoveFromUserStreamRegistryOnlyWhenObserverPresent() {
-        // Given: userStreamRegistry.getStreams 包含 responseObserver
+        // Given: userStreamRegistry.getStreams 包含 ChatStreamObserver 实例（与生产代码一致：
+        // handleLoginSuccess 通过 userStreamRegistry.register(uid, this) 注册的是 ChatStreamObserver）
         val observer = createChatStreamObserver(mockResponseObserver)
         setField(observer, "userId", 1001L)
-        every { userStreamRegistry.getStreams(1001L) } returns listOf(mockResponseObserver)
+        every { userStreamRegistry.getStreams(1001L) } returns listOf(observer)
 
         // When: 调用 cleanupConnection()
         invokeMethod(observer, "cleanupConnection")
 
-        // Then: userStreamRegistry.removeStream 被调用
-        verify(exactly = 1) { userStreamRegistry.removeStream(1001L, mockResponseObserver) }
+        // Then: userStreamRegistry.removeStream 被调用（cleanupConnection 使用 this === item 身份比较）
+        verify(exactly = 1) { userStreamRegistry.removeStream(1001L, observer) }
     }
 
     @Test
