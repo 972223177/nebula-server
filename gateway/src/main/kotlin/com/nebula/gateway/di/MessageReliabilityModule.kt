@@ -39,6 +39,6 @@ val messageReliabilityModule = module {
     single { RetryDeadLetterHandler(get()) }
 
     // HandlerCollector 注册
-    single<HandlerCollector> { DeliveryHandlerCollector() }
-    single<HandlerCollector> { AdminHandlerCollector(get(), get()) }
+    single<HandlerCollector>(named("delivery")) { DeliveryHandlerCollector() }
+    single<HandlerCollector>(named("admin")) { AdminHandlerCollector(get(), get()) }
 }

@@ -1,10 +1,11 @@
 package com.nebula.gateway.di
 
+import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.HandlerCollector
+import com.nebula.gateway.handler.message.MessageSeqHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
-import com.nebula.gateway.handler.chat.ChatHandlerCollector
-import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
 import org.koin.core.qualifier.named
@@ -23,7 +24,8 @@ val chatHandlerModule = module {
     single { SendMessageHandler(get(), get(), get(), get(), get(named("sendHandlerScope"))) }
     single { PullMessagesHandler(get()) }
     single { ReadReportHandler(get(), get(), get(), get()) }
+    single { MessageSeqHandler(get()) }
 
     // HandlerCollector 注册
-    single<HandlerCollector> { ChatHandlerCollector(get(), get(), get(), get()) }
+    single<HandlerCollector>(named("chat")) { ChatHandlerCollector(get(), get(), get(), get()) }
 }

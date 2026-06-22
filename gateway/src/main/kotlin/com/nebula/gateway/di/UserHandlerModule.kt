@@ -31,7 +31,7 @@ val userHandlerModule = module {
     single { GetPrivacyHandler(get()) }                       // UserPrivacyService
 
     // HandlerCollector 注册
-    single<HandlerCollector> { UserHandlerCollector(
+    single<HandlerCollector>(named("user")) { UserHandlerCollector(
         get(), get(), get(), get(), get(), get(), get(), get()
     ) }
 }
