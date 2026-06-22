@@ -10,6 +10,7 @@ import com.nebula.gateway.handler.conversation.LeaveGroupHandler
 import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -31,7 +32,7 @@ val conversationHandlerModule = module {
     single { KickMemberHandler(get(), get(), get()) }                 // ConversationService + LockManager + PushService
 
     // HandlerCollector 注册
-    single<HandlerCollector> { ConversationHandlerCollector(
+    single<HandlerCollector>(named("conversation")) { ConversationHandlerCollector(
         get(), get(), get(), get(), get(), get(), get()
     ) }
 }

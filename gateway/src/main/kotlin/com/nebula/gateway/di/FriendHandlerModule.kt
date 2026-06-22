@@ -8,6 +8,7 @@ import com.nebula.gateway.handler.friend.FriendRejectHandler
 import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.friend.FriendHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -26,7 +27,7 @@ val friendHandlerModule = module {
     single { FriendAcceptHandler(get(), get(), get()) }              // FriendService + PushService + LockManager
 
     // HandlerCollector 注册
-    single<HandlerCollector> { FriendHandlerCollector(
+    single<HandlerCollector>(named("friend")) { FriendHandlerCollector(
         get(), get(), get(), get(), get(), get()
     ) }
 }

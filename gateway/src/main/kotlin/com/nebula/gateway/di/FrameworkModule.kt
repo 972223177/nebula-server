@@ -53,7 +53,7 @@ val frameworkModule = module {
 
     // 系统级组件
     single { PingHandler() }
-    single<HandlerCollector> { SystemHandlerCollector(get()) }
+    single<HandlerCollector>(named("system")) { SystemHandlerCollector(get()) }
 }
 
 /**
