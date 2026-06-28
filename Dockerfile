@@ -12,11 +12,19 @@ WORKDIR /project
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle/ gradle/
 
+# 移除 macOS 主机上的 JDK 路径（容器内使用基础镜像自带的 JDK）
+RUN sed -i '' '/org\.gradle\.java\.home/d' gradle.properties 2>/dev/null || \
+    sed -i '/org\.gradle\.java\.home/d' gradle.properties
+
 # 下载依赖（无源码时可缓存此层）
 RUN ./gradlew dependencies --no-daemon -q || true
 
 # 复制源码
 COPY . .
+
+# 再次移除 macOS JDK 路径（COPY . . 覆盖了之前的修改）
+RUN sed -i '' '/org\.gradle\.java\.home/d' gradle.properties 2>/dev/null || \
+    sed -i '/org\.gradle\.java\.home/d' gradle.properties
 
 # 构建 server 模块的分发包（产物：server/build/install/server/）
 RUN ./gradlew :server:installDist --no-daemon

@@ -35,21 +35,32 @@ val frameworkModule = module {
     single { ProtoCodec }
     single { SessionRegistry(get()) } // SessionStore 从 Koin 注入
 
-    // D-06: Dispatcher 注册 — 自动注入 HandlerRegistry + Interceptors + ProtoCodec
-    // 使用 getAll<Interceptor>() 收集所有注册的 Interceptor 实现，而非直接解析 List<T>
-    single { Dispatcher(get(), getAll<Interceptor>(), get()) }
-
-    // ChatService 注册 — 依赖 gateway 组件 + service 层组件，全部从 Koin 解析（D-28）
-    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-
-    // D-07: 拦截器以 List<Interceptor> 注入，顺序决定执行顺序
-    single<Interceptor> { AuthInterceptor(
+    // D-06: Dispatcher 注册 — 显式构造拦截器列表保证顺序（D-07）
+    // ⚠️ 注意：不能使用 getAll<Interceptor>() 收集，因为连续注册多个
+    // single<Interceptor> 时 Koin 会以最后一个覆盖前面的。
+    // 改用 named qualifier + 显式列表以保证所有 4 个拦截器都被包含
+    // 必须显式使用 single<Interceptor>(named(...)) 将类型声明为 Interceptor 而非具体实现类，
+    // 否则 get<Interceptor>(named(...)) 在 Dispatcher 中将找不到匹配的 bean。
+    single<Interceptor>(named("authInterceptor")) { AuthInterceptor(
         get(),
         skipMethods = setOf("system/ping", "user/login", "user/register")
     ) }
-    single<Interceptor> { LogInterceptor() }
-    single<Interceptor> { RateLimitInterceptor() }
-    single<Interceptor> { ExceptionInterceptor() }
+    single<Interceptor>(named("logInterceptor")) { LogInterceptor() }
+    single<Interceptor>(named("rateLimitInterceptor")) { RateLimitInterceptor() }
+    single<Interceptor>(named("exceptionInterceptor")) { ExceptionInterceptor() }
+    single { Dispatcher(
+        get(),
+        listOf(
+            get<Interceptor>(named("authInterceptor")),
+            get<Interceptor>(named("logInterceptor")),
+            get<Interceptor>(named("rateLimitInterceptor")),
+            get<Interceptor>(named("exceptionInterceptor"))
+        ),
+        get()
+    ) }
+
+    // ChatService 注册 — 依赖 gateway 组件 + service 层组件，全部从 Koin 解析（D-28）
+    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // 系统级组件
     single { PingHandler() }
