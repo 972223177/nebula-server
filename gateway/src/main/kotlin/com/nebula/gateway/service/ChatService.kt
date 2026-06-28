@@ -226,7 +226,7 @@ class ChatService(
         override fun onNext(envelope: Envelope) {
             when (envelope.direction) {
                 Direction.REQUEST -> {
-                    logger.info { "[stream] 收到 REQUEST requestId=${envelope.requestId}" }
+                    logger.info { "[stream] 收到 REQUEST requestId=${envelope.requestId}，method=${envelope.request.method}，metadata=${envelope.request.metadataMap}" }
                     scope.launch {
                         // fix: 传递 ChatStreamObserver（this）而非 gRPC responseObserver，
                         // 确保 handleLoginSuccess 中的 require(responseObserver is ChatStreamObserver) 不会失败
@@ -461,7 +461,9 @@ class ChatService(
         ensureEvictionCallbackRegistered()
 
         // 日志辅助排查：打印请求的 method，确认客户端实际发送的内容
-        logger.info { "[handleRequest] method=${envelope.request.method} direction=${envelope.direction} requestId=${envelope.requestId} registry=@${System.identityHashCode(registry)}" }
+        if (envelope.direction == Direction.REQUEST){
+            logger.info { "[handleRequest] method=${envelope.request.method} direction=${envelope.direction} requestId=${envelope.requestId} metadata=${envelope.request.metadataMap}" }
+        }
 
         val response = dispatcher.dispatch(envelope.request)
 

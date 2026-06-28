@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package nebula.chat;
+
+import "nebula/envelope.proto";
+
+// gRPC 双向流服务定义 — 供非 JVM 客户端（Python/Go 等）编译 gRPC stub 使用。
+// Java 服务端手动注册此服务（见 ChatService.kt，方法名为 "chat" 小写），此文件仅用于跨语言 stub 生成。
+service ChatService {
+  rpc chat(stream com.nebula.chat.Envelope) returns (stream com.nebula.chat.Envelope);
+}

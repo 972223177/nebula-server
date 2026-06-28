@@ -1,0 +1,7 @@
+{
+  "server": "localhost:9090",
+  "accounts": [
+    {"username": "test_user1", "password": "123456"},
+    {"username": "test_user2", "password": "123456"}
+  ]
+}
