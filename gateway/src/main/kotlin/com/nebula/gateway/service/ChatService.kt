@@ -147,6 +147,9 @@ class ChatService(
         /** 连接编号（递增，用于关联同一连接的多帧消息）。非 private，允许 handlePing 等外部方法读取。 */
         internal val connId = observerCounter.incrementAndGet()
 
+        /** 写锁：gRPC MessageFramer 非线程安全，多个协程并发 onNext 会踩坏缓冲区 */
+        private val sendLock = Any()
+
         init {
             logger.info { "[stream] #$connId ChatStreamObserver 创建 responseObserver=${responseObserver.javaClass.simpleName}@${System.identityHashCode(responseObserver)}" }
         }
@@ -251,7 +254,7 @@ class ChatService(
                 // PUSH: PushService 通过 UserStreamRegistry 推送消息（聊天消息/已读回执/投递确认），
                 // 由于 UserStreamRegistry 存储的是 ChatStreamObserver 实例，需在此转发到 gRPC 客户端
                 Direction.RESPONSE, Direction.PONG, Direction.PUSH -> {
-                    responseObserver.onNext(envelope)
+                    synchronized(sendLock) { responseObserver.onNext(envelope) }
                 }
                 else -> logger.warn { "[stream] Unexpected direction: ${envelope.direction}" }
             }
@@ -287,7 +290,7 @@ class ChatService(
         fun deliver(envelope: Envelope) {
             if (deliveryActive) {
                 try {
-                    responseObserver.onNext(envelope)
+                    synchronized(sendLock) { responseObserver.onNext(envelope) }
                 } catch (e: Exception) {
                     // D-75: 投递失败，跟踪重试次数
                     val key = envelopeKey(envelope)
@@ -346,7 +349,7 @@ class ChatService(
          */
         private suspend fun deliverCached(envelope: Envelope): Boolean {
             return try {
-                responseObserver.onNext(envelope)
+                synchronized(sendLock) { responseObserver.onNext(envelope) }
                 true
             } catch (e: Exception) {
                 val key = envelopeKey(envelope)
@@ -497,7 +500,7 @@ class ChatService(
                 .setRequestId(envelope.requestId)
                 .setResponse(response)
                 .build()
-            responseObserver.onNext(responseEnvelope)
+            synchronized(sendLock) { responseObserver.onNext(responseEnvelope) }
         }
     }
 
@@ -580,7 +583,7 @@ class ChatService(
             .setRequestId(requestId)
             .setResponse(response)
             .build()
-        responseObserver.onNext(loginRespEnvelope)
+        synchronized(sendLock) { responseObserver.onNext(loginRespEnvelope) }
     }
 
     // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。
@@ -616,7 +619,7 @@ class ChatService(
             .build()
 
         try {
-            responseObserver.onNext(pongEnvelope)
+            synchronized(sendLock) { responseObserver.onNext(pongEnvelope) }
 //            logger.info { "[heartbeat] $connId 发送 PONG requestId=\"${envelope.requestId}\"" }
         } catch (e: Exception) {
 //            logger.error(e) { "[heartbeat] $connId 发送 PONG 失败 requestId=\"${envelope.requestId}\"，流可能已损坏" }
