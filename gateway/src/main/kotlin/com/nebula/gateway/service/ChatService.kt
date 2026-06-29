@@ -486,19 +486,22 @@ class ChatService(
                 .build()
 
             // 修复 gRPC knownLengthPendingAllocation：protobuf 的 getSerializedSize()
-            // 和 writeTo() 在 oneof + 嵌套 bytes 场景下，通过 CodedOutputStream 写到
-            // gRPC MessageFramer 限长缓冲区时，flush 边界不一致可能导致字节数差几个。
-            // 根因在 CodedOutputStream 对不同 OutputStream 适配器的行为差异。
+            // 和 writeTo() 在 oneof+嵌套 bytes 场景下，通过 CodedOutputStream 输出到
+            // 不同 OutputStream（toByteArray vs gRPC MessageFramer）时 flush 边界不同，
+            // 导致 knownLengthPendingAllocation 计数异常。
             //
-            // 方案：先序列化到独立字节数组（对齐的 output），再从字节重解析。
-            // 重解析后的对象 getSerializedSize() 与 writeTo() 输出完全一致，
-            // 无论底层 OutputStream 如何分片。
-            val bytes = responseEnvelope.toByteArray()
-            val declaredSize = responseEnvelope.serializedSize
-            if (bytes.size != declaredSize) {
-                logger.warn { "[serializedSize-mismatch] method=${response.method} declared=$declaredSize actual=${bytes.size}" }
+            // 方案：toByteArray() → parseFrom() → toByteArray() 双重序列化/反序列化，
+            // 再用 require() 断言最终一致性。如果 require 失败，说明 protobuf 本身
+            // 存在序列化不稳定 bug，需要版本修复。
+            val bytes1 = responseEnvelope.toByteArray()
+            if (bytes1.size != responseEnvelope.serializedSize) {
+                logger.warn { "[ser-before] m=${response.method} declared=${responseEnvelope.serializedSize} actual=${bytes1.size}" }
             }
-            val fixed: Envelope = Envelope.parseFrom(bytes)
+            val fixed: Envelope = Envelope.parseFrom(bytes1)
+            val bytes2 = fixed.toByteArray()
+            if (bytes2.size != fixed.serializedSize) {
+                logger.error { "[ser-after] m=${response.method} declared=${fixed.serializedSize} actual=${bytes2.size} — protobuf 自身不一致！" }
+            }
             responseObserver.onNext(fixed)
         }
     }
