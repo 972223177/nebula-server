@@ -130,7 +130,8 @@ class ChatServer(private val config: ApplicationConfig) {
         val sslContext = config.ssl.buildSslContext()
 
         val builder = NettyServerBuilder.forPort(config.server.port)
-            .maxInboundMessageSize(4 * 1024 * 1024) // 最大入站消息 4MB，超过则拒绝连接
+            .maxInboundMessageSize(16 * 1024 * 1024) // 最大消息 16MB，避免大列表响应触发 MessageFramer 溢出
+            .maxInboundMetadataSize(64 * 1024)       // metadata 上限 64KB
 
             // 双重心跳策略 — 传输层 + 应用层（D-27）
             // 传输层 gRPC keepalive → 连接存活检测（TCP/HTTP2 帧层面）
