@@ -485,18 +485,21 @@ class ChatService(
                 .setResponse(response)
                 .build()
 
-            // 修复 protobuf 序列化不一致：oneof + bytes 嵌套消息在 getSerializedSize()
-            // 和 writeTo() 之间可能差几个字节（protobuf-java 已知缺陷），触发 gRPC
-            // MessageFramer 的 knownLengthPendingAllocation 检查。
-            // 方案：预序列化 → 比对 → 不一致时从字节重解析（重解析后的对象内部状态一致）
+            // 修复 gRPC knownLengthPendingAllocation：protobuf 的 getSerializedSize()
+            // 和 writeTo() 在 oneof + 嵌套 bytes 场景下，通过 CodedOutputStream 写到
+            // gRPC MessageFramer 限长缓冲区时，flush 边界不一致可能导致字节数差几个。
+            // 根因在 CodedOutputStream 对不同 OutputStream 适配器的行为差异。
+            //
+            // 方案：先序列化到独立字节数组（对齐的 output），再从字节重解析。
+            // 重解析后的对象 getSerializedSize() 与 writeTo() 输出完全一致，
+            // 无论底层 OutputStream 如何分片。
             val bytes = responseEnvelope.toByteArray()
-            if (bytes.size != responseEnvelope.serializedSize) {
-                logger.warn { "[serializedSize-mismatch] method=${response.method} declared=${responseEnvelope.serializedSize}, actual=${bytes.size} — 从字节重解析修复" }
-                val fixed: Envelope = Envelope.parseFrom(bytes)
-                responseObserver.onNext(fixed)
-            } else {
-                responseObserver.onNext(responseEnvelope)
+            val declaredSize = responseEnvelope.serializedSize
+            if (bytes.size != declaredSize) {
+                logger.warn { "[serializedSize-mismatch] method=${response.method} declared=$declaredSize actual=${bytes.size}" }
             }
+            val fixed: Envelope = Envelope.parseFrom(bytes)
+            responseObserver.onNext(fixed)
         }
     }
 
@@ -578,7 +581,11 @@ class ChatService(
             .setRequestId(requestId)
             .setResponse(response)
             .build()
-        responseObserver.onNext(loginRespEnvelope)
+        // 同 handleRequest 的 protobuf 修复：pre-serialize + re-parse 避免
+        // CodedOutputStream → MessageFramer 的 knownLengthPendingAllocation
+        val loginBytes = loginRespEnvelope.toByteArray()
+        val fixedLoginEnv: Envelope = Envelope.parseFrom(loginBytes)
+        responseObserver.onNext(fixedLoginEnv)
     }
 
     // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。
