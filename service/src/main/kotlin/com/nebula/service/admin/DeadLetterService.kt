@@ -120,7 +120,10 @@ class DeadLetterService(
             failReason = failReason,
             failCount = 0,
             status = STATUS_PENDING
-        )
+        ).apply {
+            createdAt = java.time.LocalDateTime.now()
+            updatedAt = java.time.LocalDateTime.now()
+        }
         val saved = txRunner.execute { em -> deadLetterDao.insert(em, entity) }
         logger.warn { "死信记录已创建: id=${saved.id}, conv=$conversationId, reason=$failReason" }
         return saved.toDTO()

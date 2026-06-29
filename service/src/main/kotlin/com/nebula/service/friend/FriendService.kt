@@ -162,7 +162,10 @@ class FriendService(
                 toUid = toUid,
                 status = 0,
                 message = req.message
-            )
+            ).apply {
+                createdAt = LocalDateTime.now()
+                updatedAt = LocalDateTime.now()
+            }
             val savedRequest = friendRequestDao.insert(em, requestEntity)
 
             FriendAddResult(

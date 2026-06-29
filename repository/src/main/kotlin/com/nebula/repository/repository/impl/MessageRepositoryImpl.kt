@@ -193,6 +193,7 @@ class MessageRepositoryImpl(
             serverTs = body["serverTs"]?.toLongOrNull() ?: return null
         ).apply {
             id = body["id"]?.toLongOrNull()
+            createdAt = java.time.LocalDateTime.now()
             // M11: 解析 payload 字段（Base64 编码），用于死信记录恢复
             payload = body["payload"]?.let { java.util.Base64.getDecoder().decode(it) }
         }
