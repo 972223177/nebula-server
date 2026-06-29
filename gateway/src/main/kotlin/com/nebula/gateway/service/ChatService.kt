@@ -23,7 +23,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.BindableService
 import io.grpc.MethodDescriptor
 import io.grpc.ServerServiceDefinition
-import io.grpc.protobuf.ProtoUtils
 import io.grpc.stub.ServerCalls
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.CoroutineScope
@@ -102,7 +101,20 @@ class ChatService(
 
     override fun bindService(): ServerServiceDefinition {
         // 构造 BIDI_STREAMING MethodDescriptor
-        val envelopeMarshaller = ProtoUtils.marshaller(Envelope.getDefaultInstance())
+        // 使用自定义 Marshaller 替代 ProtoUtils.marshaller(Envelope.getDefaultInstance())，
+        // 修复 gRPC ProtoInputStream.drainTo() 中 getSerializedSize() 与 writeTo()
+        // 输出不一致导致的 knownLengthPendingAllocation / minWritableBytes 负值：
+        // stream() 预序列化到 ByteArrayInputStream，drainTo 输出完全匹配 declared size
+        val envelopeMarshaller: MethodDescriptor.Marshaller<Envelope> =
+            object : MethodDescriptor.Marshaller<Envelope> {
+                override fun stream(value: Envelope): java.io.InputStream {
+                    val bytes = value.toByteArray()
+                    val fixed = Envelope.parseFrom(bytes)
+                    return java.io.ByteArrayInputStream(fixed.toByteArray())
+                }
+                override fun parse(stream: java.io.InputStream): Envelope =
+                    Envelope.parseFrom(stream)
+            }
         val chatMethod = MethodDescriptor.newBuilder(envelopeMarshaller, envelopeMarshaller)
             .setFullMethodName(
                 MethodDescriptor.generateFullMethodName("nebula.chat.ChatService", "chat")
