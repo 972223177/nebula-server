@@ -489,30 +489,15 @@ class ChatService(
             handleLoginSuccess(response, responseObserver, envelope.requestId)
         } else {
             // 其他响应，直接返回
+            // 注：gRPC knownLengthPendingAllocation 已由 bindService() 中的自定义
+            // Marshaller（ByteArrayInputStream 替代 ProtoInputStream）在全局层面修复，
+            // 此处不再需要应用层序列化修复。
             val responseEnvelope = Envelope.newBuilder()
                 .setDirection(Direction.RESPONSE)
                 .setRequestId(envelope.requestId)
                 .setResponse(response)
                 .build()
-
-            // 修复 gRPC knownLengthPendingAllocation：protobuf 的 getSerializedSize()
-            // 和 writeTo() 在 oneof+嵌套 bytes 场景下，通过 CodedOutputStream 输出到
-            // 不同 OutputStream（toByteArray vs gRPC MessageFramer）时 flush 边界不同，
-            // 导致 knownLengthPendingAllocation 计数异常。
-            //
-            // 方案：toByteArray() → parseFrom() → toByteArray() 双重序列化/反序列化，
-            // 再用 require() 断言最终一致性。如果 require 失败，说明 protobuf 本身
-            // 存在序列化不稳定 bug，需要版本修复。
-            val bytes1 = responseEnvelope.toByteArray()
-            if (bytes1.size != responseEnvelope.serializedSize) {
-                logger.warn { "[ser-before] m=${response.method} declared=${responseEnvelope.serializedSize} actual=${bytes1.size}" }
-            }
-            val fixed: Envelope = Envelope.parseFrom(bytes1)
-            val bytes2 = fixed.toByteArray()
-            if (bytes2.size != fixed.serializedSize) {
-                logger.error { "[ser-after] m=${response.method} declared=${fixed.serializedSize} actual=${bytes2.size} — protobuf 自身不一致！" }
-            }
-            responseObserver.onNext(fixed)
+            responseObserver.onNext(responseEnvelope)
         }
     }
 
@@ -589,16 +574,13 @@ class ChatService(
         }
 
         // 发送 LoginResp Envelope 给客户端
+        // 注：gRPC 序列化一致性已由 bindService() 中的自定义 Marshaller 在全局层面保证
         val loginRespEnvelope = Envelope.newBuilder()
             .setDirection(Direction.RESPONSE)
             .setRequestId(requestId)
             .setResponse(response)
             .build()
-        // 同 handleRequest 的 protobuf 修复：pre-serialize + re-parse 避免
-        // CodedOutputStream → MessageFramer 的 knownLengthPendingAllocation
-        val loginBytes = loginRespEnvelope.toByteArray()
-        val fixedLoginEnv: Envelope = Envelope.parseFrom(loginBytes)
-        responseObserver.onNext(fixedLoginEnv)
+        responseObserver.onNext(loginRespEnvelope)
     }
 
     // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。
