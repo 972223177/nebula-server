@@ -484,7 +484,19 @@ class ChatService(
                 .setRequestId(envelope.requestId)
                 .setResponse(response)
                 .build()
-            responseObserver.onNext(responseEnvelope)
+
+            // 修复 protobuf 序列化不一致：oneof + bytes 嵌套消息在 getSerializedSize()
+            // 和 writeTo() 之间可能差几个字节（protobuf-java 已知缺陷），触发 gRPC
+            // MessageFramer 的 knownLengthPendingAllocation 检查。
+            // 方案：预序列化 → 比对 → 不一致时从字节重解析（重解析后的对象内部状态一致）
+            val bytes = responseEnvelope.toByteArray()
+            if (bytes.size != responseEnvelope.serializedSize) {
+                logger.warn { "[serializedSize-mismatch] method=${response.method} declared=${responseEnvelope.serializedSize}, actual=${bytes.size} — 从字节重解析修复" }
+                val fixed: Envelope = Envelope.parseFrom(bytes)
+                responseObserver.onNext(fixed)
+            } else {
+                responseObserver.onNext(responseEnvelope)
+            }
         }
     }
 
