@@ -42,6 +42,8 @@ class FriendAddHandler(
 
         // Service 内部事务（D-79 + D-80）
         // PersistenceException 幂等 catch 处理双向竞赛
+        // ⚠️ JpaTxRunner 透传原始异常，非 PersistenceException 的 JPA 异常会漏穿到
+        // ExceptionInterceptor 并返回 9000。在此兜底捕获以暴露完整堆栈。
         val result = try {
             friendService.addFriend(req, fromUid)
         } catch (e: PersistenceException) {
@@ -61,6 +63,12 @@ class FriendAddHandler(
                 // （如 existingFriendship==null 或 deleted!=0），按冲突处理返回 ALREADY_FRIEND
                 throw FriendException(BizCode.ALREADY_FRIEND)
             }
+            throw e
+        } catch (e: FriendException) {
+            throw e  // 已正确映射的异常直接透传
+        } catch (e: Exception) {
+            // 兜底：记录完整堆栈，转换为 internal error 以便排查
+            logger.error(e) { "[friend/add] 未预期异常: fromUid=$fromUid, toUid=${req.toUid}" }
             throw e
         }
 
