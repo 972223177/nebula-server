@@ -81,6 +81,23 @@ class RedisDeliveryTracker(
         redis.expire(key(msgId), TTL_SECONDS)
     }
 
+    /**
+     * R-10: 批量设置同一消息多个接收者的投递状态。
+     *
+     * 使用 HMSET 替代多次 HSET，将 N 次 Redis 往返合并为 1 次。
+     * 适用于群消息广播后批量标记 sent 状态。
+     *
+     * @param msgId 消息 ID
+     * @param uids 接收者 UID 列表
+     * @param status 投递状态（0=sent, 1=delivered, 2=read）
+     */
+    suspend fun batchSetStatus(msgId: Long, uids: List<Long>, status: Int) {
+        if (uids.isEmpty()) return
+        val fields = uids.associate { field(it) to status.toString() }
+        redis.hmset(key(msgId), fields)
+        redis.expire(key(msgId), TTL_SECONDS)
+    }
+
     /** 构造 Redis Hash key */
     private fun key(msgId: Long): String = "$KEY_PREFIX${msgId}$SUFFIX"
 

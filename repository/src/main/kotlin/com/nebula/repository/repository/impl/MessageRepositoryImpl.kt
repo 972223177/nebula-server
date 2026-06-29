@@ -74,17 +74,34 @@ class MessageRepositoryImpl(
     /**
      * 从 Redis Stream 消费并批量刷入 MySQL。
      *
+     * D-03 修复策略：
+     * 1. 快速路径：批量 INSERT 所有消息（常见场景，全部为新消息）
+     * 2. UK 冲突降级：逐条 INSERT 隔离冲突消息，非冲突消息正常入库
+     * 3. 逐条 UK 冲突 → 死信；逐条非 UK 异常 → 不 XACK 保留重试
+     * 4. 无法解析的条目 → 直接 XACK（毒消息，无法处理）
+     *
      * @see MessageWriteRepository.flushBatch
      */
     override suspend fun flushBatch(): Int {
         val entries = messageQueue.consume(batchSize = 30, blockMs = 0)
         if (entries.isEmpty()) return 0
 
-        // 解析 StreamMessage 为 MessageEntity
-        val messages = entries.mapNotNull { entry -> parseToEntity(entry) }
+        // 解析并保留 entry ↔ entity 映射
+        val parsed = entries.mapNotNull { entry ->
+            parseToEntity(entry)?.let { entry to it }
+        }
 
+        // D-03: 无法解析的条目直接 XACK（毒消息，重试无意义）
+        val unparseableIds = entries.filter { entry -> parsed.none { it.first == entry } }
+            .map { it.id }
+        unparseableIds.forEach { messageQueue.acknowledge(it) }
+
+        if (parsed.isEmpty()) return 0
+
+        val messages = parsed.map { it.second }
+
+        // 快速路径：批量插入
         try {
-            // 使用 JpaTxRunner 在事务中批量持久化消息
             jpaTxRunner.execute { em ->
                 var count = 0
                 for (msg in messages) {
@@ -96,49 +113,61 @@ class MessageRepositoryImpl(
                     }
                 }
             }
-
-            // XACK 所有成功写入的消息
-            entries.forEach { messageQueue.acknowledge(it.id) }
+            // 全部成功，XACK 所有条目
+            parsed.forEach { (entry, _) -> messageQueue.acknowledge(entry.id) }
             return messages.size
         } catch (e: PersistenceException) {
-            // M11: UK 冲突时为每条消息创建死信记录，而非静默跳过
             val isConstraintViolation = e.cause is ConstraintViolationException ||
                 (e.message?.contains("Duplicate", ignoreCase = true) == true) ||
                 (e.message?.contains("ConstraintViolation", ignoreCase = true) == true)
-            if (isConstraintViolation) {
-                logger.warn(e) { "唯一索引冲突，为冲突消息创建死信记录" }
-                val handler = onDeadLetter
-                if (handler != null) {
-                    entries.forEach { entry ->
-                        val parsed = parseToEntity(entry)
-                        if (parsed != null) {
-                            try {
-                                handler.onMessageFailed(
-                                    parsed.conversationId,
-                                    parsed.senderUid,
-                                    parsed.messageType,
-                                    parsed.content,
-                                    parsed.payload,
-                                    parsed.clientMessageId,
-                                    parsed.clientTs,
-                                    "UK 冲突: client_msg_id=${parsed.clientMessageId}"
-                                )
-                            } catch (dlEx: Exception) {
-                                logger.error(dlEx) { "创建死信记录失败: clientMsgId=${parsed.clientMessageId}" }
-                            }
-                        }
-                    }
-                }
-                // 仍然 XACK 避免 Redis 中重复消费
-                entries.forEach { messageQueue.acknowledge(it.id) }
+            if (!isConstraintViolation) {
+                // 非 UK 异常（如连接断开），保留在 Redis Stream 下次重试
+                logger.error(e) { "批量刷写失败（非 UK 冲突），保留重试" }
                 return 0
             }
-            logger.error(e) { "批量刷写消息失败" }
-            // 失败的消息保留在 Redis Stream 中，下次重试
-            return 0
+
+            // D-03: UK 冲突降级为逐条插入，隔离冲突消息
+            logger.warn { "批量插入 UK 冲突，降级为逐条插入以隔离冲突消息（共 ${parsed.size} 条）" }
+            var successCount = 0
+            for ((entry, msg) in parsed) {
+                val handled = try {
+                    jpaTxRunner.execute { em -> em.persist(msg) }
+                    successCount++
+                    true // 成功 → XACK
+                } catch (e2: PersistenceException) {
+                    val isUK = e2.cause is ConstraintViolationException ||
+                        (e2.message?.contains("Duplicate", ignoreCase = true) == true) ||
+                        (e2.message?.contains("ConstraintViolation", ignoreCase = true) == true)
+                    if (isUK) {
+                        // 个体 UK 冲突 → 死信 + XACK
+                        onDeadLetter?.let { handler ->
+                            try {
+                                handler.onMessageFailed(
+                                    msg.conversationId, msg.senderUid, msg.messageType,
+                                    msg.content, msg.payload, msg.clientMessageId,
+                                    msg.clientTs, "UK 冲突: client_msg_id=${msg.clientMessageId}"
+                                )
+                            } catch (dlEx: Exception) {
+                                logger.error(dlEx) { "创建死信记录失败: clientMsgId=${msg.clientMessageId}" }
+                            }
+                        }
+                        true // 已死信 → XACK
+                    } else {
+                        // 个体非 UK 异常 → 不 XACK，保留重试
+                        logger.error(e2) { "逐条插入失败（非 UK）: clientMsgId=${msg.clientMessageId}" }
+                        false
+                    }
+                } catch (e2: Exception) {
+                    logger.error(e2) { "逐条插入异常: clientMsgId=${msg.clientMessageId}" }
+                    false // 不 XACK，保留重试
+                }
+                if (handled) {
+                    messageQueue.acknowledge(entry.id)
+                }
+            }
+            return successCount
         } catch (e: Exception) {
-            logger.error(e) { "批量刷写消息失败" }
-            // 失败的消息保留在 Redis Stream 中，下次重试
+            logger.error(e) { "批量刷写失败，保留在 Redis Stream 重试" }
             return 0
         }
     }

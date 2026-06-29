@@ -371,6 +371,12 @@ class NebulaBot:
                         # 登录响应特殊处理
                         if not self.state.logged_in and resp.method == "user/login":
                             self._on_login_response(resp)
+                            # 登录成功后立即拉取历史好友请求
+                            self._pull_pending_friend_requests()
+                            continue
+                        # 好友请求列表响应 — 自动同意所有 pending 请求
+                        elif resp.method == "friend/requests":
+                            self._on_friend_requests_response(resp)
                             continue
                         # 非登录响应：仅日志
                         if resp.code != 200:
@@ -477,6 +483,41 @@ class NebulaBot:
         env = self._make_request_envelope("friend/accept", accept_req)
         self._send_queue.put(env)
         self.log.info("已发送 friend/accept request_id=%d", payload.request_id)
+
+    # ---- 历史好友请求拉取 ----
+    def _pull_pending_friend_requests(self):
+        """登录后拉取历史待处理好友请求列表。"""
+        pb = self.pb
+        req = pb.friend.FriendRequestsReq()
+        env = self._make_request_envelope("friend/requests", req)
+        self._send_queue.put(env)
+        self.log.info("已发送 friend/requests 拉取历史待处理好友请求")
+
+    def _on_friend_requests_response(self, resp):
+        """处理好友请求列表响应：自动同意所有 pending 状态的请求。"""
+        if resp.code != 200:
+            self.log.warning("拉取好友请求列表失败: code=%d msg=%s", resp.code, resp.msg)
+            return
+
+        pb = self.pb
+        requests_resp = pb.friend.FriendRequestsResp()
+        requests_resp.ParseFromString(resp.result)
+
+        pending = [item for item in requests_resp.requests if item.status == "pending"]
+        if not pending:
+            self.log.info("无待处理的历史好友请求")
+            return
+
+        self.log.info("发现 %d 个待处理好友请求，自动同意中...", len(pending))
+        for item in pending:
+            self.log.info(
+                "自动同意历史好友请求 request_id=%d from=%s(uid=%d)",
+                item.request_id, item.from_username, item.from_uid,
+            )
+            accept_req = pb.friend.FriendAcceptReq()
+            accept_req.request_id = item.request_id
+            env = self._make_request_envelope("friend/accept", accept_req)
+            self._send_queue.put(env)
 
     def _handle_chat_message(self, msg):
         """处理聊天消息：原样转发回发送方。"""
@@ -708,9 +749,19 @@ def main():
                 args.server = config["server"]
             accounts = config.get("accounts", [])
     else:
-        # 默认注册模式
-        main_log.info("未指定账号，启动默认注册模式")
-        accounts = register_accounts("", args.count)
+        # 自动检测脚本目录下的 accounts.json
+        default_accounts_file = SCRIPT_DIR / "accounts.json"
+        if default_accounts_file.exists():
+            main_log.info("自动检测到配置文件: %s", default_accounts_file)
+            with open(default_accounts_file, "r") as f:
+                config = json.load(f)
+                if "server" in config:
+                    args.server = config["server"]
+                accounts = config.get("accounts", [])
+        else:
+            # 最终降级：随机注册模式
+            main_log.info("未指定账号且未找到 accounts.json，启动默认注册模式")
+            accounts = register_accounts("", args.count)
 
     if not accounts:
         main_log.error("没有可用的账号，退出")

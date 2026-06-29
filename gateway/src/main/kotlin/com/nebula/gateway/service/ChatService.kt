@@ -13,6 +13,7 @@ import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
 import com.nebula.service.admin.DeadLetterService
+import com.nebula.gateway.session.DeliverableStreamObserver
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
@@ -145,7 +146,7 @@ class ChatService(
      */
     private inner class ChatStreamObserver(
         private val responseObserver: StreamObserver<Envelope>
-    ) : StreamObserver<Envelope> {
+    ) : DeliverableStreamObserver {
 
         /** 连接编号（递增，用于关联同一连接的多帧消息）。非 private，允许 handlePing 等外部方法读取。 */
         internal val connId = observerCounter.incrementAndGet()
@@ -154,12 +155,19 @@ class ChatService(
         private val sendMutex = Mutex()
 
         /**
-         * 线程安全的 Envelope 发送入口。
+         * 线程安全的 Envelope 发送入口（D-67）。
+         *
+         * gRPC MessageFramer 非线程安全，多个协程并发调用 [responseObserver.onNext] 会踩坏缓冲区。
+         * 本方法通过 [sendMutex] 串行化所有对 [responseObserver.onNext] 的调用。
+         *
+         * 非 suspend 函数 — 内部使用 [runBlocking] 桥接协程锁。
          * responseObserver.onNext(event) 本质是将字节写入 Netty 缓冲区（非阻塞），
          * runBlocking 不会造成协程饥饿。suspend 调用方也可安全使用。
+         *
+         * @param envelope 待发送的 Envelope
          */
         internal fun sendEnvelope(envelope: Envelope) {
-            sendEnvelope(envelope)
+            runBlocking { sendMutex.withLock { responseObserver.onNext(envelope) } }
         }
 
         init {
@@ -299,7 +307,7 @@ class ChatService(
          *
          * @param envelope 待投递的 Envelope
          */
-        fun deliver(envelope: Envelope) {
+        override fun deliver(envelope: Envelope) {
             if (deliveryActive) {
                 try {
                     sendEnvelope(envelope)
@@ -422,7 +430,9 @@ class ChatService(
          * 清理操作：
          * 1. 从 tokenToObserver 移除当前 responseObserver（精确匹配实例，D-67 并发安全）
          * 2. 从 UserStreamRegistry 移除当前设备的 StreamObserver（防御性检查，D-01）
-         * 3. 从 SessionRegistry 清除会话（CQ-05: 确保重连时生成新 connectionId）
+         * 3. 从 SessionRegistry 仅清除 L1 本地缓存，保留 Redis 中的 token（修复：断连后
+         *    客户端可拿同一 token 重新鉴权，无需重新登录。同设备重新登录时 registerWithDeviceType
+         *    会触发 unregister 从 Redis 删除旧 token。）
          * 4. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
         fun cleanupConnection() {
@@ -431,12 +441,11 @@ class ChatService(
             // 而 responseObserver 字段是 gRPC 原生 observer（不同对象），身份比较永不匹配导致内存泄漏
             tokenToObserver.values.remove(this)
 
-            // CQ-05: 清除会话，确保重连时生成新 connectionId
+            // 仅清除 L1 本地缓存，保留 Redis 中的 token。
+            // 客户端断连后可用同一 token 重新鉴权（AuthInterceptor 从 Redis 恢复 Session）。
+            // 同设备重新登录时 registerWithDeviceType → unregister 会从 Redis 删除旧 token。
             token?.let { tok ->
                 sessionRegistry.removeFromLocalCache(tok)
-                scope.launch {
-                    sessionRegistry.removeFromRedis(tok)
-                }
             }
 
             // D-01: 移除当前设备 StreamObserver（不调 removeUser 以免移除其他设备的流）
@@ -665,6 +674,7 @@ class ChatService(
                 val observer = tokenToObserver.remove(token)
                 if (observer != null) {
                     // Step 1: 推送 DISCONNECT 通知（D-68）
+                    // G-02 修复：通过 deliver() 走 Mutex 串行化，避免与正常推送路径并发踩坏 MessageFramer
                     try {
                         val disconnectEnvelope = Envelope.newBuilder()
                             .setDirection(Direction.PUSH)
@@ -674,7 +684,8 @@ class ChatService(
                                 .setContent("连接将被关闭，请触发重连流程")
                                 .build())
                             .build()
-                        observer.onNext(disconnectEnvelope)
+                        (observer as? DeliverableStreamObserver)?.deliver(disconnectEnvelope)
+                            ?: observer.onNext(disconnectEnvelope)
                     } catch (e: Exception) {
                         // 连接可能已损坏，推送失败不阻塞清理
                         logger.warn(e) { "Failed to push DISCONNECT, connection may already be broken" }

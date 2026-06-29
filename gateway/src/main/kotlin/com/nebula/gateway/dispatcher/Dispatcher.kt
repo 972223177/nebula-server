@@ -8,6 +8,8 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.interceptor.Interceptor
 import com.google.protobuf.ByteString
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 
 /**
  * 请求分发器 — Pipeline 编排入口（D-14, D-15）。
@@ -29,7 +31,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 class Dispatcher(
     private val handlerRegistry: HandlerRegistry,
     private val interceptors: List<Interceptor>,
-    private val protoCodec: ProtoCodec = ProtoCodec
+    private val protoCodec: ProtoCodec = ProtoCodec,
+    /** G-04: 单次请求处理超时（毫秒），含拦截器链 + Handler 执行 */
+    private val dispatchTimeoutMs: Long = DEFAULT_DISPATCH_TIMEOUT_MS
 ) {
 
     /**
@@ -96,10 +100,25 @@ class Dispatcher(
             }
         }
 
-        return pipeline.proceed(envelopeRequest)
+        // G-04: 超时保护，防止慢 Handler 无限占用协程和 DB 连接
+        return try {
+            withTimeout(dispatchTimeoutMs) {
+                pipeline.proceed(envelopeRequest)
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn { "请求处理超时 method=$method timeout=${dispatchTimeoutMs}ms" }
+            Response.newBuilder()
+                .setCode(BizCode.INTERNAL_ERROR.code)
+                .setMsg("request timeout")
+                .setMethod(method)
+                .build()
+        }
     }
 
     companion object {
         private val logger = KotlinLogging.logger {}
+
+        /** G-04: 默认请求处理超时 10s（含拦截器链 + Handler） */
+        private const val DEFAULT_DISPATCH_TIMEOUT_MS = 10_000L
     }
 }

@@ -2,7 +2,6 @@ package com.nebula.repository.redis
 
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
-import io.lettuce.core.api.async.RedisAsyncCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -12,7 +11,6 @@ import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 /**
@@ -135,40 +133,23 @@ class SessionRepositoryTest {
         coVerify(exactly = 1) { redis.del("cleanup:key:001") }
     }
 
-    // ==================== batchDelete (pipeline) ====================
+    // ==================== batchDelete ====================
 
     @Test
-    fun batchDeleteShouldDeleteMultipleKeysViaPipeline() = runTest {
+    fun batchDeleteShouldDeleteMultipleKeys() = runTest {
         val keys = listOf("session:token:abc", "session:token:def", "session:token:ghi")
 
         repository.batchDelete(keys)
 
-        verify(exactly = 1) { connection.setAutoFlushCommands(false) }
-        verify(exactly = 1) { connection.flushCommands() }
-        verify(exactly = 1) { connection.setAutoFlushCommands(true) }
+        keys.forEach { key ->
+            coVerify(exactly = 1) { redis.del(key) }
+        }
     }
 
     @Test
     fun batchDeleteWithEmptyListShouldDoNothing() = runTest {
         repository.batchDelete(emptyList())
 
-        verify(exactly = 0) { connection.setAutoFlushCommands(any()) }
-        verify(exactly = 0) { connection.flushCommands() }
-    }
-
-    @Test
-    fun batchDeleteShouldRestoreAutoFlushOnException() = runTest {
-        val async = mockk<RedisAsyncCommands<String, String>>(relaxed = true)
-        every { connection.async() } returns async
-        every { connection.flushCommands() } throws RuntimeException("Redis connection lost")
-        val keys = listOf("session:token:abc")
-
-        assertFailsWith<RuntimeException> {
-            repository.batchDelete(keys)
-        }
-
-        verify(exactly = 1) { connection.setAutoFlushCommands(false) }
-        verify(exactly = 1) { connection.flushCommands() }
-        verify(exactly = 1) { connection.setAutoFlushCommands(true) }
+        coVerify(exactly = 0) { redis.del(any()) }
     }
 }

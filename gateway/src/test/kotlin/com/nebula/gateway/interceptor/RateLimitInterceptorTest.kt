@@ -44,9 +44,11 @@ class RateLimitInterceptorTest {
     private fun createInterceptor(
         permitsPerUser: Int = 20,
         acquireTimeoutMs: Long = 100L,
+        tokenBucketCapacity: Int = 200,
+        tokenBucketRefillRate: Double = 100.0,
         scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     ): RateLimitInterceptor {
-        return RateLimitInterceptor(permitsPerUser, acquireTimeoutMs, scope).also {
+        return RateLimitInterceptor(permitsPerUser, acquireTimeoutMs, tokenBucketCapacity, tokenBucketRefillRate, scope).also {
             createdInterceptors.add(it)
         }
     }

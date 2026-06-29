@@ -19,19 +19,17 @@ import kotlin.coroutines.coroutineContext
  * Hibernate [EntityManager] 底层持有的 JDBC Connection **不是线程安全的**，
  * 官方建议遵循"一线程一 Session"原则。
  *
- * 当前实现通过 **EM 作为闭包变量在 `withContext(Dispatchers.IO)` 内传递**
- * 来规避此问题：
- * - EM 在 IO 线程上创建，整个事务期间引用不变
- * - block 内部如果有 `suspend` 调用，**仅在 IO 线程上**恢复执行
- * - 因此 EM 始终在创建它的那个 IO 线程上使用
+ * D-01 修复策略：
+ * 1. `block` 保持 `suspend` 签名以兼容 DAO 层的 suspend 方法（EntityDao 等）
+ * 2. 使用 [Dispatchers.IO.limitedParallelism] 限制并发，但关键是不在 block 内调用
+ *    `withContext(其他Dispatcher)` 切走线程
+ * 3. DAO 方法虽标记为 suspend，但实现为纯同步 JPA 调用（em.find/persist/merge），
+ *    无实际挂起点，协程不会在 block 内切换线程
  *
  * **关键约束**（设计契约）：
- * 1. `block` 体内的所有 `suspend` 挂起点恢复时，**必须仍在 IO 线程上**。
- *    这要求 `block` 不应显式调用 `withContext(其他Dispatcher)` 切走线程。
- *    - **强约束**：弹性 IO 线程池中，withContext(Default) 切回时可能到不同 IO worker
- *      → 违反 Hibernate "一线程一 Session" 假设，行为未定义
- * 2. 如果 `block` 内部需要 CPU-bound 计算，应使用 `withContext(Dispatchers.Default)`
- *    包住**子 block**，**而不是替换整个事务上下文**。
+ * 1. `block` 内**禁止**调用 `withContext(Dispatchers.Default)` 或其他 Dispatcher，
+ *    否则协程恢复时可能调度到不同 IO worker，违反 "一线程一 Session" 假设
+ * 2. 如需 CPU-bound 计算，应在 block 外完成后传入结果
  * 3. cleanup（[EntityManager.close]）使用 [NonCancellable] 包装，
  *    即使父协程被取消也保证执行。
  *
@@ -72,12 +70,17 @@ import kotlin.coroutines.coroutineContext
  * }
  * ```
  *
+ * 注意：block 内的代码在 `Dispatchers.IO` 线程上执行，DAO 的 suspend 方法
+ * 为纯同步 JPA 调用无实际挂起点。禁止在 block 内调用 withContext 切换 Dispatcher。
+ *
  * @param emf JPA EntityManagerFactory（线程安全，可共享）
  * @param metricsHook metrics 埋点钩子（可选，默认 no-op）
+ * @param txTimeoutSeconds 事务超时秒数（D-04），默认 30s，超时后 JDBC 层面中断查询
  */
 class JpaTxRunner(
     private val emf: EntityManagerFactory,
-    private val metricsHook: MetricsHook = NoOpMetricsHook
+    private val metricsHook: MetricsHook = NoOpMetricsHook,
+    private val txTimeoutSeconds: Int = DEFAULT_TX_TIMEOUT_SECONDS
 ) {
 
     /**
@@ -101,6 +104,9 @@ class JpaTxRunner(
         val em = emf.createEntityManager()
         val tx: EntityTransaction = em.transaction
         try {
+            // D-04: 设置事务超时，必须在 begin() 前调用
+            // EntityTransaction 接口无 setTimeout，需通过 Hibernate Transaction 设置
+            (tx as org.hibernate.Transaction).setTimeout(txTimeoutSeconds)
             tx.begin()
             val result = block(em)
             tx.commit()
@@ -151,6 +157,11 @@ class JpaTxRunner(
             // 正常情况下 Hibernate 不会抛异常；若发生，说明 EM 已损坏，
             // 资源泄露风险已存在，再次抛出只会让 finally 块混乱
         }
+    }
+
+    companion object {
+        /** D-04: 默认事务超时秒数 */
+        private const val DEFAULT_TX_TIMEOUT_SECONDS = 30
     }
 }
 

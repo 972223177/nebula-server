@@ -99,26 +99,20 @@ class SessionRepository(
         redis.del(key)
     }
 
-    // ==================== Pipeline 批量操作 ====================
+    // ==================== 批量操作 ====================
 
     /**
-     * 使用 Redis pipeline 批量删除多个 key（D-65）。
+     * 批量删除多个 key（D-65）。
      *
-     * 使用 Lettuce setAutoFlushCommands(false) + flushCommands() 实现 pipeline 模式，
-     * 将多个 DEL 命令合并为一次网络往返，适用于连接清理等需要批量删除的场景。
+     * R-01 修复：移除 setAutoFlushCommands(false) + flushCommands() pipeline 模式。
+     * 原实现修改 connection 级状态，与共享同一连接的其他协程产生竞态 —
+     * 其他协程的命令也会被意外缓冲或提前 flush。
+     * 改为逐条 del，Lettuce reactive API 内部已自动 pipeline 命令，性能接近。
      *
      * @param keys 待删除的 key 列表
      */
     suspend fun batchDelete(keys: List<String>) {
         if (keys.isEmpty()) return
-        connection.setAutoFlushCommands(false)
-        try {
-            val async = connection.async()
-            keys.forEach { async.del(it) }
-            connection.flushCommands()
-        } finally {
-            // 异常时也要恢复 autoFlush，防止后续操作被缓冲
-            connection.setAutoFlushCommands(true)
-        }
+        keys.forEach { redis.del(it) }
     }
 }

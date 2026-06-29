@@ -1,6 +1,7 @@
 package com.nebula.gateway.session
 
 import kotlinx.serialization.json.Json
+import com.nebula.common.circuit.SimpleCircuitBreaker
 import com.nebula.common.session.SessionStore
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.TimeoutCancellationException
@@ -43,6 +44,24 @@ class SessionRegistry(
 
     /** L2 Redis 调用超时时间（毫秒）*/
     private val redisTimeoutMs = 500L
+
+    /**
+     * R-03: 负缓存 — token → 过期时间戳，防止不存在的 token 反复穿透到 Redis。
+     *
+     * 当 Redis 查询返回 null 时，将 token 写入负缓存，有效期内直接返回 null 不查 Redis。
+     * 注册新 Session 时清除对应负缓存条目。
+     */
+    private val negativeCache = ConcurrentHashMap<String, Long>()
+
+    /** R-03: 负缓存 TTL（毫秒），默认 60s */
+    private val negativeCacheTtlMs = 60_000L
+
+    /**
+     * C-07: Redis 调用熔断器 — 连续失败 5 次后熔断 10s，期间快速失败不查 Redis。
+     *
+     * 熔断期间已登录用户不受影响（L1 缓存命中），新登录/跨节点认证降级。
+     */
+    private val redisCircuitBreaker = SimpleCircuitBreaker()
 
     /**
      * 注册缓存驱逐回调。
@@ -111,14 +130,21 @@ class SessionRegistry(
      * @param session 待保存的 Session
      */
     suspend fun saveToRedis(session: Session) {
+        if (!redisCircuitBreaker.allowRequest()) {
+            logger.warn { "Circuit breaker open, skipping Redis save for token=${session.token}" }
+            return
+        }
         try {
             withTimeout(redisTimeoutMs) {
                 val sessionJson = json.encodeToString(session)
                 sessionStore.save(session.token, sessionJson)
             }
+            redisCircuitBreaker.recordSuccess()
         } catch (e: TimeoutCancellationException) {
+            redisCircuitBreaker.recordFailure()
             logger.warn(e) { "Redis save timeout for token=${session.token}, degraded to L1 only" }
         } catch (e: Exception) {
+            redisCircuitBreaker.recordFailure()
             logger.error(e) { "Redis save failed for token=${session.token}, degraded to L1 only" }
         }
     }
@@ -129,13 +155,20 @@ class SessionRegistry(
      * @param token 待移除的 Session Token
      */
     suspend fun removeFromRedis(token: String) {
+        if (!redisCircuitBreaker.allowRequest()) {
+            logger.warn { "Circuit breaker open, skipping Redis remove for token=$token" }
+            return
+        }
         try {
             withTimeout(redisTimeoutMs) {
                 sessionStore.delete(token)
             }
+            redisCircuitBreaker.recordSuccess()
         } catch (e: TimeoutCancellationException) {
+            redisCircuitBreaker.recordFailure()
             logger.warn(e) { "Redis remove timeout for token=$token" }
         } catch (e: Exception) {
+            redisCircuitBreaker.recordFailure()
             logger.error(e) { "Redis remove failed for token=$token" }
         }
     }
@@ -150,17 +183,25 @@ class SessionRegistry(
      * @return 反序列化的 Session，若不存在或查询失败则返回 null
      */
     suspend fun queryFromRedis(token: String): Session? {
+        if (!redisCircuitBreaker.allowRequest()) {
+            logger.warn { "Circuit breaker open, skipping Redis query for token=$token" }
+            return null
+        }
         return try {
-            withTimeout(redisTimeoutMs) {
+            val result = withTimeout(redisTimeoutMs) {
                 val sessionJson = sessionStore.findByToken(token)
                 if (sessionJson != null) {
                     json.decodeFromString<Session>(sessionJson)
                 } else null
             }
+            redisCircuitBreaker.recordSuccess()
+            result
         } catch (e: TimeoutCancellationException) {
+            redisCircuitBreaker.recordFailure()
             logger.warn(e) { "Redis query timeout for token=$token, degraded to L1 only" }
             null
         } catch (e: Exception) {
+            redisCircuitBreaker.recordFailure()
             logger.error(e) { "Redis query failed for token=$token" }
             null
         }
@@ -171,17 +212,33 @@ class SessionRegistry(
     /**
      * 验证 Session Token 并返回 Session。
      *
-     * 查询顺序：L1 本地缓存 → L2 Redis。
-     * L1 命中直接返回；L2 查询到结果后写入 L1 再返回。
-     * L2 超时或失败时返回 null。
+     * 查询顺序：L1 本地缓存 → L1 负缓存（R-03 防穿透）→ L2 Redis。
+     * L1 命中直接返回；L2 查询到结果后写入 L1 再返回；
+     * L2 返回 null 时写入负缓存，有效期内不再查 Redis。
      *
      * @param token Session Token
      * @return 有效的 Session，若不存在或查询失败则返回 null
      */
     suspend fun validate(token: String): Session? {
-        return getFromLocalCache(token) ?: queryFromRedis(token)?.also {
-            addToLocalCache(it)
+        // L1 正缓存
+        getFromLocalCache(token)?.let { return it }
+
+        // R-03: L1 负缓存（防穿透）
+        val negExpiry = negativeCache[token]
+        if (negExpiry != null) {
+            if (System.currentTimeMillis() < negExpiry) return null
+            negativeCache.remove(token) // 已过期，清除
         }
+
+        // L2 Redis
+        val session = queryFromRedis(token)
+        if (session != null) {
+            addToLocalCache(session)
+        } else {
+            // R-03: 写入负缓存，防止同一无效 token 反复穿透
+            negativeCache[token] = System.currentTimeMillis() + negativeCacheTtlMs
+        }
+        return session
     }
 
     /**
@@ -192,13 +249,19 @@ class SessionRegistry(
      * @param token Session Token
      */
     suspend fun refreshTtl(token: String) {
+        if (!redisCircuitBreaker.allowRequest()) {
+            return
+        }
         try {
             withTimeout(redisTimeoutMs) {
                 sessionStore.refreshTtl(token)
             }
+            redisCircuitBreaker.recordSuccess()
         } catch (e: TimeoutCancellationException) {
+            redisCircuitBreaker.recordFailure()
             logger.warn(e) { "Redis refreshTtl timeout for token=$token" }
         } catch (e: Exception) {
+            redisCircuitBreaker.recordFailure()
             logger.error(e) { "Redis refreshTtl failed for token=$token" }
         }
     }
@@ -211,6 +274,8 @@ class SessionRegistry(
     suspend fun register(session: Session) {
         addToLocalCache(session)
         saveToRedis(session)
+        // R-03: 清除负缓存（新注册的 token 可能之前被缓存为不存在）
+        negativeCache.remove(session.token)
     }
 
     /**

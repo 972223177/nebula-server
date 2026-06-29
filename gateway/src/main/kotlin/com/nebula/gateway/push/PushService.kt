@@ -14,9 +14,11 @@ import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.DeliveryAckPayload
 import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.gateway.delivery.DeliveryTrackingService
+import com.nebula.gateway.session.DeliverableStreamObserver
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.service.conversation.ConversationService
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -28,7 +30,7 @@ import kotlinx.coroutines.withContext
  * - pushReadReceipt：向发送者推送 ReadReceiptPayload Envelope
  *
  * 推送策略：
- * - 通过 UserStreamRegistry 查找在线设备，对每个设备调用 StreamObserver.onNext（D-02 多设备）
+ * - 通过 UserStreamRegistry 查找在线设备，对每个设备通过 deliver() 串行化投递（D-02 多设备, G-03 修复）
  * - 单个 observer 推送异常时 try-catch 保护，不影响其他 observer（D-05 容错）
  * - 不自行判断推送权限，由调用方（SendMessageHandler/ReadReportHandler）保证仅推送给验证过的成员
  *
@@ -63,7 +65,7 @@ class PushService(
                         .setPayload(payload.toByteString())
                         .build())
                     .build()
-                observer.onNext(envelope)
+                deliverEnvelope(observer, envelope)
             } catch (e: Exception) {
                 // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push READ_RECEIPT to senderUid=$senderUid" }
@@ -99,7 +101,7 @@ class PushService(
                         .setPayload(payload.toByteString())
                         .build())
                     .build()
-                observer.onNext(envelope)
+                deliverEnvelope(observer, envelope)
             } catch (e: Exception) {
                 // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push DELIVERY_ACK to senderUid=$senderUid, msgId=$msgId" }
@@ -113,6 +115,19 @@ class PushService(
     }
 
     /**
+     * 通过 Mutex 串行化投递 Envelope（G-03/C-01 修复）。
+     *
+     * 优先走 [DeliverableStreamObserver.deliver]（内部通过 Mutex 串行化 onNext），
+     * 降级为裸 onNext() 以兼容测试 mock 或其他非 DeliverableStreamObserver 实现。
+     *
+     * @param observer 目标 StreamObserver
+     * @param envelope 待投递的 Envelope
+     */
+    private fun deliverEnvelope(observer: StreamObserver<Envelope>, envelope: Envelope) {
+        (observer as? DeliverableStreamObserver)?.deliver(envelope) ?: observer.onNext(envelope)
+    }
+
+    /**
      * 向指定成员列表推送 ChatMessage（M29: 复用批量查询结果，避免二次 DB 查询）。
      *
      * 与 [pushMessage] 的区别：本方法接受预查询的成员 userId 列表，而非通过 conversationService 再次查询。
@@ -121,8 +136,11 @@ class PushService(
      * @param chatMessage 待推送的 ChatMessage
      */
     suspend fun pushMessageToMembers(targetUids: List<Long>, chatMessage: ChatMessage) {
+        // R-10: 收集成功投递的 uid，循环结束后批量标记 sent 状态
+        val sentUids = mutableListOf<Long>()
         for (uid in targetUids) {
             val observers = userStreamRegistry.getStreams(uid)
+            var sent = false
             for (observer in observers) {
                 try {
                     val envelope = Envelope.newBuilder()
@@ -134,13 +152,18 @@ class PushService(
                             .setPayload(chatMessage.toByteString())
                             .build())
                         .build()
-                    observer.onNext(envelope)
-                    deliveryTrackingService.markSent(chatMessage.msgId, uid)
+                    deliverEnvelope(observer, envelope)
+                    sent = true
                 } catch (e: Exception) {
                     logger.error(e) { "Failed to push CHAT_MESSAGE to userId=$uid" }
                     userStreamRegistry.removeStream(uid, observer)
                 }
             }
+            if (sent) sentUids.add(uid)
+        }
+        // R-10: 批量标记投递状态，N 次 Redis 往返合并为 1 次 HMSET
+        if (sentUids.isNotEmpty()) {
+            deliveryTrackingService.batchMarkSent(chatMessage.msgId, sentUids)
         }
     }
 
@@ -180,7 +203,7 @@ class PushService(
                             .setPayload(payloadBytes)
                             .build())
                         .build()
-                    observer.onNext(envelope)
+                    deliverEnvelope(observer, envelope)
                 } catch (e: Exception) {
                     // D-05 容错：单个 observer 推送异常不影响其他 observer
                     logger.error(e) { "Failed to push $eventType to userId=${member.userId}" }
@@ -217,7 +240,7 @@ class PushService(
                         .setPayload(payloadBytes)
                         .build())
                     .build()
-                observer.onNext(envelope)
+                deliverEnvelope(observer, envelope)
             } catch (e: Exception) {
                 // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push $eventType to userId=$targetUid" }

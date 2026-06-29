@@ -47,6 +47,18 @@ class DeliveryTrackingService(
     }
 
     /**
+     * R-10: 批量标记消息为"已投递"状态（sent）。
+     *
+     * 使用 HMSET 将 N 次 Redis 往返合并为 1 次，适用于群消息广播场景。
+     *
+     * @param msgId 消息 ID
+     * @param uids 接收者 UID 列表
+     */
+    suspend fun batchMarkSent(msgId: Long, uids: List<Long>) {
+        tracker.batchSetStatus(msgId, uids, STATUS_SENT)
+    }
+
+    /**
      * 标记消息为"已送达"状态（delivered）。
      *
      * 接收者客户端回复 DeliveryAck 后调用。

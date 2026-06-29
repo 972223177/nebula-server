@@ -12,6 +12,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.nebula.common.BizCode
@@ -40,11 +41,18 @@ import kotlin.coroutines.cancellation.CancellationException
 class RateLimitInterceptor(
     private val permitsPerUser: Int = DEFAULT_PERMITS_PER_USER,
     private val acquireTimeoutMs: Long = DEFAULT_ACQUIRE_TIMEOUT_MS,
+    /** C-05: 令牌桶容量（最大突发请求数） */
+    private val tokenBucketCapacity: Int = DEFAULT_TOKEN_BUCKET_CAPACITY,
+    /** C-05: 令牌桶补充速率（每秒补充的令牌数 = 持续 QPS 上限） */
+    private val tokenBucketRefillRate: Double = DEFAULT_TOKEN_BUCKET_REFILL_RATE,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : Interceptor {
 
     /** 每用户信号量映射 — userId/IP → Semaphore(permitsPerUser) */
     private val userSemaphores = ConcurrentHashMap<String, Semaphore>()
+
+    /** C-05: 每用户令牌桶映射 — userId/IP → TokenBucket */
+    private val userTokenBuckets = ConcurrentHashMap<String, TokenBucket>()
 
     /**
      * 定时清理不活跃的信号量条目（CQ-11）。
@@ -59,12 +67,18 @@ class RateLimitInterceptor(
         while (isActive) {
             try {
                 delay(CLEANUP_INTERVAL_MS)
-                val before = userSemaphores.size
-                // 仅移除所有 permit 都可用的条目（用户完全无请求时安全移除）
+                // 清理空闲信号量
+                val beforeSem = userSemaphores.size
                 userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
-                val after = userSemaphores.size
-                if (before != after) {
-                    log.debug { "RateLimiter 清理完成: $before → $after 个信号量" }
+                // C-05: 清理空闲令牌桶
+                val beforeBucket = userTokenBuckets.size
+                userTokenBuckets.entries.removeIf { 
+                    runBlocking { it.value.isIdle() } 
+                }
+                val afterSem = userSemaphores.size
+                val afterBucket = userTokenBuckets.size
+                if (beforeSem != afterSem || beforeBucket != afterBucket) {
+                    log.debug { "RateLimiter 清理: 信号量 $beforeSem→$afterSem, 令牌桶 $beforeBucket→$afterBucket" }
                 }
             } catch (_: CancellationException) {
                 break
@@ -104,7 +118,19 @@ class RateLimitInterceptor(
         val session = currentCoroutineContext()[SessionKey]
         val limitKey = session?.session?.userId?.toString() ?: extractClientIp(request)
 
-        // 获取或创建该用户的信号量
+        // C-05: 令牌桶 QPS 限流（先于并发限流，快速拒绝突发流量）
+        val tokenBucket = userTokenBuckets.computeIfAbsent(limitKey) {
+            TokenBucket(tokenBucketCapacity, tokenBucketRefillRate)
+        }
+        if (!tokenBucket.tryAcquire()) {
+            log.warn { "QPS rate limit exceeded for key=$limitKey, method=${request.method}" }
+            return Response.newBuilder()
+                .setCode(BizCode.RATE_LIMITED.code)
+                .setMsg(RATE_LIMITED_MSG)
+                .build()
+        }
+
+        // 获取或创建该用户的信号量（并发数限流）
         val semaphore = userSemaphores.computeIfAbsent(limitKey) { Semaphore(permitsPerUser) }
 
         // 尝试获取信号量，超时未获取到则限流
@@ -155,24 +181,30 @@ class RateLimitInterceptor(
         /**
          * 尝试获取注册许可。
          *
+         * C-02/C-09 修复：所有对 [ipRequestTimes] 的读写（含 getOrPut）必须在 [mutex] 内执行，
+         * 避免两个并发协程为同一 IP 创建不同 MutableList 实例导致限流计数丢失。
+         * 清理空条目也在锁内完成，避免 remove(ip, times) 的 TOCTOU 竞态。
+         *
          * @param ip 客户端 IP
          * @return true=允许注册，false=超出限流
          */
         suspend fun tryAcquire(ip: String): Boolean {
             val now = System.currentTimeMillis()
-            val times = ipRequestTimes.getOrPut(ip) { mutableListOf() }
-            val acquired = mutex.withLock {
+            return mutex.withLock {
+                val times = ipRequestTimes.getOrPut(ip) { mutableListOf() }
                 times.removeAll { now - it > windowMs }
-                if (times.size >= maxRequests) false else {
+                val acquired = if (times.size >= maxRequests) {
+                    false
+                } else {
                     times.add(now)
                     true
                 }
+                // 内存泄漏防护：清除已过期的空 IP 条目（锁内执行，无竞态）
+                if (times.isEmpty()) {
+                    ipRequestTimes.remove(ip)
+                }
+                acquired
             }
-            // 内存泄漏修复：清除已过期空的 IP 条目（Review 反馈#5）
-            if (times.isEmpty()) {
-                ipRequestTimes.remove(ip, times)
-            }
-            return acquired
         }
     }
 
@@ -190,5 +222,12 @@ class RateLimitInterceptor(
 
         /** 信号量清理间隔（毫秒），每 10 分钟扫描一次不活跃条目（CQ-11） */
         private const val CLEANUP_INTERVAL_MS = 10 * 60 * 1000L
+
+        /** C-05: 令牌桶默认容量（最大突发请求数）。
+         * 200 足以容纳重连补偿场景下的并发请求（登录+拉好友请求+拉消息+拉会话等多个接口同时发出） */
+        private const val DEFAULT_TOKEN_BUCKET_CAPACITY = 200
+
+        /** C-05: 令牌桶默认补充速率（每秒 100 个令牌 = 100 QPS 持续上限） */
+        private const val DEFAULT_TOKEN_BUCKET_REFILL_RATE = 100.0
     }
 }
