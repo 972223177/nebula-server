@@ -101,17 +101,15 @@ class ChatService(
 
     override fun bindService(): ServerServiceDefinition {
         // 构造 BIDI_STREAMING MethodDescriptor
-        // 使用自定义 Marshaller 替代 ProtoUtils.marshaller(Envelope.getDefaultInstance())，
-        // 修复 gRPC ProtoInputStream.drainTo() 中 getSerializedSize() 与 writeTo()
-        // 输出不一致导致的 knownLengthPendingAllocation / minWritableBytes 负值：
-        // stream() 预序列化到 ByteArrayInputStream，drainTo 输出完全匹配 declared size
+        // 使用自定义 Marshaller 替代 ProtoUtils.marshaller(Envelope.getDefaultInstance())。
+        // ProtoInputStream.drainTo() 返回 getSerializedSize() 作为已写入字节数，
+        // 但 CodedOutputStream → MessageFramer 的 flush 边界不一致导致写入 > 声明，
+        // 触发 knownLengthPendingAllocation。ByteArrayInputStream 的 available()
+        // 与 read() 完全一致，且对标 protobuf 仅多一次 toByteArray()（原路径同样有序列化）。
         val envelopeMarshaller: MethodDescriptor.Marshaller<Envelope> =
             object : MethodDescriptor.Marshaller<Envelope> {
-                override fun stream(value: Envelope): java.io.InputStream {
-                    val bytes = value.toByteArray()
-                    val fixed = Envelope.parseFrom(bytes)
-                    return java.io.ByteArrayInputStream(fixed.toByteArray())
-                }
+                override fun stream(value: Envelope): java.io.InputStream =
+                    java.io.ByteArrayInputStream(value.toByteArray())
                 override fun parse(stream: java.io.InputStream): Envelope =
                     Envelope.parseFrom(stream)
             }
