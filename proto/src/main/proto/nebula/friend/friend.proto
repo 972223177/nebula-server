@@ -124,3 +124,20 @@ message FriendCheckRelationResp {
   FriendRelationStatus status = 1;    // 关系状态
   int64 request_id = 2;               // 关联的申请 ID（仅 PENDING_SENT/PENDING_RECEIVED/REJECTED 时有效）
 }
+
+// ---- friend/batchCheck ----
+// 批量查询当前用户与多个目标用户的关系状态
+
+message FriendBatchCheckRelationReq {
+  repeated int64 uids = 1;            // 目标用户 UID 列表
+}
+
+message FriendBatchCheckRelationResp {
+  repeated FriendRelationItem items = 1;
+}
+
+message FriendRelationItem {
+  int64 uid = 1;                      // 目标用户 UID
+  FriendRelationStatus status = 2;    // 关系状态
+  int64 request_id = 3;               // 关联的申请 ID
+}

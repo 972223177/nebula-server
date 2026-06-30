@@ -478,6 +478,69 @@ class FriendService(
             FriendRelationStatus.NONE to null
         }
     }
+
+    /**
+     * 批量查询当前用户与多个目标用户的关系状态（friend/batchCheck）。
+     *
+     * 在单个事务内批量完成好友关系 + 待处理申请 + 被拒绝申请的查询，
+     * 避免 N+1 问题。逐用户按优先级返回首个匹配状态。
+     *
+     * @param currentUserId 当前用户 UID
+     * @param targetUids 目标用户 UID 列表
+     * @return 关系状态列表（与输入顺序一致）
+     */
+    suspend fun batchCheckRelation(
+        currentUserId: Long,
+        targetUids: List<Long>
+    ): List<FriendRelationResult> {
+        if (targetUids.isEmpty()) return emptyList()
+
+        return txRunner.execute { em ->
+            // 批量查询所有相关数据
+            val friendUids = targetUids.mapNotNull { target ->
+                val smaller = minOf(currentUserId, target)
+                val larger = maxOf(currentUserId, target)
+                friendshipDao.findByUserIdAndFriendId(em, smaller, larger)?.let { f ->
+                    if (f.isActive) target to f else null
+                }
+            }.toMap()
+
+            // 批量查我发起的 pending 申请
+            val sentRequests = targetUids.mapNotNull { target ->
+                friendRequestDao.findByFromUidAndToUidAndStatus(em, currentUserId, target, 0)
+                    ?.let { target to it }
+            }.toMap()
+
+            // 批量查对方发起的 pending 申请
+            val receivedRequests = targetUids.mapNotNull { target ->
+                friendRequestDao.findByFromUidAndToUidAndStatus(em, target, currentUserId, 0)
+                    ?.let { target to it }
+            }.toMap()
+
+            // 批量查双方被拒绝的申请（状态=2）
+            val rejectedMap = mutableMapOf<Long, Long>() // uid → requestId
+            for (target in targetUids) {
+                val rejected = friendRequestDao.findByFromUidAndToUid(em, currentUserId, target)
+                    ?.takeIf { it.status == 2 }
+                    ?: friendRequestDao.findByFromUidAndToUid(em, target, currentUserId)
+                        ?.takeIf { it.status == 2 }
+                if (rejected != null) {
+                    rejectedMap[target] = rejected.id ?: 0
+                }
+            }
+
+            // 逐用户按优先级组装结果
+            targetUids.map { uid ->
+                when {
+                    friendUids.containsKey(uid) -> FriendRelationResult(uid, FriendRelationStatus.FRIEND, null)
+                    sentRequests.containsKey(uid) -> FriendRelationResult(uid, FriendRelationStatus.PENDING_SENT, sentRequests[uid]!!.id)
+                    receivedRequests.containsKey(uid) -> FriendRelationResult(uid, FriendRelationStatus.PENDING_RECEIVED, receivedRequests[uid]!!.id)
+                    rejectedMap.containsKey(uid) -> FriendRelationResult(uid, FriendRelationStatus.REJECTED, rejectedMap[uid])
+                    else -> FriendRelationResult(uid, FriendRelationStatus.NONE, null)
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -506,4 +569,16 @@ data class FriendAcceptResult(
     val toUid: Long,
     /** 私聊会话 ID */
     val convId: String
+)
+
+/**
+ * 好友关系查询结果（friend/check / friend/batchCheck 共用）。
+ */
+data class FriendRelationResult(
+    /** 目标用户 UID */
+    val uid: Long,
+    /** 关系状态 */
+    val status: FriendRelationStatus,
+    /** 关联的申请 ID（仅 PENDING_SENT/PENDING_RECEIVED/REJECTED 时非 null） */
+    val requestId: Long?
 )

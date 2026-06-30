@@ -2,6 +2,7 @@ package com.nebula.gateway.di
 
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
+import com.nebula.gateway.handler.friend.FriendBatchCheckRelationHandler
 import com.nebula.gateway.handler.friend.FriendCheckRelationHandler
 import com.nebula.gateway.handler.friend.FriendDeleteHandler
 import com.nebula.gateway.handler.friend.FriendListHandler
@@ -27,9 +28,10 @@ val friendHandlerModule = module {
     single { FriendAddHandler(get(), get(), get()) }                 // FriendService + PushService + LockManager
     single { FriendAcceptHandler(get(), get(), get()) }              // FriendService + PushService + LockManager
     single { FriendCheckRelationHandler(get()) }                     // FriendService
+    single { FriendBatchCheckRelationHandler(get()) }                 // FriendService
 
     // HandlerCollector 注册
     single<HandlerCollector>(named("friend")) { FriendHandlerCollector(
-        get(), get(), get(), get(), get(), get(), get()
+        get(), get(), get(), get(), get(), get(), get(), get()
     ) }
 }

@@ -24,7 +24,8 @@ class FriendHandlerCollectorTest {
             friendDeleteHandler = mockk { every { method } returns "friend/delete" },
             friendAddHandler = mockk { every { method } returns "friend/add" },
             friendAcceptHandler = mockk { every { method } returns "friend/accept" },
-            friendCheckRelationHandler = mockk { every { method } returns "friend/check" }
+            friendCheckRelationHandler = mockk { every { method } returns "friend/check" },
+            friendBatchCheckRelationHandler = mockk { every { method } returns "friend/batchCheck" }
         )
 
         collector.registerAll(registry)
@@ -36,5 +37,6 @@ class FriendHandlerCollectorTest {
         assertNotNull(registry.get("friend/add"), "friend/add 应已注册")
         assertNotNull(registry.get("friend/accept"), "friend/accept 应已注册")
         assertNotNull(registry.get("friend/check"), "friend/check 应已注册")
+        assertNotNull(registry.get("friend/batchCheck"), "friend/batchCheck 应已注册")
     }
 }
