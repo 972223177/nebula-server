@@ -13,7 +13,8 @@ class FriendHandlerCollector(
     private val friendListHandler: FriendListHandler,
     private val friendDeleteHandler: FriendDeleteHandler,
     private val friendAddHandler: FriendAddHandler,
-    private val friendAcceptHandler: FriendAcceptHandler
+    private val friendAcceptHandler: FriendAcceptHandler,
+    private val friendCheckRelationHandler: FriendCheckRelationHandler
 ) : HandlerCollector {
 
     override fun registerAll(registry: HandlerRegistry) {
@@ -23,5 +24,6 @@ class FriendHandlerCollector(
         registry.register(friendDeleteHandler)
         registry.register(friendAddHandler)
         registry.register(friendAcceptHandler)
+        registry.register(friendCheckRelationHandler)
     }
 }

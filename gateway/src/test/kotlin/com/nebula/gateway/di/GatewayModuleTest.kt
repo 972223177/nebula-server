@@ -19,6 +19,7 @@ import com.nebula.gateway.handler.conversation.LeaveGroupHandler
 import com.nebula.gateway.handler.conversation.ListConversationsHandler
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
+import com.nebula.gateway.handler.friend.FriendCheckRelationHandler
 import com.nebula.gateway.handler.friend.FriendDeleteHandler
 import com.nebula.gateway.handler.friend.FriendHandlerCollector
 import com.nebula.gateway.handler.friend.FriendListHandler
@@ -184,6 +185,7 @@ class GatewayModuleTest {
         single { FriendDeleteHandler(friendService) }
         single { FriendAddHandler(friendService, get(), get()) }
         single { FriendAcceptHandler(friendService, get(), get()) }
+        single { FriendCheckRelationHandler(friendService) }
     }
 
     @AfterEach
@@ -262,7 +264,8 @@ class GatewayModuleTest {
             GlobalContext.get().get<FriendListHandler>(),
             GlobalContext.get().get<FriendDeleteHandler>(),
             GlobalContext.get().get<FriendAddHandler>(),
-            GlobalContext.get().get<FriendAcceptHandler>()
+            GlobalContext.get().get<FriendAcceptHandler>(),
+            GlobalContext.get().get<FriendCheckRelationHandler>()
         )
         friendCollector.registerAll(registry)
 
@@ -369,7 +372,8 @@ class GatewayModuleTest {
             GlobalContext.get().get<FriendListHandler>(),
             GlobalContext.get().get<FriendDeleteHandler>(),
             GlobalContext.get().get<FriendAddHandler>(),
-            GlobalContext.get().get<FriendAcceptHandler>()
+            GlobalContext.get().get<FriendAcceptHandler>(),
+            GlobalContext.get().get<FriendCheckRelationHandler>()
         )
         collector.registerAll(registry)
         assertNotNull(registry.get("friend/reject"))
@@ -378,6 +382,7 @@ class GatewayModuleTest {
         assertNotNull(registry.get("friend/delete"))
         assertNotNull(registry.get("friend/add"))
         assertNotNull(registry.get("friend/accept"))
+        assertNotNull(registry.get("friend/check"))
     }
 
     /**

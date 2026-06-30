@@ -9,6 +9,7 @@ import com.nebula.chat.friend.FriendListResp
 import com.nebula.chat.friend.FriendRejectReq
 import com.nebula.chat.friend.FriendRequestsReq
 import com.nebula.chat.friend.FriendRequestsResp
+import com.nebula.chat.friend.FriendRelationStatus
 import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendBrief
 import com.nebula.common.BizCode
@@ -431,6 +432,51 @@ class FriendService(
             friendshipDao.findByUserIdAndFriendId(em, minOf(userId1, userId2), maxOf(userId1, userId2))
         }
         return entity?.let { FriendshipInfo(userId = it.userId, friendId = it.friendId, deleted = it.deleted) }
+    }
+
+    /**
+     * 查询当前用户与目标用户间的关系状态（friend/check 接口）。
+     *
+     * 查询顺序：好友 → 我发起的待处理申请 → 对方发起的待处理申请 → 被拒绝的申请 → 无关系。
+     * 按此优先级返回首个匹配状态，确保不重复查询。
+     *
+     * @param currentUserId 当前用户 UID
+     * @param targetUid 目标用户 UID
+     * @return 关系状态 + 关联的申请 ID（非 NONE/FRIEND 时有效）
+     */
+    suspend fun checkRelation(currentUserId: Long, targetUid: Long): Pair<FriendRelationStatus, Long?> {
+        val smaller = minOf(currentUserId, targetUid)
+        val larger = maxOf(currentUserId, targetUid)
+
+        return txRunner.execute { em ->
+            // 1. 检查好友关系
+            val friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
+            if (friendship != null && friendship.isActive) {
+                return@execute FriendRelationStatus.FRIEND to null
+            }
+
+            // 2. 我→对方 pending 申请
+            val myRequest = friendRequestDao.findByFromUidAndToUidAndStatus(em, currentUserId, targetUid, 0)
+            if (myRequest != null) {
+                return@execute FriendRelationStatus.PENDING_SENT to myRequest.id
+            }
+
+            // 3. 对方→我 pending 申请
+            val theirRequest = friendRequestDao.findByFromUidAndToUidAndStatus(em, targetUid, currentUserId, 0)
+            if (theirRequest != null) {
+                return@execute FriendRelationStatus.PENDING_RECEIVED to theirRequest.id
+            }
+
+            // 4. 检查双方有无被拒绝的申请（rejected = status 2）
+            val rejectedRequest = friendRequestDao.findByFromUidAndToUid(em, currentUserId, targetUid)
+                ?: friendRequestDao.findByFromUidAndToUid(em, targetUid, currentUserId)
+            if (rejectedRequest != null && rejectedRequest.status == 2) {
+                return@execute FriendRelationStatus.REJECTED to rejectedRequest.id
+            }
+
+            // 5. 无任何关系
+            FriendRelationStatus.NONE to null
+        }
     }
 }
 

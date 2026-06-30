@@ -103,3 +103,24 @@ message StatusChangedPayload {
   int64 uid = 1;                      // 状态变更用户 UID
   int32 status = 2;                   // 在线状态：0=离线 1=在线 2=隐藏（D-57）
 }
+
+// ---- friend/check ----
+// 查询两个用户间的关系状态
+
+// 关系状态枚举
+enum FriendRelationStatus {
+  FRIEND = 0;               // 已是好友
+  PENDING_SENT = 1;         // 我发起了申请，等待对方同意
+  PENDING_RECEIVED = 2;     // 对方发起了申请，等待我同意
+  REJECTED = 3;             // 申请已被拒绝
+  NONE = 4;                 // 无任何关系
+}
+
+message FriendCheckRelationReq {
+  int64 uid = 1;                      // 目标用户 UID
+}
+
+message FriendCheckRelationResp {
+  FriendRelationStatus status = 1;    // 关系状态
+  int64 request_id = 2;               // 关联的申请 ID（仅 PENDING_SENT/PENDING_RECEIVED/REJECTED 时有效）
+}
