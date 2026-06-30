@@ -72,7 +72,7 @@ class ConversationEntity(
     )
 
     @Id
-    @Column(length = 32)
+    @Column(length = 64)
     var id: String? = null
 
     @Column(nullable = false, updatable = false)

@@ -15,7 +15,7 @@ import java.time.LocalDateTime
 ])
 class ConversationMemberEntity(
     /** 会话 ID */
-    @Column(nullable = false, length = 32)
+    @Column(nullable = false, length = 64)
     var conversationId: String,
 
     /** 成员用户 ID */

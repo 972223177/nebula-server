@@ -15,7 +15,7 @@ import java.time.LocalDateTime
 ])
 class MessageEntity(
     /** 会话 ID，外键关联 conversations 表 */
-    @Column(nullable = false, length = 32)
+    @Column(nullable = false, length = 64)
     var conversationId: String,
 
     /** 发送者用户 ID */
