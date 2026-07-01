@@ -530,16 +530,6 @@ class ConversationService(
     }
 
     /**
-     * 查询指定用户在指定会话中的成员角色，不存在时返回 null。
-     *
-     * 返回 [ConversationMemberInfo] 替代在 gateway 层直接暴露 JPA 实体，
-     * 仅包含 gateway 层需要的 userId 和 role 字段。
-     *
-     * @param conversationId 会话 ID
-     * @param userId 用户 ID
-     * @return 成员信息 DTO，不存在时返回 null
-     */
-    /**
      * 查询用户参与的存活群组列表（conversation/group_list）。
      *
      * 仅返回 type=2(群聊) + status=0(正常) 的会话，过滤私聊和已解散群。
@@ -578,6 +568,16 @@ class ConversationService(
         return builder.build()
     }
 
+    /**
+     * 查询指定用户在指定会话中的成员角色，不存在时返回 null。
+     *
+     * 返回 [ConversationMemberInfo] 替代在 gateway 层直接暴露 JPA 实体，
+     * 仅包含 gateway 层需要的 userId 和 role 字段。
+     *
+     * @param conversationId 会话 ID
+     * @param userId 用户 ID
+     * @return 成员信息 DTO，不存在时返回 null
+     */
     suspend fun getMemberRole(conversationId: String, userId: Long): ConversationMemberInfo? {
         val entity = txRunner.execute { em ->
             conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
