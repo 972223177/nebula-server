@@ -154,16 +154,16 @@ class DeadLetterService(
                 item.failCount = item.failCount + 1
                 txRunner.execute { em -> deadLetterDao.update(em, item) }
 
-                // 重新写入 Redis Stream（M09: payload 从 DeadLetterEntity 恢复为 Base64）
+                // 重新写入 Redis Stream（key 必须与 parseToEntity 对齐：camelCase）
                 val streamFields = mapOf(
-                    "msg_id" to (item.msgId?.toString() ?: ""),
-                    "conversation_id" to item.conversationId,
-                    "sender_uid" to item.senderUid.toString(),
-                    "message_type" to item.messageType.toString(),
+                    "id" to (item.msgId?.toString() ?: ""),
+                    "conversationId" to item.conversationId,
+                    "senderUid" to item.senderUid.toString(),
+                    "messageType" to item.messageType.toString(),
                     "content" to item.content,
-                    "client_message_id" to (item.clientMsgId ?: ""),
-                    "client_ts" to item.clientTs.toString(),
-                    "server_ts" to System.currentTimeMillis().toString(),
+                    "clientMessageId" to (item.clientMsgId ?: ""),
+                    "clientTs" to item.clientTs.toString(),
+                    "serverTs" to System.currentTimeMillis().toString(),
                     "payload" to (item.payload?.let { java.util.Base64.getEncoder().encodeToString(it) } ?: "")
                 )
                 messageQueueRepository.enqueue(streamFields)
@@ -209,16 +209,16 @@ class DeadLetterService(
             entity.failCount = entity.failCount + 1
             txRunner.execute { em -> deadLetterDao.update(em, entity) }
 
-            // 重新写入 Redis Stream（M10: payload 从 DeadLetterEntity 恢复为 Base64）
+            // 重新写入 Redis Stream（key 必须与 parseToEntity 对齐：camelCase）
             val streamFields = mapOf(
-                "msg_id" to (entity.msgId?.toString() ?: ""),
-                "conversation_id" to entity.conversationId,
-                "sender_uid" to entity.senderUid.toString(),
-                "message_type" to entity.messageType.toString(),
+                "id" to (entity.msgId?.toString() ?: ""),
+                "conversationId" to entity.conversationId,
+                "senderUid" to entity.senderUid.toString(),
+                "messageType" to entity.messageType.toString(),
                 "content" to entity.content,
-                "client_message_id" to (entity.clientMsgId ?: ""),
-                "client_ts" to entity.clientTs.toString(),
-                "server_ts" to System.currentTimeMillis().toString(),
+                "clientMessageId" to (entity.clientMsgId ?: ""),
+                "clientTs" to entity.clientTs.toString(),
+                "serverTs" to System.currentTimeMillis().toString(),
                 "payload" to (entity.payload?.let { java.util.Base64.getEncoder().encodeToString(it) } ?: "")
             )
             messageQueueRepository.enqueue(streamFields)
