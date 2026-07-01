@@ -20,6 +20,7 @@ class ConversationHandlerCollectorTest {
         val collector = ConversationHandlerCollector(
             listConversationsHandler = mockk { every { method } returns "conversation/list" },
             groupMembersHandler = mockk { every { method } returns "conversation/group_members" },
+            groupListHandler = mockk { every { method } returns "conversation/group_list" },
             editGroupHandler = mockk { every { method } returns "conversation/edit_group_info" },
             createGroupHandler = mockk { every { method } returns "conversation/create_group" },
             inviteMemberHandler = mockk { every { method } returns "conversation/invite_member" },
@@ -33,6 +34,7 @@ class ConversationHandlerCollectorTest {
 
         assertNotNull(registry.get("conversation/list"), "conversation/list 应已注册")
         assertNotNull(registry.get("conversation/group_members"), "conversation/group_members 应已注册")
+        assertNotNull(registry.get("conversation/group_list"), "conversation/group_list 应已注册")
         assertNotNull(registry.get("conversation/edit_group_info"), "conversation/edit_group_info 应已注册")
         assertNotNull(registry.get("conversation/create_group"), "conversation/create_group 应已注册")
         assertNotNull(registry.get("conversation/invite_member"), "conversation/invite_member 应已注册")

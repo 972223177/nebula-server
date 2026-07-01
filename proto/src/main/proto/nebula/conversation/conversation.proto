@@ -133,6 +133,19 @@ message GroupDissolvedPayload {
   string conversation_id = 1;         // 会话 ID
 }
 
+// ---- conversation/group_list ----
+// 查询用户参与的存活群组列表
+
+message GroupListReq {
+  int32 limit = 1;                    // 拉取条数上限
+  int64 cursor = 2;                   // 游标分页，基于会话最后更新时间
+}
+
+message GroupListResp {
+  repeated ConversationBrief groups = 1; // 群组简要信息列表
+  bool has_more = 2;                     // 是否还有更多数据
+}
+
 // ---- conversation/delete ----
 // 从会话列表删除会话（软删除当前用户的 member 记录）
 message DeleteConversationReq {

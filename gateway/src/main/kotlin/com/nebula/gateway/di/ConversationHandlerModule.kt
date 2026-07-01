@@ -4,6 +4,7 @@ import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.CreatePrivateConversationHandler
 import com.nebula.gateway.handler.conversation.DeleteConversationHandler
+import com.nebula.gateway.handler.conversation.GroupListHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
 import com.nebula.gateway.handler.conversation.GroupMembersHandler
 import com.nebula.gateway.handler.conversation.InviteMemberHandler
@@ -34,9 +35,10 @@ val conversationHandlerModule = module {
     single { KickMemberHandler(get(), get(), get()) }                 // ConversationService + LockManager + PushService
     single { DeleteConversationHandler(get()) }                       // ConversationService
     single { CreatePrivateConversationHandler(get()) }                // ConversationService
+    single { GroupListHandler(get()) }                                // ConversationService
 
     // HandlerCollector 注册
     single<HandlerCollector>(named("conversation")) { ConversationHandlerCollector(
-        get(), get(), get(), get(), get(), get(), get(), get(), get()
+        get(), get(), get(), get(), get(), get(), get(), get(), get(), get()
     ) }
 }

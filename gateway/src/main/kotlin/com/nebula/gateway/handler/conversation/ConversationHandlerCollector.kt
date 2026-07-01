@@ -10,6 +10,7 @@ import com.nebula.gateway.di.register
 class ConversationHandlerCollector(
     private val listConversationsHandler: ListConversationsHandler,
     private val groupMembersHandler: GroupMembersHandler,
+    private val groupListHandler: GroupListHandler,
     private val editGroupHandler: EditGroupHandler,
     private val createGroupHandler: CreateGroupHandler,
     private val inviteMemberHandler: InviteMemberHandler,
@@ -22,6 +23,7 @@ class ConversationHandlerCollector(
     override fun registerAll(registry: HandlerRegistry) {
         registry.register(listConversationsHandler)
         registry.register(groupMembersHandler)
+        registry.register(groupListHandler)
         registry.register(editGroupHandler)
         registry.register(createGroupHandler)
         registry.register(inviteMemberHandler)

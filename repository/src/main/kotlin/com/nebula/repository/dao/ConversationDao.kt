@@ -103,4 +103,38 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
         query.maxResults = limit
         return query.resultList
     }
+
+    /**
+     * 查询用户参与的存活群组（type=2 群聊, status=0 正常）。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param userId 用户 UID
+     * @param cursor 游标（会话最后更新时间），null=首页
+     * @param limit 返回行数限制
+     * @return 群组会话列表（按 updatedAt DESC 排序）
+     */
+    suspend fun findGroupConversationsByUserId(
+        em: EntityManager,
+        userId: Long,
+        cursor: LocalDateTime?,
+        limit: Int
+    ): List<ConversationEntity> {
+        val query = em.createQuery(
+            """
+            SELECT c FROM ConversationEntity c
+            WHERE c.type = 2 AND c.status = 0
+            AND c.id IN (
+                SELECT cm.conversationId FROM ConversationMemberEntity cm
+                WHERE cm.userId = :userId AND cm.deleted = 0
+            )
+            AND (:cursor IS NULL OR c.updatedAt < :cursor)
+            ORDER BY c.updatedAt DESC
+            """.trimIndent(),
+            ConversationEntity::class.java
+        )
+        query.setParameter("userId", userId)
+        query.setParameter("cursor", cursor)
+        query.maxResults = limit
+        return query.resultList
+    }
 }

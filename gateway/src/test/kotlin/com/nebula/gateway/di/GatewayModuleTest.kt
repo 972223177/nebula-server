@@ -14,6 +14,7 @@ import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.CreatePrivateConversationHandler
 import com.nebula.gateway.handler.conversation.DeleteConversationHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
+import com.nebula.gateway.handler.conversation.GroupListHandler
 import com.nebula.gateway.handler.conversation.GroupMembersHandler
 import com.nebula.gateway.handler.conversation.InviteMemberHandler
 import com.nebula.gateway.handler.conversation.KickMemberHandler
@@ -182,6 +183,7 @@ class GatewayModuleTest {
         single { KickMemberHandler(conversationService, get(), get()) }
         single { DeleteConversationHandler(conversationService) }
         single { CreatePrivateConversationHandler(conversationService) }
+        single { GroupListHandler(conversationService) }
 
         // Phase 8: Friend
         single { FriendRejectHandler(friendService) }
@@ -256,6 +258,7 @@ class GatewayModuleTest {
         val convCollector = com.nebula.gateway.handler.conversation.ConversationHandlerCollector(
             GlobalContext.get().get<ListConversationsHandler>(),
             GlobalContext.get().get<GroupMembersHandler>(),
+            GlobalContext.get().get<GroupListHandler>(),
             GlobalContext.get().get<EditGroupHandler>(),
             GlobalContext.get().get<CreateGroupHandler>(),
             GlobalContext.get().get<InviteMemberHandler>(),
@@ -350,6 +353,7 @@ class GatewayModuleTest {
         val collector = ConversationHandlerCollector(
             GlobalContext.get().get<ListConversationsHandler>(),
             GlobalContext.get().get<GroupMembersHandler>(),
+            GlobalContext.get().get<GroupListHandler>(),
             GlobalContext.get().get<EditGroupHandler>(),
             GlobalContext.get().get<CreateGroupHandler>(),
             GlobalContext.get().get<InviteMemberHandler>(),
@@ -361,6 +365,7 @@ class GatewayModuleTest {
         collector.registerAll(registry)
         assertNotNull(registry.get("conversation/list"))
         assertNotNull(registry.get("conversation/group_members"))
+        assertNotNull(registry.get("conversation/group_list"))
         assertNotNull(registry.get("conversation/edit_group_info"))
         assertNotNull(registry.get("conversation/create_group"))
         assertNotNull(registry.get("conversation/invite_member"))

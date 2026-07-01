@@ -5,6 +5,8 @@ import com.nebula.chat.conversation.ConversationBrief
 import com.nebula.chat.conversation.CreateGroupReq
 import com.nebula.chat.conversation.CreateGroupResp
 import com.nebula.chat.conversation.EditGroupReq
+import com.nebula.chat.conversation.GroupListReq
+import com.nebula.chat.conversation.GroupListResp
 import com.nebula.chat.conversation.GroupMembersReq
 import com.nebula.chat.conversation.GroupMembersResp
 import com.nebula.chat.conversation.InviteMemberReq
@@ -537,6 +539,45 @@ class ConversationService(
      * @param userId 用户 ID
      * @return 成员信息 DTO，不存在时返回 null
      */
+    /**
+     * 查询用户参与的存活群组列表（conversation/group_list）。
+     *
+     * 仅返回 type=2(群聊) + status=0(正常) 的会话，过滤私聊和已解散群。
+     * 复用 ConversationBrief，type 固定为 "group"。
+     *
+     * @param userId 用户 UID
+     * @param cursor 游标（毫秒时间戳），0=首页
+     * @param limit 每页条数
+     * @return 群组列表响应
+     */
+    suspend fun listGroupConversations(userId: Long, cursor: Long, limit: Int): GroupListResp {
+        val actualLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
+        val cursorDateTime = if (cursor == 0L) null
+            else LocalDateTime.ofInstant(Instant.ofEpochMilli(cursor), ZoneOffset.UTC)
+
+        val conversations = txRunner.execute { em ->
+            conversationDao.findGroupConversationsByUserId(em, userId, cursorDateTime, actualLimit + 1)
+        }
+        val hasMore = conversations.size > actualLimit
+        val result = if (hasMore) conversations.dropLast(1) else conversations
+
+        val builder = GroupListResp.newBuilder()
+        result.forEach { entity ->
+            builder.addGroups(ConversationBrief.newBuilder()
+                .setConversationId(requireNotNull(entity.id) { "会话ID不能为null" })
+                .setType("group")
+                .setName(entity.name)
+                .setAvatarUrl(entity.avatar)
+                .setLastMessageId(entity.lastMessageId)
+                .setLastMessagePreview(entity.lastMessagePreview)
+                .setLastMessageTs(entity.lastMessageTs)
+                .setLastUpdatedAt(entity.updatedAt?.toEpochMillis() ?: 0)
+                .build())
+        }
+        builder.setHasMore(hasMore)
+        return builder.build()
+    }
+
     suspend fun getMemberRole(conversationId: String, userId: Long): ConversationMemberInfo? {
         val entity = txRunner.execute { em ->
             conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
