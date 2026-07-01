@@ -137,9 +137,11 @@ class MessageService(
             .setServerTs(now)
             .build()
 
-        // 写入 Redis Stream（key 使用 camelCase 与 MessageRepositoryImpl.parseToEntity() 对齐）
+        // 写入 Redis Stream（key 必须与 MessageRepositoryImpl.parseToEntity() 对齐）
+        // 修复：parseToEntity 读取 body["id"]，此处原误用 "msgId" 导致消息 ID 为 null、
+        // DB INSERT 失败（PK not null），消息永久留在 Redis Stream 无法落库
         val streamFields = mapOf(
-            "msgId" to msgId.toString(),
+            "id" to msgId.toString(),
             "conversationId" to conversationId,
             "senderUid" to senderUid.toString(),
             "messageType" to req.messageType.toString(),

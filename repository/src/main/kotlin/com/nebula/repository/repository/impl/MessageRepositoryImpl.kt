@@ -221,7 +221,8 @@ class MessageRepositoryImpl(
             clientTs = body["clientTs"]?.toLongOrNull() ?: return null,
             serverTs = body["serverTs"]?.toLongOrNull() ?: return null
         ).apply {
-            id = body["id"]?.toLongOrNull()
+            // 修复：兼容旧 key "msgId"（SendMessage 曾误用此 key，现已修正为 "id"）
+            id = body["id"]?.toLongOrNull() ?: body["msgId"]?.toLongOrNull()
             createdAt = java.time.LocalDateTime.now()
             // M11: 解析 payload 字段（Base64 编码），用于死信记录恢复
             payload = body["payload"]?.let { java.util.Base64.getDecoder().decode(it) }
