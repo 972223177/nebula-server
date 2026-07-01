@@ -195,6 +195,25 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
     }
 
     /**
+     * 按会话 ID 列表查所有成员（不区分 userId），用于批量获取对方信息。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param conversationIds 会话 ID 列表
+     * @return 所有成员实体列表
+     */
+    suspend fun findAllByConversationIds(
+        em: EntityManager,
+        conversationIds: List<String>
+    ): List<ConversationMemberEntity> {
+        if (conversationIds.isEmpty()) return emptyList()
+        return queryList(
+            em,
+            "SELECT cm FROM ConversationMemberEntity cm WHERE cm.conversationId IN :convIds AND cm.deleted = 0",
+            "convIds" to conversationIds
+        )
+    }
+
+    /**
      * 批量软删除会话中所有成员记录（群主退群时解散群）。
      *
      * @param em 当前事务的 [EntityManager]

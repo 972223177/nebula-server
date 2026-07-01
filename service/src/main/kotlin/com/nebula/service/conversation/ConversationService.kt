@@ -163,13 +163,40 @@ class ConversationService(
         val hasMore = conversations.size > actualLimit
         val result = if (hasMore) conversations.dropLast(1) else conversations
 
+        // 私聊会话：批量查对方用户信息，填充 name 字段
+        val privateConvIds = result.filter { it.type == CONV_TYPE_PRIVATE }.mapNotNull { it.id }
+        // convId → 对方显示名（昵称优先，若无则用用户名）
+        val peerNameByConvId: Map<String, String> = if (privateConvIds.isNotEmpty()) {
+            val allMembers = txRunner.execute { em ->
+                conversationMemberDao.findAllByConversationIds(em, privateConvIds)
+            }
+            // convId → 对方 userId
+            val peerUidByConvId = allMembers
+                .filter { it.userId != userId }
+                .associate { it.conversationId to it.userId }
+            val peerUids = peerUidByConvId.values.distinct()
+            val userMap = if (peerUids.isNotEmpty()) {
+                txRunner.execute { em -> userDao.findAllById(em, peerUids) }
+                    .associate { it.id to (it.nickname.ifBlank { it.username }) }
+            } else emptyMap()
+            // convId → 对方显示名
+            peerUidByConvId.mapValues { (_, uid) -> userMap[uid] ?: "" }
+        } else emptyMap()
+
         val builder = ConvListResp.newBuilder()
         result.forEach { entity ->
             val member = memberMap[entity.id]
+            val convId = requireNotNull(entity.id) { "会话ID不能为null" }
+            // 私聊：用对方昵称/用户名填充 name；群聊：直接用 entity.name
+            val displayName = if (entity.type == CONV_TYPE_PRIVATE) {
+                peerNameByConvId[convId] ?: entity.name
+            } else {
+                entity.name
+            }
             builder.addConversations(ConversationBrief.newBuilder()
-                .setConversationId(requireNotNull(entity.id) { "会话ID不能为null" })
+                .setConversationId(convId)
                 .setType(if (entity.type == CONV_TYPE_PRIVATE) "private" else "group")
-                .setName(entity.name)
+                .setName(displayName)
                 .setAvatarUrl(entity.avatar)
                 .setLastMessageId(entity.lastMessageId)
                 .setLastMessagePreview(entity.lastMessagePreview)
