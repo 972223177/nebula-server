@@ -12,7 +12,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.nebula.common.BizCode
@@ -70,10 +69,10 @@ class RateLimitInterceptor(
                 // 清理空闲信号量
                 val beforeSem = userSemaphores.size
                 userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
-                // C-05: 清理空闲令牌桶
+                // C-05 + H1: 清理空闲令牌桶（非 suspend，无 runBlocking）
                 val beforeBucket = userTokenBuckets.size
                 userTokenBuckets.entries.removeIf { 
-                    runBlocking { it.value.isIdle() } 
+                    it.value.isIdleForCleanup(CLEANUP_INTERVAL_MS)
                 }
                 val afterSem = userSemaphores.size
                 val afterBucket = userTokenBuckets.size

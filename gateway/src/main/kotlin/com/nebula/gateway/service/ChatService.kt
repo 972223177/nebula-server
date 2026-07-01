@@ -188,6 +188,10 @@ class ChatService(
         @Volatile
         var delayedOfflineJob: Job? = null
 
+        /** H2 修复：设备类型（用于连接断开时清理 Redis 设备类型映射） */
+        @Volatile
+        var deviceType: String? = null
+
         /**
          * 缓存再投递缓冲区 — 使用 ConcurrentLinkedQueue（无界、无锁、高性能 FIFO，
          * 适合生产者-消费者缓存模式，与 PushService 的 CopyOnWriteArrayList 和
@@ -448,6 +452,16 @@ class ChatService(
                 sessionRegistry.removeFromLocalCache(tok)
             }
 
+            // H2: 清理 Redis 设备类型映射，防止泄漏。
+            // 不清除 token 主 key（支持重连），但清除 deviceType→token 交叉引用。
+            userId?.let { uid ->
+                deviceType?.let { dt ->
+                    scope.launch {
+                        sessionRegistry.cleanupDeviceTypeMapping(uid, dt)
+                    }
+                }
+            }
+
             // D-01: 移除当前设备 StreamObserver（不调 removeUser 以免移除其他设备的流）
             userId?.let { uid ->
                 // 防御性检查：仅当当前 observer 仍在注册表中时才移除
@@ -570,6 +584,7 @@ class ChatService(
 
         // CQ-05: 记录 token 用于连接断开时清理 SessionRegistry
         responseObserver.token = session.token
+        responseObserver.deviceType = session.deviceType  // H2: 记录设备类型，用于断连清理
 
         // D-57: 重连时取消旧的延迟离线任务
         responseObserver.delayedOfflineJob?.cancel()

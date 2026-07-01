@@ -23,13 +23,11 @@ class FriendCheckRelationHandler(
 
     override suspend fun handle(req: FriendCheckRelationReq): FriendCheckRelationResp {
         val session = currentCoroutineContext().requireSession()
-        val (status, requestId) = friendService.checkRelation(session.userId, req.uid)
+        val result = friendService.checkRelation(session.userId, req.uid)
 
         return FriendCheckRelationResp.newBuilder()
-            .setStatus(status)
-            .also { builder ->
-                requestId?.let { builder.requestId = it }
-            }
+            .setStatus(result.status)
+            .apply { result.requestId?.let { this.requestId = it } }
             .build()
     }
 }

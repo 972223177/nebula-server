@@ -59,4 +59,33 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
         query.maxResults = limit
         return query.resultList
     }
+
+    /**
+     * H3 批量优化：批量查询 userId 与 targetUids 中用户的双向好友关系。
+     *
+     * 一条查询替代 N 次 findByUserIdAndFriendId。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param userId 当前用户 UID
+     * @param targetUids 目标用户 UID 列表
+     * @return 活跃的好友关系实体列表
+     */
+    suspend fun findAllFriendsByUids(
+        em: EntityManager,
+        userId: Long,
+        targetUids: List<Long>
+    ): List<FriendshipEntity> {
+        if (targetUids.isEmpty()) return emptyList()
+        return queryList(
+            em,
+            """
+            SELECT f FROM FriendshipEntity f
+            WHERE f.deleted = 0
+            AND ((f.userId = :userId AND f.friendId IN :targetUids)
+                 OR (f.friendId = :userId AND f.userId IN :targetUids))
+            """.trimIndent(),
+            "userId" to userId,
+            "targetUids" to targetUids
+        )
+    }
 }

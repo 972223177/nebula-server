@@ -49,6 +49,57 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
     )
 
     /**
+     * H3 批量优化：按目标 uid 列表和当前 uid 双向查找所有 pending 申请。
+     *
+     * 一条查询替代 N 次 findByFromUidAndToUidAndStatus，用于批量关系查询。
+     * 查询方向：(fromUid=uid AND toUid IN targets) OR (fromUid IN targets AND toUid=uid)
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param uid 当前用户 UID
+     * @param targetUids 目标用户 UID 列表
+     * @return 双向 pending 申请列表
+     */
+    suspend fun findAllPendingBidirectional(
+        em: EntityManager,
+        uid: Long,
+        targetUids: List<Long>
+    ): List<FriendRequestEntity> {
+        if (targetUids.isEmpty()) return emptyList()
+        return queryList(
+            em,
+            """
+            SELECT fr FROM FriendRequestEntity fr 
+            WHERE fr.status = 0 
+            AND ((fr.fromUid = :uid AND fr.toUid IN :targetUids) 
+                 OR (fr.toUid = :uid AND fr.fromUid IN :targetUids))
+            """.trimIndent(),
+            "uid" to uid,
+            "targetUids" to targetUids
+        )
+    }
+
+    /**
+     * H3 批量优化：查找双向任意状态的申请（用于被拒绝检测）。
+     */
+    suspend fun findAllBidirectional(
+        em: EntityManager,
+        uid: Long,
+        targetUids: List<Long>
+    ): List<FriendRequestEntity> {
+        if (targetUids.isEmpty()) return emptyList()
+        return queryList(
+            em,
+            """
+            SELECT fr FROM FriendRequestEntity fr 
+            WHERE ((fr.fromUid = :uid AND fr.toUid IN :targetUids) 
+                   OR (fr.toUid = :uid AND fr.fromUid IN :targetUids))
+            """.trimIndent(),
+            "uid" to uid,
+            "targetUids" to targetUids
+        )
+    }
+
+    /**
      * 按发起方和接收方精确查找好友申请。
      *
      * @param em 当前事务的 [EntityManager]

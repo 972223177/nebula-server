@@ -34,6 +34,15 @@ class TokenBucket(
     private var lastRefillTimeMs: Long = System.currentTimeMillis()
 
     /**
+     * H1+M5 修复：最近一次成功获取令牌的时间戳。
+     * 使用 @Volatile 保证协程写入对清理线程的可见性。
+     * 用于非 suspend 的空闲检测，消除清理任务中的 runBlocking。
+     */
+    @Volatile
+    var lastAcquireTimeMs: Long = System.currentTimeMillis()
+        private set
+
+    /**
      * 尝试获取 1 个令牌。
      *
      * 先按时间差补充令牌（不超过容量上限），再尝试消耗。
@@ -50,6 +59,7 @@ class TokenBucket(
             // 尝试消耗
             if (tokens >= 1.0) {
                 tokens -= 1.0
+                lastAcquireTimeMs = now
                 true
             } else {
                 false
@@ -58,16 +68,15 @@ class TokenBucket(
     }
 
     /**
-     * 桶是否处于空闲状态（令牌已满），用于清理过期条目。
+     * H1+M5 修复：非 suspend 空闲检测，用于清理任务。
      *
-     * @return true 如果令牌数已达到容量上限
+     * 基于最近访问时间戳判断，无需获取 Mutex，避免清理循环中的 runBlocking。
+     * 无需精确 token 数 — 长时间未请求的桶即可安全清理（下次重建成本极低）。
+     *
+     * @param intervalMs 空闲超时间隔（毫秒），默认 10min
+     * @return true 如果超过指定时间未使用此桶
      */
-    suspend fun isIdle(): Boolean {
-        return mutex.withLock {
-            val now = System.currentTimeMillis()
-            val elapsedSeconds = (now - lastRefillTimeMs) / 1000.0
-            val currentTokens = minOf(capacity.toDouble(), tokens + elapsedSeconds * refillRatePerSecond)
-            currentTokens >= capacity.toDouble()
-        }
+    fun isIdleForCleanup(intervalMs: Long): Boolean {
+        return System.currentTimeMillis() - lastAcquireTimeMs >= intervalMs
     }
 }

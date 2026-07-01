@@ -378,6 +378,27 @@ class SessionRegistry(
     }
 
     /**
+     * H2 修复：公开的清理设备类型映射方法，供 ChatService.cleanupConnection 调用。
+     *
+     * 连接断开时清理 Redis 中的 deviceType→token 映射，防止泄漏。
+     * 注意：不清除 token 主 key（token 保留以支持断连重连）。
+     *
+     * @param userId 用户 ID
+     * @param deviceType 设备类型字符串
+     */
+    suspend fun cleanupDeviceTypeMapping(userId: Long, deviceType: String) {
+        try {
+            withTimeout(redisTimeoutMs) {
+                sessionStore.deleteKey("session:$userId:$deviceType")
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Device type mapping cleanup timeout for userId=$userId" }
+        } catch (e: Exception) {
+            logger.error(e) { "Device type mapping cleanup failed for userId=$userId" }
+        }
+    }
+
+    /**
      * 从 Redis 查找设备类型映射（重启后恢复用）。
      *
      * @param userId 用户 ID
