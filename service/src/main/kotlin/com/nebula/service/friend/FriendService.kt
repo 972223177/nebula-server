@@ -10,6 +10,7 @@ import com.nebula.chat.friend.FriendRejectReq
 import com.nebula.chat.friend.FriendRequestsReq
 import com.nebula.chat.friend.FriendRequestsResp
 import com.nebula.chat.friend.FriendRelationStatus
+import com.nebula.chat.friend.FriendRequestDirection
 import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendBrief
 import com.nebula.common.BizCode
@@ -374,18 +375,31 @@ class FriendService(
      * @return 申请列表响应
      */
     suspend fun getFriendRequests(req: FriendRequestsReq, userId: Long): FriendRequestsResp {
-        val requests = txRunner.execute { em ->
-            friendRequestDao.findByToUidAndStatus(em, userId, 0)
+        val direction = req.direction  // 默认 INCOMING(0)，兼容旧客户端
+
+        val (incomingEntities, outgoingEntities, toUids) = txRunner.execute { em ->
+            val incoming = if (direction == FriendRequestDirection.INCOMING || direction == FriendRequestDirection.BOTH) {
+                friendRequestDao.findByToUidAndStatus(em, userId, 0)
+            } else emptyList()
+
+            val outgoing = if (direction == FriendRequestDirection.OUTGOING || direction == FriendRequestDirection.BOTH) {
+                friendRequestDao.findByFromUidAndStatus(em, userId, 0)
+            } else emptyList()
+
+            // 收集所有需要查用户信息的 uid（收到的=发送者，发出的=接收者）
+            val uids = (incoming.map { it.fromUid } + outgoing.map { it.toUid }).distinct()
+            Triple(incoming, outgoing, uids)
         }
 
-        val fromUids = requests.map { it.fromUid }.distinct()
-        val userMap = if (fromUids.isNotEmpty()) {
-            txRunner.execute { em -> userDao.findAllById(em, fromUids) }
+        val userMap = if (toUids.isNotEmpty()) {
+            txRunner.execute { em -> userDao.findAllById(em, toUids) }
                 .associateBy { it.id }
         } else emptyMap()
 
         val builder = FriendRequestsResp.newBuilder()
-        requests.forEach { reqEntity ->
+
+        // 收到的申请
+        incomingEntities.forEach { reqEntity ->
             val user = userMap[reqEntity.fromUid]
             builder.addRequests(FriendRequestItem.newBuilder()
                 .setRequestId(reqEntity.id ?: 0L)
@@ -394,11 +408,32 @@ class FriendService(
                 .setFromAvatar(user?.avatar ?: "")
                 .setMessage(reqEntity.message)
                 .setStatus(reqEntity.status.toString())
-                .setCreatedAt(reqEntity.createdAt?.atZone(java.time.ZoneOffset.UTC)
-                    ?.toInstant()?.toEpochMilli() ?: 0)
+                .setCreatedAt(toEpochMs(reqEntity.createdAt))
+                .setDirection(FriendRequestDirection.INCOMING)
                 .build())
         }
+
+        // 发出的申请
+        outgoingEntities.forEach { reqEntity ->
+            val user = userMap[reqEntity.toUid]
+            builder.addRequests(FriendRequestItem.newBuilder()
+                .setRequestId(reqEntity.id ?: 0L)
+                .setFromUid(reqEntity.toUid)      // from_uid = 对方 UID（接收方）
+                .setFromUsername(user?.username ?: "")
+                .setFromAvatar(user?.avatar ?: "")
+                .setMessage(reqEntity.message)
+                .setStatus(reqEntity.status.toString())
+                .setCreatedAt(toEpochMs(reqEntity.createdAt))
+                .setDirection(FriendRequestDirection.OUTGOING)
+                .build())
+        }
+
         return builder.build()
+    }
+
+    /** 将 LocalDateTime 转为毫秒时间戳 */
+    private fun toEpochMs(dt: java.time.LocalDateTime?): Long {
+        return dt?.atZone(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: 0
     }
 
     /**

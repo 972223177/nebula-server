@@ -11,7 +11,7 @@ import jakarta.persistence.EntityManager
 class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::class.java) {
 
     /**
-     * 按接收方 UID 和状态查询好友申请列表。
+     * 按接收方 UID 和状态查询好友申请列表（收到的申请）。
      *
      * @param em 当前事务的 [EntityManager]
      * @param toUid 申请接收方 UID
@@ -26,6 +26,25 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
         em,
         "SELECT fr FROM FriendRequestEntity fr WHERE fr.toUid = :toUid AND fr.status = :status",
         "toUid" to toUid,
+        "status" to status
+    )
+
+    /**
+     * 按发起方 UID 和状态查询好友申请列表（发出的申请）。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param fromUid 申请发起方 UID
+     * @param status 申请状态
+     * @return 匹配的申请列表
+     */
+    suspend fun findByFromUidAndStatus(
+        em: EntityManager,
+        fromUid: Long,
+        status: Int
+    ): List<FriendRequestEntity> = queryList(
+        em,
+        "SELECT fr FROM FriendRequestEntity fr WHERE fr.fromUid = :fromUid AND fr.status = :status",
+        "fromUid" to fromUid,
         "status" to status
     )
 

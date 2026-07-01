@@ -60,8 +60,18 @@ message FriendBrief {
 }
 
 // ---- friend/requests ----
-// 获取好友申请列表
-message FriendRequestsReq {}
+// 获取好友申请列表（支持按方向过滤）
+
+// 申请方向
+enum FriendRequestDirection {
+  INCOMING = 0;                       // 收到的申请（默认）
+  OUTGOING = 1;                       // 发出的申请
+  BOTH = 2;                           // 双向
+}
+
+message FriendRequestsReq {
+  FriendRequestDirection direction = 1; // 方向过滤，默认 INCOMING 兼容旧行为
+}
 
 // 好友申请列表响应
 message FriendRequestsResp {
@@ -71,12 +81,13 @@ message FriendRequestsResp {
 // 好友申请条目
 message FriendRequestItem {
   int64 request_id = 1;               // 申请 ID
-  int64 from_uid = 2;                 // 申请人 UID
-  string from_username = 3;           // 申请人用户名
-  string from_avatar = 4;             // 申请人头像 URL
+  int64 from_uid = 2;                 // 对方 UID（INCOMING=申请发起方，OUTGOING=申请接收方）
+  string from_username = 3;           // 对方用户名
+  string from_avatar = 4;             // 对方头像 URL
   string message = 5;                 // 申请附言
   string status = 6;                  // 申请状态：pending / accepted / rejected
   int64 created_at = 7;               // 申请时间（毫秒时间戳）
+  FriendRequestDirection direction = 8; // 申请方向（新增字段，默认 INCOMING 兼容旧客户端）
 }
 
 // ========================================
