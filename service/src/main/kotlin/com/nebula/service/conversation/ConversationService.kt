@@ -281,9 +281,9 @@ class ConversationService(
 
             val newMemberUids = mutableListOf<Long>()
 
-            // D-83/M13: 前置批量查询替代 N+1 循环
+            // D-83/M13: 前置批量查询（含软删，用于恢复已退出成员）
             val existingMap = conversationMemberDao
-                .findByConversationIdAndUserIds(em, convId, req.uidsList)
+                .findByConversationIdAndUserIdsIncludingDeleted(em, convId, req.uidsList)
                 .associateBy { it.userId }
 
             for (uid in req.uidsList) {
@@ -599,9 +599,9 @@ class ConversationService(
                 conversationDao.insert(em, conv)
             }
 
-            // 3. 恢复/创建双方 member 记录
+            // 3. 恢复/创建双方 member 记录（需含软删，用于恢复）
             listOf(smaller, larger).forEach { uid ->
-                val existing = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
+                val existing = conversationMemberDao.findByConversationIdAndUserIdIncludingDeleted(em, convId, uid)
                 if (existing == null) {
                     val member = ConversationMemberEntity(conversationId = convId, userId = uid)
                     member.joinedAt = now

@@ -34,7 +34,32 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param userId 用户 ID
      * @return 成员实体，不存在返回 null
      */
+    /**
+     * 按会话和用户查成员（仅活跃记录，deleted=0）。
+     *
+     * 修复：加上 deleted=0 条件，避免 message/pull 等成员校验返回已软删记录，
+     * 导致 conversation/list 显示会话但 message/pull 报 1403 NOT_MEMBER。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param conversationId 会话 ID
+     * @param userId 用户 ID
+     * @return 活跃的成员实体，软删或不存在返回 null
+     */
     suspend fun findByConversationIdAndUserId(
+        em: EntityManager,
+        conversationId: String,
+        userId: Long
+    ): ConversationMemberEntity? = querySingle(
+        em,
+        "SELECT cm FROM ConversationMemberEntity cm WHERE cm.conversationId = :convId AND cm.userId = :userId AND cm.deleted = 0",
+        "convId" to conversationId,
+        "userId" to userId
+    )
+
+    /**
+     * 查会话成员（含软删），用于 createPrivateConversation / invite 等恢复场景。
+     */
+    suspend fun findByConversationIdAndUserIdIncludingDeleted(
         em: EntityManager,
         conversationId: String,
         userId: Long
@@ -158,7 +183,26 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param userIds 用户 ID 列表
      * @return 匹配的成员记录列表（仅包含传入 uid 中已存在的）
      */
+    /**
+     * 批量查会话成员（仅活跃，用于 conversation/list 等）。*/
     suspend fun findByConversationIdAndUserIds(
+        em: EntityManager,
+        conversationId: String,
+        userIds: List<Long>
+    ): List<ConversationMemberEntity> {
+        if (userIds.isEmpty()) return emptyList()
+        return queryList(
+            em,
+            "SELECT cm FROM ConversationMemberEntity cm WHERE cm.conversationId = :convId AND cm.userId IN :userIds AND cm.deleted = 0",
+            "convId" to conversationId,
+            "userIds" to userIds
+        )
+    }
+
+    /**
+     * 批量查会话成员（含软删，用于 invite 恢复已退出成员场景）。
+     */
+    suspend fun findByConversationIdAndUserIdsIncludingDeleted(
         em: EntityManager,
         conversationId: String,
         userIds: List<Long>
