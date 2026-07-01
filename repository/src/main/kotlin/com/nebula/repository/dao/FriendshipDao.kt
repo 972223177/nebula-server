@@ -49,7 +49,7 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
             """
             SELECT f FROM FriendshipEntity f
             WHERE (f.userId = :userId OR f.friendId = :userId)
-            AND f.deleted = 0 AND f.id < :cursor
+            AND f.deleted = 0 AND (:cursor = 0 OR f.id < :cursor)
             ORDER BY f.id DESC
             """.trimIndent(),
             FriendshipEntity::class.java
