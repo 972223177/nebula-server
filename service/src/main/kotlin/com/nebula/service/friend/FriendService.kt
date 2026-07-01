@@ -12,6 +12,7 @@ import com.nebula.chat.friend.FriendRequestsResp
 import com.nebula.chat.friend.FriendRelationStatus
 import com.nebula.chat.friend.FriendRequestDirection
 import com.nebula.chat.friend.FriendRequestItem
+import com.nebula.common.util.toEpochMillis
 import com.nebula.chat.friend.FriendBrief
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
@@ -411,7 +412,7 @@ class FriendService(
                 .setFromAvatar(user?.avatar ?: "")
                 .setMessage(reqEntity.message)
                 .setStatus(reqEntity.status.toString())
-                .setCreatedAt(toEpochMs(reqEntity.createdAt))
+                .setCreatedAt(reqEntity.createdAt?.toEpochMillis() ?: 0)
                 .setDirection(FriendRequestDirection.INCOMING)
                 .build())
         }
@@ -426,17 +427,12 @@ class FriendService(
                 .setFromAvatar(user?.avatar ?: "")
                 .setMessage(reqEntity.message)
                 .setStatus(reqEntity.status.toString())
-                .setCreatedAt(toEpochMs(reqEntity.createdAt))
+                .setCreatedAt(reqEntity.createdAt?.toEpochMillis() ?: 0)
                 .setDirection(FriendRequestDirection.OUTGOING)
                 .build())
         }
 
         return builder.build()
-    }
-
-    /** 将 LocalDateTime 转为毫秒时间戳 */
-    private fun toEpochMs(dt: java.time.LocalDateTime?): Long {
-        return dt?.atZone(java.time.ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: 0
     }
 
     /**

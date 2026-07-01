@@ -13,6 +13,7 @@ import com.nebula.chat.conversation.LeaveGroupReq
 import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
+import com.nebula.common.util.toEpochMillis
 import com.nebula.repository.dao.ConversationDao
 import com.nebula.repository.dao.ConversationMemberDao
 import com.nebula.repository.dao.FriendshipDao
@@ -203,7 +204,7 @@ class ConversationService(
                 .setLastMessageId(entity.lastMessageId)
                 .setLastMessagePreview(entity.lastMessagePreview)
                 .setLastMessageTs(entity.lastMessageTs)
-                .setLastUpdatedAt(entity.updatedAt?.atZone(ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: 0)
+                .setLastUpdatedAt(entity.updatedAt?.toEpochMillis() ?: 0)
                 .setLastReadMsgId(member?.lastReadMessageId ?: 0)
                 .build())
         }
@@ -489,7 +490,7 @@ class ConversationService(
                 .setDisplayName(user?.nickname ?: "")
                 .setAvatarUrl(user?.avatar ?: "")
                 .setRole(m.role)
-                .setJoinedAt(m.joinedAt?.atZone(ZoneOffset.UTC)?.toInstant()?.toEpochMilli() ?: 0)
+                .setJoinedAt(m.joinedAt?.toEpochMillis() ?: 0)
                 .build())
         }
         return builder.build()

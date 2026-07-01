@@ -53,21 +53,12 @@ class PushService(
      * @param payload 已读回执 payload
      */
     fun pushReadReceipt(senderUid: Long, payload: ReadReceiptPayload) {
+        val envelope = buildPushEnvelope(PushEventType.READ_RECEIPT, payload.toByteString())
         val observers = userStreamRegistry.getStreams(senderUid)
         for (observer in observers) {
             try {
-                val envelope = Envelope.newBuilder()
-                    .setDirection(Direction.PUSH)
-                    .setRequestId("")
-                    .setMessage(Message.newBuilder()
-                        .setEventType(PushEventType.READ_RECEIPT)
-                        .setContent("")
-                        .setPayload(payload.toByteString())
-                        .build())
-                    .build()
                 deliverEnvelope(observer, envelope)
             } catch (e: Exception) {
-                // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push READ_RECEIPT to senderUid=$senderUid" }
                 userStreamRegistry.removeStream(senderUid, observer)
             }
@@ -85,25 +76,14 @@ class PushService(
      * @param convId 会话 ID
      */
     fun pushDeliveryAck(senderUid: Long, msgId: Long, convId: String) {
-        val observers = userStreamRegistry.getStreams(senderUid)
         val payload = DeliveryAckPayload.newBuilder()
-            .setMsgId(msgId)
-            .setConversationId(convId)
-            .build()
+            .setMsgId(msgId).setConversationId(convId).build()
+        val envelope = buildPushEnvelope(PushEventType.DELIVERY_ACK, payload.toByteString())
+        val observers = userStreamRegistry.getStreams(senderUid)
         for (observer in observers) {
             try {
-                val envelope = Envelope.newBuilder()
-                    .setDirection(Direction.PUSH)
-                    .setRequestId("")
-                    .setMessage(Message.newBuilder()
-                        .setEventType(PushEventType.DELIVERY_ACK)
-                        .setContent("")
-                        .setPayload(payload.toByteString())
-                        .build())
-                    .build()
                 deliverEnvelope(observer, envelope)
             } catch (e: Exception) {
-                // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push DELIVERY_ACK to senderUid=$senderUid, msgId=$msgId" }
                 userStreamRegistry.removeStream(senderUid, observer)
             }
@@ -116,15 +96,34 @@ class PushService(
 
     /**
      * 通过 Mutex 串行化投递 Envelope（G-03/C-01 修复）。
-     *
-     * 优先走 [DeliverableStreamObserver.deliver]（内部通过 Mutex 串行化 onNext），
-     * 降级为裸 onNext() 以兼容测试 mock 或其他非 DeliverableStreamObserver 实现。
-     *
-     * @param observer 目标 StreamObserver
-     * @param envelope 待投递的 Envelope
      */
     private fun deliverEnvelope(observer: StreamObserver<Envelope>, envelope: Envelope) {
         (observer as? DeliverableStreamObserver)?.deliver(envelope) ?: observer.onNext(envelope)
+    }
+
+    /**
+     * L2: 构建 PUSH 方向 Envelope 的工厂方法。
+     *
+     * 消除 5 个推送方法中重复的 Envelope 构建代码。
+     *
+     * @param eventType 推送事件类型
+     * @param payloadBytes 序列化后的 payload
+     * @param content 可选内容文本，默认空
+     */
+    private fun buildPushEnvelope(
+        eventType: PushEventType,
+        payloadBytes: com.google.protobuf.ByteString,
+        content: String = ""
+    ): Envelope {
+        return Envelope.newBuilder()
+            .setDirection(Direction.PUSH)
+            .setRequestId("")
+            .setMessage(Message.newBuilder()
+                .setEventType(eventType)
+                .setContent(content)
+                .setPayload(payloadBytes)
+                .build())
+            .build()
     }
 
     /**
@@ -136,22 +135,13 @@ class PushService(
      * @param chatMessage 待推送的 ChatMessage
      */
     suspend fun pushMessageToMembers(targetUids: List<Long>, chatMessage: ChatMessage) {
-        // R-10: 收集成功投递的 uid，循环结束后批量标记 sent 状态
+        val envelope = buildPushEnvelope(PushEventType.CHAT_MESSAGE, chatMessage.toByteString())
         val sentUids = mutableListOf<Long>()
         for (uid in targetUids) {
             val observers = userStreamRegistry.getStreams(uid)
             var sent = false
             for (observer in observers) {
                 try {
-                    val envelope = Envelope.newBuilder()
-                        .setDirection(Direction.PUSH)
-                        .setRequestId("")
-                        .setMessage(Message.newBuilder()
-                            .setEventType(PushEventType.CHAT_MESSAGE)
-                            .setContent("")
-                            .setPayload(chatMessage.toByteString())
-                            .build())
-                        .build()
                     deliverEnvelope(observer, envelope)
                     sent = true
                 } catch (e: Exception) {
@@ -161,7 +151,6 @@ class PushService(
             }
             if (sent) sentUids.add(uid)
         }
-        // R-10: 批量标记投递状态，N 次 Redis 往返合并为 1 次 HMSET
         if (sentUids.isNotEmpty()) {
             deliveryTrackingService.batchMarkSent(chatMessage.msgId, sentUids)
         }
@@ -190,22 +179,13 @@ class PushService(
         }
         val targets = members.filter { it.userId !in excludeUids }
 
+        val envelope = buildPushEnvelope(eventType, payloadBytes)
         for (member in targets) {
             val observers = userStreamRegistry.getStreams(member.userId)
             for (observer in observers) {
                 try {
-                    val envelope = Envelope.newBuilder()
-                        .setDirection(Direction.PUSH)
-                        .setRequestId("")
-                        .setMessage(Message.newBuilder()
-                            .setEventType(eventType)
-                            .setContent("")
-                            .setPayload(payloadBytes)
-                            .build())
-                        .build()
                     deliverEnvelope(observer, envelope)
                 } catch (e: Exception) {
-                    // D-05 容错：单个 observer 推送异常不影响其他 observer
                     logger.error(e) { "Failed to push $eventType to userId=${member.userId}" }
                     userStreamRegistry.removeStream(member.userId, observer)
                 }
@@ -213,36 +193,17 @@ class PushService(
         }
     }
 
-    /**
-     * 向指定用户推送单独事件（D-14 踢人时推送给被踢者本人）。
-     *
-     * 与 pushConversationEvent 不同，此方法精确推送到指定 userId 的所有在线设备，
-     * 用于需要区分推送目标的场景（如 MEMBER_KICKED 仅推送给被踢者）。
-     *
-     * @param targetUid 目标用户 ID
-     * @param eventType PushEventType 事件类型
-     * @param payloadBytes 序列化后的 Payload 字节
-     */
     fun pushEventToUser(
         targetUid: Long,
         eventType: PushEventType,
         payloadBytes: com.google.protobuf.ByteString
     ) {
+        val envelope = buildPushEnvelope(eventType, payloadBytes)
         val observers = userStreamRegistry.getStreams(targetUid)
         for (observer in observers) {
             try {
-                val envelope = Envelope.newBuilder()
-                    .setDirection(Direction.PUSH)
-                    .setRequestId("")
-                    .setMessage(Message.newBuilder()
-                        .setEventType(eventType)
-                        .setContent("")
-                        .setPayload(payloadBytes)
-                        .build())
-                    .build()
                 deliverEnvelope(observer, envelope)
             } catch (e: Exception) {
-                // D-05 容错：单个 observer 推送异常不影响其他 observer
                 logger.error(e) { "Failed to push $eventType to userId=$targetUid" }
                 userStreamRegistry.removeStream(targetUid, observer)
             }

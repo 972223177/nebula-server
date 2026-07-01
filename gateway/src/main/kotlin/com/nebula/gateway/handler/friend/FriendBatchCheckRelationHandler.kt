@@ -27,13 +27,9 @@ class FriendBatchCheckRelationHandler(
         val results = friendService.batchCheckRelation(session.userId, req.uidsList)
 
         val items = results.map { r ->
-            FriendRelationItem.newBuilder()
-                .setUid(r.uid)
-                .setStatus(r.status)
-                .also { builder ->
-                    r.requestId?.let { builder.requestId = it }
-                }
-                .build()
+            val builder = FriendRelationItem.newBuilder().setUid(r.uid).setStatus(r.status)
+            r.requestId?.let { builder.requestId = it }
+            builder.build()
         }
 
         return FriendBatchCheckRelationResp.newBuilder()
