@@ -14,7 +14,9 @@ class ConversationHandlerCollector(
     private val createGroupHandler: CreateGroupHandler,
     private val inviteMemberHandler: InviteMemberHandler,
     private val leaveGroupHandler: LeaveGroupHandler,
-    private val kickMemberHandler: KickMemberHandler
+    private val kickMemberHandler: KickMemberHandler,
+    private val deleteConversationHandler: DeleteConversationHandler,
+    private val createPrivateConversationHandler: CreatePrivateConversationHandler
 ) : HandlerCollector {
 
     override fun registerAll(registry: HandlerRegistry) {
@@ -25,5 +27,7 @@ class ConversationHandlerCollector(
         registry.register(inviteMemberHandler)
         registry.register(leaveGroupHandler)
         registry.register(kickMemberHandler)
+        registry.register(deleteConversationHandler)
+        registry.register(createPrivateConversationHandler)
     }
 }

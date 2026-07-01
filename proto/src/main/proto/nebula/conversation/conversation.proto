@@ -132,3 +132,19 @@ message GroupInvitedPayload {
 message GroupDissolvedPayload {
   string conversation_id = 1;         // 会话 ID
 }
+
+// ---- conversation/delete ----
+// 从会话列表删除会话（软删除当前用户的 member 记录）
+message DeleteConversationReq {
+  string conversation_id = 1;         // 会话 ID
+}
+
+// ---- conversation/create_private ----
+// 创建或恢复到好友的私聊会话
+message CreatePrivateConversationReq {
+  int64 uid = 1;                      // 对方用户 UID（必须是好友）
+}
+
+message CreatePrivateConversationResp {
+  string conversation_id = 1;         // 会话 ID
+}

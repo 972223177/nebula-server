@@ -24,7 +24,7 @@ val serviceKoinModule = module {
     single { UserPrivacyService(get(), get()) }
     single { OnlineStatusService(get()) }
     single { MessageService(get(), get(), get(), get(), get(), get(), get(), get()) }
-    single { ConversationService(get(), get(), get(), get()) }
+    single { ConversationService(get(), get(), get(), get(), get()) }
     single { FriendService(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { DeadLetterService(get(), get(), get(), get()) }
     single<DeadLetterCallback> { get<DeadLetterService>() }

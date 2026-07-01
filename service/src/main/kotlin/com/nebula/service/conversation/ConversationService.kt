@@ -15,6 +15,7 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.repository.dao.ConversationDao
 import com.nebula.repository.dao.ConversationMemberDao
+import com.nebula.repository.dao.FriendshipDao
 import com.nebula.repository.dao.JpaTxRunner
 import com.nebula.repository.dao.UserDao
 import com.nebula.repository.entity.ConversationEntity
@@ -39,6 +40,7 @@ class ConversationService(
     private val conversationDao: ConversationDao,
     private val conversationMemberDao: ConversationMemberDao,
     private val userDao: UserDao,
+    private val friendshipDao: FriendshipDao,
     private val txRunner: JpaTxRunner
 ) {
 
@@ -539,6 +541,79 @@ class ConversationService(
             conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
         } ?: return null
         return ConversationMemberInfo(userId = entity.userId, role = entity.role)
+    }
+
+    /**
+     * 从列表软删除会话（conversation/delete）。
+     *
+     * 仅删除当前用户的 member 记录（deleted=1），不影响会话本身和其他成员。
+     * 适用于私聊和群聊。
+     *
+     * @param userId 当前用户 UID
+     * @param convId 会话 ID
+     */
+    suspend fun deleteConversation(userId: Long, convId: String) {
+        txRunner.execute { em ->
+            conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, userId)
+        }
+    }
+
+    /**
+     * 创建或恢复到好友的私聊会话（conversation/create_private）。
+     *
+     * 流程：
+     * 1. 校验双方是好友
+     * 2. 生成固定 convId（private:<uid1>:<uid2>，较小的在前）
+     * 3. 会话不存在则创建，存在则无需操作
+     * 4. 恢复/创建双方的 member 记录（若已软删则恢复）
+     *
+     * @param userId 当前用户 UID
+     * @param targetUid 对方用户 UID
+     * @return 会话 ID
+     */
+    suspend fun createPrivateConversation(userId: Long, targetUid: Long): String {
+        if (userId == targetUid) {
+            throw ConversationException(BizCode.INVALID_PARAM, "不能和自己创建私聊")
+        }
+
+        val smaller = minOf(userId, targetUid)
+        val larger = maxOf(userId, targetUid)
+        val convId = "private:$smaller:$larger"
+        val now = LocalDateTime.now()
+
+        txRunner.execute { em ->
+            // 1. 校验好友关系
+            val friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
+            if (friendship == null || !friendship.isActive) {
+                throw ConversationException(BizCode.NOT_FRIEND, "私聊需要好友关系")
+            }
+
+            // 2. 创建/恢复会话
+            var conv = conversationDao.findById(em, convId)
+            if (conv == null) {
+                conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
+                conv.id = convId
+                conv.createdAt = now
+                conv.updatedAt = now
+                conversationDao.insert(em, conv)
+            }
+
+            // 3. 恢复/创建双方 member 记录
+            listOf(smaller, larger).forEach { uid ->
+                val existing = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
+                if (existing == null) {
+                    val member = ConversationMemberEntity(conversationId = convId, userId = uid)
+                    member.joinedAt = now
+                    conversationMemberDao.insert(em, member)
+                } else if (!existing.isActive) {
+                    // 恢复软删记录
+                    existing.deleted = 0
+                    existing.joinedAt = now
+                }
+            }
+        }
+
+        return convId
     }
 }
 

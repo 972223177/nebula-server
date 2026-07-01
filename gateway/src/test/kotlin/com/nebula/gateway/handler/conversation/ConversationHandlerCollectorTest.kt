@@ -24,7 +24,9 @@ class ConversationHandlerCollectorTest {
             createGroupHandler = mockk { every { method } returns "conversation/create_group" },
             inviteMemberHandler = mockk { every { method } returns "conversation/invite_member" },
             leaveGroupHandler = mockk { every { method } returns "conversation/leave_group" },
-            kickMemberHandler = mockk { every { method } returns "conversation/kick_member" }
+            kickMemberHandler = mockk { every { method } returns "conversation/kick_member" },
+            deleteConversationHandler = mockk { every { method } returns "conversation/delete" },
+            createPrivateConversationHandler = mockk { every { method } returns "conversation/create_private" }
         )
 
         collector.registerAll(registry)
@@ -36,5 +38,7 @@ class ConversationHandlerCollectorTest {
         assertNotNull(registry.get("conversation/invite_member"), "conversation/invite_member 应已注册")
         assertNotNull(registry.get("conversation/leave_group"), "conversation/leave_group 应已注册")
         assertNotNull(registry.get("conversation/kick_member"), "conversation/kick_member 应已注册")
+        assertNotNull(registry.get("conversation/delete"), "conversation/delete 应已注册")
+        assertNotNull(registry.get("conversation/create_private"), "conversation/create_private 应已注册")
     }
 }

@@ -11,6 +11,8 @@ import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
+import com.nebula.gateway.handler.conversation.CreatePrivateConversationHandler
+import com.nebula.gateway.handler.conversation.DeleteConversationHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
 import com.nebula.gateway.handler.conversation.GroupMembersHandler
 import com.nebula.gateway.handler.conversation.InviteMemberHandler
@@ -178,6 +180,8 @@ class GatewayModuleTest {
         single { InviteMemberHandler(conversationService, get(), get()) }
         single { LeaveGroupHandler(conversationService, get(), get()) }
         single { KickMemberHandler(conversationService, get(), get()) }
+        single { DeleteConversationHandler(conversationService) }
+        single { CreatePrivateConversationHandler(conversationService) }
 
         // Phase 8: Friend
         single { FriendRejectHandler(friendService) }
@@ -256,7 +260,9 @@ class GatewayModuleTest {
             GlobalContext.get().get<CreateGroupHandler>(),
             GlobalContext.get().get<InviteMemberHandler>(),
             GlobalContext.get().get<LeaveGroupHandler>(),
-            GlobalContext.get().get<KickMemberHandler>()
+            GlobalContext.get().get<KickMemberHandler>(),
+            GlobalContext.get().get<DeleteConversationHandler>(),
+            GlobalContext.get().get<CreatePrivateConversationHandler>()
         )
         convCollector.registerAll(registry)
 
@@ -348,7 +354,9 @@ class GatewayModuleTest {
             GlobalContext.get().get<CreateGroupHandler>(),
             GlobalContext.get().get<InviteMemberHandler>(),
             GlobalContext.get().get<LeaveGroupHandler>(),
-            GlobalContext.get().get<KickMemberHandler>()
+            GlobalContext.get().get<KickMemberHandler>(),
+            GlobalContext.get().get<DeleteConversationHandler>(),
+            GlobalContext.get().get<CreatePrivateConversationHandler>()
         )
         collector.registerAll(registry)
         assertNotNull(registry.get("conversation/list"))
@@ -358,6 +366,8 @@ class GatewayModuleTest {
         assertNotNull(registry.get("conversation/invite_member"))
         assertNotNull(registry.get("conversation/leave_group"))
         assertNotNull(registry.get("conversation/kick_member"))
+        assertNotNull(registry.get("conversation/delete"))
+        assertNotNull(registry.get("conversation/create_private"))
     }
 
     /**
