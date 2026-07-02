@@ -77,14 +77,25 @@ class SendMessageHandlerTest {
     @Test
     fun sendShouldReturnSendMessageResp() = runTest {
         // MessageService 返回成功结果
+        // 注：使用真实 SendMessageResult 实例而非 mockk mock ——
+        // mockk 对 data class.copy() 会生成子 mock 而不继承父 stub，
+        // 导致 handler 的 result.copy(conversationCreated=...) 拿不到 msgId 等字段值。
+        // 2026-07 改造：SendMessageResult 多了 conversationCreated/conversationBrief 字段，
+        // 真实实例更稳定，未来再加字段不会回归。
         val chatMsg = ChatMessage.newBuilder()
             .setMsgId(50001L)
             .setConversationId("conv-001")
             .setSenderUid(1001L)
             .build()
-        val sendResult = mockk<SendMessageResult>(relaxed = true)
-        every { sendResult.msgId } returns 50001L
-        every { sendResult.serverTs } returns 1700000000000L
+        val sendResult = SendMessageResult(
+            msgId = 50001L,
+            serverTs = 1700000000000L,
+            conversationId = "conv-001",
+            senderUid = 1001L,
+            chatMessage = chatMsg,
+            conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
+            conversationCreated = false
+        )
         coEvery { messageService.sendMessage(any(), any()) } returns sendResult
 
         val req = SendMessageReq.newBuilder()

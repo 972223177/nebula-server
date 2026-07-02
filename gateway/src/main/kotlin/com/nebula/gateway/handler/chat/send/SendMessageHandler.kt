@@ -72,15 +72,42 @@ class SendMessageHandler(
         }
 
         return try {
-            // Step 1: 委托 MessageService 处理核心业务逻辑
-            val result = messageService.sendMessage(req, senderUid)
+            // Step 0: 私聊懒加载 — target_uid != 0 时触发 createPrivateConversation
+            //         （群聊场景忽略 target_uid，群聊不支持懒加载：不在群 → 不允许凭空发消息）
+            //         返回 (resolvedConvId, didCreate)：
+            //         - resolvedConvId 兜底回填给客户端（懒加载时客户端可能没传 convId）
+            //         - didCreate=true 时 SendMessageResp.conversation 字段会填入会话 Brief
+            //
+            // 2026-07 review 遗漏 #4 优化：仅在懒加载实际触发了 createPrivateConversation 时
+            //                         重新构造 req（toBuilder 涉及 proto 内部对象分配）；
+            //                         常规路径（target_uid=0）直接传原 req，避免内存毛刺。
+            val (resolvedConvId, didCreate) = ensurePrivateConversationIfNeeded(req, senderUid)
+            val effectiveReq = if (resolvedConvId != null) {
+                req.toBuilder().setConversationId(resolvedConvId).build()
+            } else {
+                req
+            }
 
-            // Step 2: 构建响应（含服务端分配的 seq）
-            val response = SendMessageResp.newBuilder()
+            // Step 1: 委托 MessageService 处理核心业务逻辑
+            val result = messageService.sendMessage(
+                req = effectiveReq,
+                senderUid = senderUid
+            ).copy(conversationCreated = didCreate)
+
+            // Step 2: 构建响应（含服务端分配的 seq、懒加载会话元信息）
+            val responseBuilder = SendMessageResp.newBuilder()
                 .setMsgId(result.msgId)
                 .setServerTs(result.serverTs)
                 .setSeq(result.seq)
-                .build()
+                .setConversationId(result.conversationId)
+
+            // 仅懒加载触发了 createPrivateConversation 时填 conversation 字段，
+            // 已有会话直接发的场景保持字段未设置，客户端用 conversation_id 自行拉详情
+            if (didCreate) {
+                responseBuilder.conversation = result.conversationBrief
+            }
+
+            val response = responseBuilder.build()
 
             // Step 3: 异步 fire-and-forget：未读计数 + 推送
             scope.launch {
@@ -140,5 +167,39 @@ class SendMessageHandler(
             // TODO: 扩展死信接口支持 fire-and-forget 异步操作补偿（如 onPushFailed），
             //       或在此处写入 Redis 补偿标记键供后台 Job 扫描。
         }
+    }
+
+    /**
+     * 私聊懒加载前置处理（2026-07 改造）。
+     *
+     * 触发条件：客户端传了 `req.targetUid != 0`。
+     * 不论 `req.conversationId` 是否一并传，都以 `target_uid` 为准触发 createPrivateConversation。
+     * 传 `conversation_id` 的语义在 createPrivateConversation 内部是"幂等查/建"——同名会话只会有一份。
+     *
+     * 群聊场景：本方法不触发懒加载，群聊要求发送方必须是 active 成员。
+     * 若客户端对群聊误传 target_uid，`createPrivateConversation` 会因好友校验失败而抛 NOT_FRIEND，
+     * 这是预期行为：群聊应忽略 target_uid 字段。
+     *
+     * 并发安全：`createPrivateConversation` 内部用 `txRunner.execute` 串行化事务，
+     * 私聊 convId 由双方 UID 排序生成（`private:<smaller>:<larger>`），双发天然幂等。
+     *
+     * @param req 发送消息请求
+     * @param senderUid 发送方 UID（来自 session）
+     * @return Pair(resolvedConvId, didCreate)
+     *         - resolvedConvId: 实际使用的会话 ID（懒加载时填入 createPrivateConversation 的返回值）
+     *         - didCreate: 是否真正触发了 createPrivateConversation（影响 response.conversation 是否填充）
+     */
+    private suspend fun ensurePrivateConversationIfNeeded(
+        req: SendMessageReq,
+        senderUid: Long
+    ): Pair<String?, Boolean> {
+        val targetUid = req.targetUid
+        if (targetUid == 0L) {
+            // 未传 target_uid：不懒加载，走 conversation_id 原路径
+            return Pair(null, false)
+        }
+        // 传了 target_uid：执行 get-or-create 私聊会话（幂等：已存在则恢复 member）
+        val convId = conversationService.createPrivateConversation(senderUid, targetUid)
+        return Pair(convId, true)
     }
 }

@@ -2,6 +2,7 @@ package com.nebula.service.chat
 
 import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.chat.SendMessageResp
+import com.nebula.chat.conversation.ConversationBrief
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.PullMessagesReq
 import com.nebula.chat.message.PullMessagesResp
@@ -9,6 +10,8 @@ import com.nebula.chat.message.ReadReportReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ChatException
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.common.util.toEpochMillis
+import com.nebula.service.conversation.toConversationBrief
 import com.nebula.service.sequence.SeqService
 import com.nebula.repository.dao.ConversationDao
 import com.nebula.repository.dao.ConversationMemberDao
@@ -165,7 +168,7 @@ class MessageService(
             conversationId = conversationId,
             senderUid = senderUid,
             chatMessage = chatMessage,
-            conversation = conversation,
+            conversationBrief = conversation.toConversationBrief(displayName = conversation.name),
             seq = seq
         )
     }
@@ -327,6 +330,18 @@ data class SendMessageResult(
     val conversationId: String,
     val senderUid: Long,
     val chatMessage: ChatMessage,
-    val conversation: ConversationEntity,
-    val seq: Long = 0
+    /**
+     * 序列化后的会话 Brief（懒加载响应字段），由 MessageService 内部构造。
+     * gateway 层不直接接触 ConversationEntity，通过此字段获取响应。
+     * 2026-07 改造新增。
+     */
+    val conversationBrief: ConversationBrief,
+    val seq: Long = 0,
+    /**
+     * 是否本次发送触发了私聊懒加载（createPrivateConversation 真正执行了创建/恢复）。
+     * true 时 SendMessageResp.conversation 字段应填入会话 Brief，客户端无需再调 conversation/list。
+     * false 时该字段保持未设置，客户端继续走原有逻辑。
+     * 2026-07 改造新增。
+     */
+    val conversationCreated: Boolean = false
 )

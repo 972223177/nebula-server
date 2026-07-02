@@ -6,16 +6,30 @@ option java_multiple_files = true;
 option java_package = "com.nebula.chat.chat";
 
 import "nebula/message_type.proto";
+import "nebula/conversation/conversation.proto";
 
 // ---- chat/send ----
 // 发送消息请求
+//
+// 私聊会话寻址（conversation_id 与 target_uid 二选一）：
+// - 已有会话：传 conversation_id（消息发到该会话）
+// - 懒加载：传 target_uid（服务端自动 get-or-create 私聊会话，等价于先 create_private 再 send）
+//   - 适用场景：第一次给某人发消息 / 之前用 conversation/delete 删过又想恢复发消息
+// - 群聊会话：只允许传 conversation_id（群聊不支持懒加载，误传 target_uid 会因好友校验失败抛 NOT_FRIEND）
+//
+// 校验规则：
+// - 私聊 + 只传 conversation_id：保持原行为，会话不存在则报 CONV_NOT_FOUND
+// - 私聊 + 只传 target_uid：懒加载创建/恢复会话，响应 conversation 字段填入 Brief
+// - 私聊 + 两个都传：以 target_uid 为准触发懒加载（conversation_id 被忽略）
+// - 私聊 + 两个都不传：CONV_NOT_FOUND
 message SendMessageReq {
-  string conversation_id = 1;         // 会话ID，标识消息所属会话
+  string conversation_id = 1;         // 会话ID，群聊必填；私聊与 target_uid 二选一
   ChatContentType message_type = 2;      // 消息内容类型，如 TEXT、TEXT_AND_IMAGE 等
   string content = 3;                 // 消息文本内容
   bytes payload = 4;                  // 消息附带的结构化数据，根据 message_type 解析
   int64 client_ts = 5;                // 客户端发送时间戳（毫秒），用于消息排序与去重
   string client_message_id = 6;       // 客户端消息幂等标识（UUID），服务端用于防重试重复入库
+  int64 target_uid = 7;               // 私聊懒加载的对方 UID（0 = 不启用懒加载）
 }
 
 // 发送消息响应
@@ -23,4 +37,23 @@ message SendMessageResp {
   int64 msg_id = 1;                   // 服务端分配的消息 ID
   int64 server_ts = 2;                // 服务端接收时间戳（毫秒）
   int64 seq = 3;                      // 服务端分配的会话序列号（D-74），per-(conv,uid) 自增
+  // 实际使用的会话 ID。
+  // 懒加载场景：填入 createPrivateConversation 实际生成的 convId
+  // 已有会话场景：与请求的 conversation_id 一致
+  string conversation_id = 4;
+  // 懒加载新建/恢复的会话元信息（仅懒加载场景填）。
+  // 用 optional 显式声明，使客户端能通过 hasConversation() 区分"懒加载触发了" vs "已有会话"。
+  // proto3 默认 singular message 字段无 has 字段，会让客户端无法判别。
+  //
+  // ## 客户端 name 字段补全（2026-07 改造说明）
+  //
+  // 懒加载私聊场景下 `conversation.name` 为空字符串（私聊会话表上不存 name，由对方用户信息决定）。
+  // 客户端拿到 `resp.conversation` 后若 `name.isEmpty()`，应：
+  // 1. 从 `resp.conversation_id` 解析出对方 UID（私聊 convId 格式：`private:<smaller>:<larger>`）
+  // 2. 调 `user/batchGet`（BatchIdRequest{uids:[对方UID]}）→ BatchGetUserResp{users:[UserBrief]}
+  // 3. 用 `users[0].display_name` 补全本地会话缓存的 name
+  //
+  // 为什么不服务端直接带 name：MessageService 不依赖 userDao（避免跨包访问 + 依赖面增加）。
+  // 群聊懒加载走 conversation_id 路由，name 由 entity.name 提供，无需客户端补全。
+  optional com.nebula.chat.conversation.ConversationBrief conversation = 5;
 }

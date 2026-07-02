@@ -198,17 +198,10 @@ class ConversationService(
             } else {
                 entity.name
             }
-            builder.addConversations(ConversationBrief.newBuilder()
-                .setConversationId(convId)
-                .setType(if (entity.type == CONV_TYPE_PRIVATE) "private" else "group")
-                .setName(displayName)
-                .setAvatarUrl(entity.avatar)
-                .setLastMessageId(entity.lastMessageId)
-                .setLastMessagePreview(entity.lastMessagePreview)
-                .setLastMessageTs(entity.lastMessageTs)
-                .setLastUpdatedAt(entity.updatedAt?.toEpochMillis() ?: 0)
-                .setLastReadMsgId(member?.lastReadMessageId ?: 0)
-                .build())
+            builder.addConversations(entity.toConversationBrief(
+                displayName = displayName,
+                lastReadMessageId = member?.lastReadMessageId ?: 0L
+            ))
         }
         builder.setHasMore(hasMore)
         return builder.build()
@@ -553,16 +546,10 @@ class ConversationService(
 
         val builder = GroupListResp.newBuilder()
         result.forEach { entity ->
-            builder.addGroups(ConversationBrief.newBuilder()
-                .setConversationId(requireNotNull(entity.id) { "会话ID不能为null" })
-                .setType("group")
-                .setName(entity.name)
-                .setAvatarUrl(entity.avatar)
-                .setLastMessageId(entity.lastMessageId)
-                .setLastMessagePreview(entity.lastMessagePreview)
-                .setLastMessageTs(entity.lastMessageTs)
-                .setLastUpdatedAt(entity.updatedAt?.toEpochMillis() ?: 0)
-                .build())
+            builder.addGroups(entity.toConversationBrief(
+                displayName = entity.name,
+                lastReadMessageId = 0L
+            ))
         }
         builder.setHasMore(hasMore)
         return builder.build()
@@ -586,6 +573,27 @@ class ConversationService(
     }
 
     /**
+     * 检查用户是否是指定会话的活跃成员（用于 chat/send 懒加载前置判断，2026-07 改造）。
+     *
+     * 与 [getMemberRole] 的区别：直接返回 Boolean，避免 gateway 层做 null 判空；
+     * DAO 查询自带 `deleted = 0` 过滤，**软删的 member 不算活跃**。
+     *
+     * @param conversationId 会话 ID
+     * @param userId 用户 ID
+     * @return 是活跃成员返回 true，会话不存在 / 不是成员 / 软删 / 异常均返回 false
+     */
+    suspend fun requireMemberActive(conversationId: String, userId: Long): Boolean {
+        return try {
+            txRunner.execute { em ->
+                conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)?.isActive ?: false
+            }
+        } catch (e: Exception) {
+            logger.warn(e) { "requireMemberActive 查询失败: convId=$conversationId, userId=$userId" }
+            false
+        }
+    }
+
+    /**
      * 从列表软删除会话（conversation/delete）。
      *
      * 仅删除当前用户的 member 记录（deleted=1），不影响会话本身和其他成员。
@@ -598,6 +606,74 @@ class ConversationService(
         txRunner.execute { em ->
             conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, userId)
         }
+    }
+
+    /**
+     * 按会话类型分支的删除行为（conversation/delete 业务编排）。
+     *
+     * 业务规则（按国内 IM 主流做法）：
+     * - 私聊：仅软隐藏当前用户的 member 记录（不通知对方）
+     * - 群聊：删除 = 退出群组
+     *   - 群主：解散群（status=DISSOLVED + 软删除所有成员）
+     *   - 普通成员：退群（软删除自己 + memberCount-1）
+     *
+     * 调用方（Handler）应在 `lockManager.withLock(convId)` 内调用此方法，
+     * 保证"读 type/role → 写状态"的串行化，避免与踢人/退群并发冲突（D-19）。
+     * 事务由本方法内部 `txRunner.execute` 管理。
+     *
+     * @param userId 当前用户 UID
+     * @param convId 会话 ID
+     * @return 实际执行的删除动作，供 Handler 选择推送事件类型
+     */
+    suspend fun deleteConversationByType(userId: Long, convId: String): DeleteConversationAction {
+        val action: DeleteConversationAction = txRunner.execute { em ->
+            val conv = conversationDao.findById(em, convId)
+                ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
+
+            when (conv.type) {
+                CONV_TYPE_PRIVATE -> {
+                    // 私聊：仅软隐藏当前用户
+                    conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, userId)
+                    DeleteConversationAction.PRIVATE_HIDDEN
+                }
+                CONV_TYPE_GROUP -> {
+                    // 群聊：按角色路由
+                    val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, userId)
+                        ?: throw ConversationException(BizCode.NOT_MEMBER)
+
+                    when (member.role) {
+                        ROLE_OWNER -> {
+                            // 群主：解散群
+                            if (conv.status == STATUS_DISSOLVED) {
+                                // 已解散：仅软隐藏群主自己，幂等返回
+                                conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, userId)
+                                DeleteConversationAction.GROUP_DISSOLVED_ALREADY
+                            } else {
+                                conv.status = STATUS_DISSOLVED
+                                conversationMemberDao.softDeleteAllByConversationId(em, convId)
+                                DeleteConversationAction.GROUP_DISSOLVED
+                            }
+                        }
+                        else -> {
+                            // 普通成员：退群
+                            val memberCount = conversationMemberDao.countActiveByConversationId(em, convId)
+                            if (memberCount <= 1L) {
+                                // 最后一个活跃成员：物理删除会话与成员记录（与 leaveGroup 兜底一致）
+                                conversationDao.deleteById(em, convId)
+                                conversationMemberDao.delete(em, member)
+                            } else {
+                                conversationMemberDao.softDeleteByConversationIdAndUserId(em, convId, userId)
+                                conversationDao.incrementMemberCount(em, convId, -1)
+                            }
+                            DeleteConversationAction.GROUP_LEFT
+                        }
+                    }
+                }
+                else -> throw ConversationException(BizCode.CONV_NOT_FOUND, "不支持的会话类型: ${conv.type}")
+            }
+        }
+
+        return action
     }
 
     /**

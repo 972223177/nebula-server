@@ -181,7 +181,7 @@ class GatewayModuleTest {
         single { InviteMemberHandler(conversationService, get(), get()) }
         single { LeaveGroupHandler(conversationService, get(), get()) }
         single { KickMemberHandler(conversationService, get(), get()) }
-        single { DeleteConversationHandler(conversationService) }
+        single { DeleteConversationHandler(conversationService, get(), get()) }
         single { CreatePrivateConversationHandler(conversationService) }
         single { GroupListHandler(conversationService) }
 

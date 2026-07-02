@@ -29,11 +29,12 @@ val conversationHandlerModule = module {
     single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
     // 创建群聊无需会话级锁，Service 内置事务
     single { CreateGroupHandler(get(), get()) }                       // ConversationService + PushService
-    // 邀请/踢人/退群需要会话级锁保护并发
+    // 邀请/踢人/退群/删除群会话需要会话级锁保护并发
     single { InviteMemberHandler(get(), get(), get()) }               // ConversationService + LockManager + PushService
     single { LeaveGroupHandler(get(), get(), get()) }                 // ConversationService + LockManager + PushService
     single { KickMemberHandler(get(), get(), get()) }                 // ConversationService + LockManager + PushService
-    single { DeleteConversationHandler(get()) }                       // ConversationService
+    // 删除会话：按 type/role 分支（私聊隐藏 / 群退群 / 群主解散），需要锁 + 推送
+    single { DeleteConversationHandler(get(), get(), get()) }          // ConversationService + LockManager + PushService
     single { CreatePrivateConversationHandler(get()) }                // ConversationService
     single { GroupListHandler(get()) }                                // ConversationService
 

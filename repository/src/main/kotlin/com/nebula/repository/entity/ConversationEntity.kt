@@ -12,8 +12,9 @@ import java.time.LocalDateTime
 @Entity
 @Table(name = "conversations")
 class ConversationEntity(
-    /** 会话类型：1=私聊, 2=群聊（与 V1__init_schema.sql COMMENT 一致，CQ-12） */
-    @Column(nullable = false)
+    /** 会话类型：1=私聊, 2=群聊（与 V1__init_schema.sql COMMENT 一致，CQ-12）。
+     *  @Column(updatable = false) 防止业务代码意外修改 type（私聊/群聊不可转换）*/
+    @Column(nullable = false, updatable = false)
     var type: Int,
 
     /** 群组名称 */
