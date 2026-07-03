@@ -707,7 +707,14 @@ class ChatService(
                     }
 
                     // Step 2: 关闭连接（触发 cleanupConnection）
-                    observer.onCompleted()
+                    // G-03 修复：旧连接可能已被 gRPC/客户端关闭，onCompleted() 重复调用会抛
+                    // "call already closed"，导致驱逐回调异常传播 → registerWithDeviceType 崩溃
+                    // → handleLoginSuccess 中途退出 → 新登录的 token 映射/userId/投递激活全部丢失。
+                    try {
+                        observer.onCompleted()
+                    } catch (e: Exception) {
+                        logger.warn(e) { "旧连接 onCompleted 失败（连接可能已关闭），跳过" }
+                    }
                 }
             }
         }
