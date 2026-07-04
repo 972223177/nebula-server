@@ -72,6 +72,8 @@ class FriendAddHandlerTest {
         coEvery { friendService.addFriend(any<FriendAddReq>(), any()) } returns FriendAddResult(
             requestId = 42L,
             isMutualAccept = false,
+            isAutoAccepted = false,
+            isAutoRejected = false,
             convId = null,
             fromUid = 1001L,
             toUid = 2001L
@@ -172,6 +174,8 @@ class FriendAddHandlerTest {
         coEvery { friendService.addFriend(any<FriendAddReq>(), any()) } returns FriendAddResult(
             requestId = 5L,
             isMutualAccept = true,
+            isAutoAccepted = false,
+            isAutoRejected = false,
             convId = "private:1001:2001",
             fromUid = 1001L,
             toUid = 2001L

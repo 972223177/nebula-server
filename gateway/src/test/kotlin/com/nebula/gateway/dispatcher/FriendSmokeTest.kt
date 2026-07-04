@@ -101,7 +101,7 @@ class FriendSmokeTest {
 
         // ---- 步骤 1: B 向 A 发送好友申请 ----
         coEvery { friendService.addFriend(any(), any()) } returns FriendAddResult(
-            requestId = 100L, isMutualAccept = false, convId = null, fromUid = 2001L, toUid = 1001L
+            requestId = 100L, isMutualAccept = false, isAutoAccepted = false, isAutoRejected = false, convId = null, fromUid = 2001L, toUid = 1001L
         )
 
         val step1Resp = dispatcherB.dispatchAs("friend/add",
@@ -130,7 +130,7 @@ class FriendSmokeTest {
 
         // ---- 步骤 4: C 向 A 发申请，A 查看待处理列表 ----
         coEvery { friendService.addFriend(any(), any()) } returns FriendAddResult(
-            requestId = 101L, isMutualAccept = false, convId = null, fromUid = 3001L, toUid = 1001L
+            requestId = 101L, isMutualAccept = false, isAutoAccepted = false, isAutoRejected = false, convId = null, fromUid = 3001L, toUid = 1001L
         )
 
         val step4aResp = dispatcherC.dispatchAs("friend/add",

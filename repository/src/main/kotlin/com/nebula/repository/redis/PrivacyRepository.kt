@@ -61,9 +61,13 @@ class PrivacyRepository(
      * 隐私设置数据模型。
      *
      * @param hideOnlineStatus 是否隐藏在线状态
+     * @param friendApprovalMode 好友申请通过模式：0=等待同意, 1=自动通过, 2=自动拒绝
      */
     @Serializable
-    data class PrivacyData(val hideOnlineStatus: Boolean)
+    data class PrivacyData(
+        val hideOnlineStatus: Boolean = false,
+        val friendApprovalMode: Int = 0
+    )
 
     /**
      * 获取用户在线状态可见性设置。
@@ -110,7 +114,7 @@ class PrivacyRepository(
     /**
      * 设置用户在线状态可见性。
      *
-     * 立即写 Redis（实时生效），异步刷 MySQL（best-effort）。
+     * 读-改-写 Redis（保留 friendApprovalMode），异步刷 MySQL（best-effort）。
      *
      * @param userId 用户 ID
      * @param hide true=隐藏在线状态，false=在线状态可见
@@ -118,7 +122,9 @@ class PrivacyRepository(
     suspend fun setHideOnlineStatus(userId: Long, hide: Boolean) {
         try {
             withTimeout(REDIS_TIMEOUT_MS) {
-                redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, json.encodeToString(PrivacyData(hide)))
+                val existing = readPrivacyData(userId)
+                redis.setex("$KEY_PREFIX$userId", TTL_SECONDS,
+                    json.encodeToString(existing.copy(hideOnlineStatus = hide)))
             }
             // Redis 写成功后，异步刷 MySQL（best-effort 模式）
             try {
@@ -135,6 +141,99 @@ class PrivacyRepository(
             logger.warn(e) { "Redis setHideOnlineStatus timeout for userId=$userId" }
         } catch (e: Exception) {
             logger.error(e) { "Redis setHideOnlineStatus failed for userId=$userId" }
+        }
+    }
+
+    /**
+     * 获取用户好友申请通过模式。
+     *
+     * 查询顺序：Redis → MySQL（回退）。
+     * 当用户不存在时返回默认值 0（等待同意）。
+     *
+     * @param userId 用户 ID
+     * @return 好友申请通过模式：0=等待同意, 1=自动通过, 2=自动拒绝
+     */
+    suspend fun getFriendApprovalMode(userId: Long): Int {
+        return try {
+            withTimeout(REDIS_TIMEOUT_MS) {
+                val cached = redis.get("$KEY_PREFIX$userId")
+                if (cached != null) {
+                    val data = json.decodeFromString<PrivacyData>(cached)
+                    return@withTimeout data.friendApprovalMode
+                }
+            }
+            // Redis 未命中，从 MySQL 回退读取
+            val entity = txRunner.execute { em -> userDao.findById(em, userId) }
+            if (entity != null) {
+                val mode = entity.friendApproval
+                // 写回 Redis（保留现有 hideOnlineStatus，若有）
+                withTimeout(REDIS_TIMEOUT_MS) {
+                    val existing = readPrivacyData(userId)
+                    redis.setex("$KEY_PREFIX$userId", TTL_SECONDS,
+                        json.encodeToString(existing.copy(friendApprovalMode = mode)))
+                }
+                return mode
+            }
+            0 // 用户不存在，默认等待同意
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Redis getFriendApprovalMode timeout for userId=$userId, falling back to MySQL" }
+            val entity = txRunner.execute { em -> userDao.findById(em, userId) }
+            return entity?.friendApproval ?: 0
+        } catch (e: Exception) {
+            logger.error(e) { "Redis getFriendApprovalMode failed for userId=$userId" }
+            0
+        }
+    }
+
+    /**
+     * 设置用户好友申请通过模式。
+     *
+     * 读-改-写 Redis（保留 hideOnlineStatus），异步刷 MySQL（best-effort）。
+     *
+     * @param userId 用户 ID
+     * @param mode 好友申请通过模式：0=等待同意, 1=自动通过, 2=自动拒绝
+     */
+    suspend fun setFriendApprovalMode(userId: Long, mode: Int) {
+        try {
+            withTimeout(REDIS_TIMEOUT_MS) {
+                val existing = readPrivacyData(userId)
+                redis.setex("$KEY_PREFIX$userId", TTL_SECONDS,
+                    json.encodeToString(existing.copy(friendApprovalMode = mode)))
+            }
+            // Redis 写成功后，异步刷 MySQL（best-effort 模式）
+            try {
+                txRunner.execute { em ->
+                    val entity = userDao.findById(em, userId) ?: return@execute
+                    entity.friendApproval = mode
+                    userDao.update(em, entity)
+                }
+            } catch (e: Exception) {
+                logger.error(e) { "Async MySQL friendApproval update failed for userId=$userId" }
+                throw e
+            }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn(e) { "Redis setFriendApprovalMode timeout for userId=$userId" }
+        } catch (e: Exception) {
+            logger.error(e) { "Redis setFriendApprovalMode failed for userId=$userId" }
+        }
+    }
+
+    /**
+     * 从 Redis 读取当前隐私设置数据，未命中时返回默认值。
+     *
+     * @param userId 用户 ID
+     * @return 当前隐私设置数据
+     */
+    private suspend fun readPrivacyData(userId: Long): PrivacyData {
+        return try {
+            withTimeout(REDIS_TIMEOUT_MS) {
+                val cached = redis.get("$KEY_PREFIX$userId")
+                if (cached != null) {
+                    json.decodeFromString<PrivacyData>(cached)
+                } else PrivacyData()
+            }
+        } catch (e: Exception) {
+            PrivacyData()
         }
     }
 

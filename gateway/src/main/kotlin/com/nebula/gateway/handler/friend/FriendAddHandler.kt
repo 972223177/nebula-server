@@ -72,16 +72,16 @@ class FriendAddHandler(
             throw e
         }
 
-        if (result.isMutualAccept) {
-            // 双向竞赛：推送 FRIEND_ACCEPTED 给双方
+        if (result.isMutualAccept || result.isAutoAccepted) {
+            // 双向竞赛或自动通过：推送 FRIEND_ACCEPTED 给双方
             val acceptedPayload = FriendAcceptedPayload.newBuilder()
                 .setUid(result.toUid)
                 .setConversationId(result.convId ?: "")
                 .build()
             pushService.pushEventToUser(fromUid, PushEventType.FRIEND_ACCEPTED, acceptedPayload.toByteString())
             pushService.pushEventToUser(result.toUid, PushEventType.FRIEND_ACCEPTED, acceptedPayload.toByteString())
-        } else {
-            // 普通申请：推送 FRIEND_REQUEST 给目标用户
+        } else if (!result.isAutoRejected) {
+            // 普通申请（非自动拒绝）：推送 FRIEND_REQUEST 给目标用户
             val requestPayload = FriendRequestPayload.newBuilder()
                 .setRequestId(result.requestId)
                 .setFromUid(fromUid)

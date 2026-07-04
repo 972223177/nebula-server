@@ -32,7 +32,11 @@ class UserEntity(
 
     /** 在线状态可见性：0=所有人, 1=仅好友, 2=隐藏 */
     @Column(nullable = false)
-    var privacyStatus: Int = 0
+    var privacyStatus: Int = 0,
+
+    /** 好友申请通过模式：0=等待同意, 1=自动通过, 2=自动拒绝 */
+    @Column(nullable = false)
+    var friendApproval: Int = 0
 ) {
     /**
      * JPA 必需的受保护无参构造函数。
@@ -47,7 +51,8 @@ class UserEntity(
         passwordHash = "",
         nickname = "",
         avatar = "",
-        privacyStatus = 0
+        privacyStatus = 0,
+        friendApproval = 0
     )
 
     /** 用户 ID，Snowflake 算法生成 */

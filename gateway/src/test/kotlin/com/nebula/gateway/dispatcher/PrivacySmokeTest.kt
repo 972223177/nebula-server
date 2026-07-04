@@ -88,7 +88,7 @@ class PrivacySmokeTest {
         assertEquals(BizCode.OK.code, setResp.code, "步骤1: 设置隐藏应返回 200")
 
         // ---- 步骤 2: 读取确认 ----
-        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
+        coEvery { userPrivacyService.getPrivacySettings(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
 
         val getDispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),
@@ -118,7 +118,7 @@ class PrivacySmokeTest {
         assertEquals(BizCode.OK.code, setResp.code, "步骤1: 设置可见应返回 200")
 
         // ---- 步骤 2: 读取确认 ----
-        coEvery { userPrivacyService.getHideOnlineStatus(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
+        coEvery { userPrivacyService.getPrivacySettings(any(), any()) } returns GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
 
         val getDispatcher = singleHandlerDispatcher(
             GetPrivacyHandler(userPrivacyService),

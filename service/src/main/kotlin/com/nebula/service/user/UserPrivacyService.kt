@@ -1,5 +1,6 @@
 package com.nebula.service.user
 
+import com.nebula.chat.user.FriendApprovalMode
 import com.nebula.chat.user.GetPrivacyReq
 import com.nebula.chat.user.GetPrivacyResp
 import com.nebula.chat.user.SetPrivacyReq
@@ -9,7 +10,7 @@ import com.nebula.repository.redis.PrivacyRepository
 /**
  * 用户隐私设置业务服务（D-09, D-11, D-57）。
  *
- * 提供在线状态可见性的设置和查询。
+ * 提供在线状态可见性和好友申请通过模式的设置和查询。
  * Redis + MySQL 双写策略：Redis 实时生效，MySQL 异步持久化。
  */
 class UserPrivacyService(
@@ -40,15 +41,50 @@ class UserPrivacyService(
     }
 
     /**
-     * 查询在线状态可见性。
+     * 设置好友申请通过模式。
+     *
+     * 委托 PrivacyRepository 执行 Redis 写 + MySQL 异步持久化。
+     *
+     * @param userId 当前用户 ID
+     * @param mode 好友申请通过模式枚举值
+     */
+    suspend fun setFriendApprovalMode(userId: Long, mode: FriendApprovalMode) {
+        privacyRepository.setFriendApprovalMode(userId, mode.number)
+    }
+
+    /**
+     * 查询隐私设置（在线状态可见性 + 好友申请通过模式）。
      *
      * @param userId 当前用户 ID
      * @param req 查询请求
      * @return 隐私设置响应
      */
-    suspend fun getHideOnlineStatus(userId: Long, req: GetPrivacyReq): GetPrivacyResp {
+    suspend fun getPrivacySettings(userId: Long, req: GetPrivacyReq): GetPrivacyResp {
         val hide = privacyRepository.getHideOnlineStatus(userId)
-        return GetPrivacyResp.newBuilder().setHideOnlineStatus(hide).build()
+        val approvalMode = privacyRepository.getFriendApprovalMode(userId)
+        return GetPrivacyResp.newBuilder()
+            .setHideOnlineStatus(hide)
+            .setFriendApproval(FriendApprovalMode.forNumber(approvalMode))
+            .build()
+    }
+
+    /**
+     * 查询在线状态可见性（已废弃，推荐使用 getPrivacySettings）。
+     */
+    @Deprecated("Use getPrivacySettings instead", ReplaceWith("getPrivacySettings(userId, req)"))
+    suspend fun getHideOnlineStatus(userId: Long, req: GetPrivacyReq): GetPrivacyResp {
+        return getPrivacySettings(userId, req)
+    }
+
+    /**
+     * 获取用户好友申请通过模式。
+     *
+     * @param userId 用户 ID
+     * @return 好友申请通过模式枚举值
+     */
+    suspend fun getFriendApprovalMode(userId: Long): FriendApprovalMode {
+        val mode = privacyRepository.getFriendApprovalMode(userId)
+        return FriendApprovalMode.forNumber(mode)
     }
 
     /**

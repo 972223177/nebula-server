@@ -14,3 +14,6 @@ out/
 
 # IM 测试账号配置（含密码，不提交）
 im_test/accounts.json
+
+# CodeBuddy 计划文件（临时产物，不提交）
+.codebuddy/plans/

@@ -43,8 +43,13 @@ class SetPrivacyHandler(
         val session = currentCoroutineContext().requireSession()
         val userId = session.userId
 
-        // 委托 UserPrivacyService 处理业务逻辑
+        // 处理在线状态隐藏设置
         userPrivacyService.setHideOnlineStatus(userId, req)
+
+        // 处理好友申请通过模式设置（仅当客户端传入时才修改）
+        if (req.hasFriendApproval()) {
+            userPrivacyService.setFriendApprovalMode(userId, req.friendApproval)
+        }
 
         // D-57: 切换隐藏状态时同步更新在线状态服务
         val newStatus = if (req.hideOnlineStatus) {

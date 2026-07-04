@@ -22,6 +22,6 @@ class GetPrivacyHandler(
 
     override suspend fun handle(req: GetPrivacyReq): GetPrivacyResp {
         val session = currentCoroutineContext().requireSession()
-        return userPrivacyService.getHideOnlineStatus(session.userId, req)
+        return userPrivacyService.getPrivacySettings(session.userId, req)
     }
 }

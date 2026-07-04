@@ -97,10 +97,19 @@ message BatchGetStatusResp {
   repeated UserOnlineStatus statuses = 1;  // 在线状态列表
 }
 
+// ---- friendApproval 枚举 ----
+// 好友申请通过模式：控制他人向当前用户发起好友申请时的处理策略
+enum FriendApprovalMode {
+  WAIT_APPROVAL = 0;                  // 等待同意（默认），好友申请进入待处理列表
+  AUTO_ACCEPT = 1;                    // 自动通过，好友申请自动建立好友关系
+  AUTO_REJECT = 2;                    // 自动拒绝，好友申请直接拒绝，不推送通知
+}
+
 // ---- user/setPrivacy ----
 // 设置隐私选项
 message SetPrivacyReq {
   bool hide_online_status = 1;        // 是否隐藏在线状态
+  optional FriendApprovalMode friend_approval = 2;  // 好友申请通过模式，不传时不修改现有设置
 }
 
 // ---- user/getPrivacy ----
@@ -110,6 +119,7 @@ message GetPrivacyReq {}
 // 获取隐私选项响应
 message GetPrivacyResp {
   bool hide_online_status = 1;        // 是否隐藏在线状态
+  FriendApprovalMode friend_approval = 2;  // 好友申请通过模式
 }
 
 // 用户简要信息（多接口复用）

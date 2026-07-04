@@ -29,6 +29,8 @@ import com.nebula.repository.entity.FriendshipEntity
 import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
+import jakarta.persistence.PersistenceException
 import java.time.LocalDateTime
 
 /**
@@ -58,6 +60,16 @@ class FriendService(
         /** M6: 批量关系查询上限，防止单事务过大数据集 */
         private const val MAX_BATCH_CHECK_SIZE = 500
 
+        /** 好友申请通过模式：等待同意（默认） */
+        private const val APPROVAL_WAIT = 0
+        /** 好友申请通过模式：自动通过 */
+        private const val APPROVAL_AUTO_ACCEPT = 1
+        /** 好友申请通过模式：自动拒绝 */
+        private const val APPROVAL_AUTO_REJECT = 2
+
+        /** 日志记录器 */
+        private val logger = KotlinLogging.logger {}
+
         /**
          * 构造私聊会话 ID，格式 `private:smaller:larger`（D-43）。
          */
@@ -85,6 +97,9 @@ class FriendService(
         val smaller = minOf(fromUid, toUid)
         val larger = maxOf(fromUid, toUid)
 
+        // 预先查询目标用户的好友申请通过模式（走 Redis→MySQL，独立于后续事务）
+        val approvalMode = privacyRepository.getFriendApprovalMode(toUid)
+
         return txRunner.execute { em ->
             // 检查是否已是好友
             val existingFriendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
@@ -92,7 +107,87 @@ class FriendService(
                 throw FriendException(BizCode.ALREADY_FRIEND)
             }
 
-            // 双向竞赛检测：对方是否已发送 pending 申请
+            // 好友申请通过模式检查
+            when (approvalMode) {
+                APPROVAL_AUTO_REJECT -> {
+                    // 自动拒绝：直接创建 status=2 的申请记录，不推送通知
+                    logger.info { "好友申请自动拒绝: fromUid=$fromUid, toUid=$toUid, mode=AUTO_REJECT" }
+                    val requestEntity = FriendRequestEntity(
+                        fromUid = fromUid,
+                        toUid = toUid,
+                        status = 2,
+                        message = req.message
+                    ).apply {
+                        createdAt = LocalDateTime.now()
+                        updatedAt = LocalDateTime.now()
+                    }
+                    val savedRequest = friendRequestDao.insert(em, requestEntity)
+                    return@execute FriendAddResult(
+                        requestId = savedRequest.id ?: 0L,
+                        isMutualAccept = false,
+                        isAutoAccepted = false,
+                        isAutoRejected = true,
+                        convId = null,
+                        fromUid = fromUid,
+                        toUid = toUid
+                    )
+                }
+
+                APPROVAL_AUTO_ACCEPT -> {
+                    // 自动通过：直接建立好友关系 + 私聊会话
+                    val convId = buildPrivateConvId(smaller, larger)
+
+                    // 创建/恢复好友关系
+                    if (existingFriendship == null) {
+                        val newFriendship = FriendshipEntity(
+                            userId = smaller,
+                            friendId = larger
+                        ).apply {
+                            deleted = 0
+                            createdAt = LocalDateTime.now()
+                        }
+                        friendshipDao.insert(em, newFriendship)
+                    } else if (!existingFriendship.isActive) {
+                        existingFriendship.deleted = 0
+                    }
+
+                    // 创建私聊会话（如果不存在）
+                    var conv = conversationDao.findById(em, convId)
+                    if (conv == null) {
+                        conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
+                        conv.id = convId
+                        conv.createdAt = LocalDateTime.now()
+                        conv.updatedAt = LocalDateTime.now()
+                        conversationDao.insert(em, conv)
+                    }
+
+                    // 创建双方会话成员
+                    listOf(smaller, larger).forEach { uid ->
+                        val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
+                        if (existingMember == null) {
+                            val member = ConversationMemberEntity(
+                                conversationId = convId,
+                                userId = uid
+                            )
+                            member.joinedAt = LocalDateTime.now()
+                            conversationMemberDao.insert(em, member)
+                        }
+                    }
+
+                    logger.info { "好友申请自动通过: fromUid=$fromUid, toUid=$toUid, convId=$convId, mode=AUTO_ACCEPT" }
+                    return@execute FriendAddResult(
+                        requestId = 0L,
+                        isMutualAccept = false,
+                        isAutoAccepted = true,
+                        isAutoRejected = false,
+                        convId = convId,
+                        fromUid = fromUid,
+                        toUid = toUid
+                    )
+                }
+            }
+
+            // WAIT_APPROVAL（默认）：进入原流程 —— 双向竞赛检测
             val reverseRequest = friendRequestDao.findByFromUidAndToUidAndStatus(em, toUid, fromUid, 0)
             if (reverseRequest != null) {
                 // 双向竞赛：自动创建好友关系 + 私聊会话
@@ -150,6 +245,8 @@ class FriendService(
                 return@execute FriendAddResult(
                     requestId = reverseRequest.id ?: 0L,
                     isMutualAccept = true,
+                    isAutoAccepted = false,
+                    isAutoRejected = false,
                     convId = convId,
                     fromUid = fromUid,
                     toUid = toUid
@@ -177,6 +274,8 @@ class FriendService(
             FriendAddResult(
                 requestId = savedRequest.id ?: 0L,
                 isMutualAccept = false,
+                isAutoAccepted = false,
+                isAutoRejected = false,
                 convId = null,
                 fromUid = fromUid,
                 toUid = toUid
@@ -582,7 +681,11 @@ data class FriendAddResult(
     val requestId: Long,
     /** 是否双向竞赛自动接受（双方同时申请时触发自动建立好友关系） */
     val isMutualAccept: Boolean,
-    /** 私聊会话 ID，双向竞赛或接受后分配 */
+    /** 是否自动通过（目标用户设置了自动通过模式） */
+    val isAutoAccepted: Boolean,
+    /** 是否自动拒绝（目标用户设置了自动拒绝模式） */
+    val isAutoRejected: Boolean,
+    /** 私聊会话 ID，双向竞赛或自动通过时分配 */
     val convId: String?,
     /** 发起者用户 ID */
     val fromUid: Long,
