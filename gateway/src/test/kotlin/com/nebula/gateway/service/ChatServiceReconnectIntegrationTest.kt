@@ -390,17 +390,19 @@ class ChatServiceReconnectIntegrationTest {
         // Given: tokenToObserver 中包含 ChatStreamObserver 实例（与生产代码一致：
         // handleLoginSuccess 存入的是 ChatStreamObserver，而非 gRPC 原生 observer）
         val observer = createChatStreamObserver(mockResponseObserver)
+        // CQ-12: cleanupConnection 使用 token 字段精确 key-based 删除，必须设置 token 字段
+        setField(observer, "token", "test-token")
         val tokenToObserver: ConcurrentHashMap<String, StreamObserver<Envelope>> =
             getField(chatService, "tokenToObserver")
         tokenToObserver["test-token"] = observer
-        assert(tokenToObserver.values.contains(observer)) { "Expected observer in tokenToObserver" }
+        assert(tokenToObserver.containsKey("test-token")) { "Expected observer in tokenToObserver by key" }
 
         // When: 调用 cleanupConnection()
         invokeMethod(observer, "cleanupConnection")
 
-        // Then: tokenToObserver.values 不再包含 observer（cleanupConnection 用 this 精确匹配）
-        assert(!tokenToObserver.values.contains(observer)) {
-            "Expected observer removed from tokenToObserver"
+        // Then: tokenToObserver 中不再包含 test-token 的映射（cleanupConnection 用 token key 精确删除）
+        assert(!tokenToObserver.containsKey("test-token")) {
+            "Expected observer removed from tokenToObserver by key"
         }
     }
 

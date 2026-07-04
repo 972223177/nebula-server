@@ -378,18 +378,28 @@ class SessionRegistry(
     }
 
     /**
-     * H2 修复：公开的清理设备类型映射方法，供 ChatService.cleanupConnection 调用。
+     * H2 修复：公开的条件清理设备类型映射方法，供 ChatService.cleanupConnection 调用。
      *
      * 连接断开时清理 Redis 中的 deviceType→token 映射，防止泄漏。
      * 注意：不清除 token 主 key（token 保留以支持断连重连）。
      *
+     * **条件删除策略（CQ-12）**：先读取 Redis 当前值，仅当值仍为 expectedToken 时才删除。
+     * 防止旧连接的异步清理误删新连接重连后写入的映射（竞态条件修复）。
+     * 非原子操作（read-then-delete），但窗口极小且最坏影响为映射暂时丢失，可被下次登录覆盖。
+     *
      * @param userId 用户 ID
      * @param deviceType 设备类型字符串
+     * @param expectedToken 期望的旧 token，仅当 Redis 中映射值为该 token 时才执行删除
      */
-    suspend fun cleanupDeviceTypeMapping(userId: Long, deviceType: String) {
+    suspend fun cleanupDeviceTypeMapping(userId: Long, deviceType: String, expectedToken: String) {
         try {
             withTimeout(redisTimeoutMs) {
-                sessionStore.deleteKey("session:$userId:$deviceType")
+                val key = "session:$userId:$deviceType"
+                val currentValue = sessionStore.findRaw(key)
+                // CQ-12: 仅当 Redis 中的值仍为旧 token 时才删除，防止误删新连接的映射
+                if (currentValue == expectedToken) {
+                    sessionStore.deleteKey(key)
+                }
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Device type mapping cleanup timeout for userId=$userId" }

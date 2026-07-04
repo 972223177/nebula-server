@@ -286,16 +286,36 @@ class ChatService(
 
         override fun onCompleted() {
             logger.info { "[stream] #$connId onCompleted userId=$userId token=${token?.take(8)}..." }
-            cleanupPending()
-            cleanupConnection()
-            responseObserver.onCompleted()
+            try {
+                cleanupPending()
+                cleanupConnection()
+            } catch (e: Exception) {
+                logger.error(e) { "[stream] #$connId cleanupConnection 失败，跳过以释放 gRPC 资源" }
+            } finally {
+                // CQ-12: responseObserver.onCompleted() 可能因 call 已关闭而抛异常，需要兜底容错
+                try {
+                    responseObserver.onCompleted()
+                } catch (e: Exception) {
+                    logger.warn(e) { "[stream] #$connId responseObserver.onCompleted 失败（连接可能已关闭）" }
+                }
+            }
         }
 
         override fun onError(t: Throwable) {
             logger.error(t) { "[stream] #$connId onError userId=$userId token=${token?.take(8)}..." }
-            cleanupPending()
-            cleanupConnection()
-            responseObserver.onError(t)
+            try {
+                cleanupPending()
+                cleanupConnection()
+            } catch (e: Exception) {
+                logger.error(e) { "[stream] #$connId cleanupConnection 失败，跳过以释放 gRPC 资源" }
+            } finally {
+                // CQ-12: responseObserver.onError() 可能因 call 已关闭而抛异常，需要兜底容错
+                try {
+                    responseObserver.onError(t)
+                } catch (e: Exception) {
+                    logger.warn(e) { "[stream] #$connId responseObserver.onError 失败（连接可能已关闭）" }
+                }
+            }
         }
 
         /**
@@ -440,10 +460,13 @@ class ChatService(
          * 4. 启动 60s 延迟离线任务，到期后检查无剩余设备则标记离线 + 推送（D-57）
          */
         fun cleanupConnection() {
-            // D-67 并发安全：使用 values.remove(this) 精确匹配当前 ChatStreamObserver 实例
-            // fix: 使用 this 而非 responseObserver 字段，因为 tokenToObserver 存储的是 ChatStreamObserver 实例，
-            // 而 responseObserver 字段是 gRPC 原生 observer（不同对象），身份比较永不匹配导致内存泄漏
-            tokenToObserver.values.remove(this)
+            // CQ-12: 使用 token 字段精确 key-based 删除，替代 O(n) 全表扫描 values.remove(this)。
+            // tokenToObserver 存储的是 ChatStreamObserver 实例（handleLoginSuccess L590）。
+            // 正常流程中 token 已设置（登录后），清理时通过 token key 精确删除。
+            // 若 token 为 null（未登录即断连），该 observer 不在 tokenToObserver 中，无需清理。
+            token?.let { tok ->
+                tokenToObserver.remove(tok)
+            }
 
             // 仅清除 L1 本地缓存，保留 Redis 中的 token。
             // 客户端断连后可用同一 token 重新鉴权（AuthInterceptor 从 Redis 恢复 Session）。
@@ -452,12 +475,15 @@ class ChatService(
                 sessionRegistry.removeFromLocalCache(tok)
             }
 
-            // H2: 清理 Redis 设备类型映射，防止泄漏。
-            // 不清除 token 主 key（支持重连），但清除 deviceType→token 交叉引用。
+            // H2: 条件清理 Redis 设备类型映射（CQ-12 竞态修复）。
+            // 传递 expectedToken 参数，仅当 Redis 中映射值仍为旧 token 时才删除，
+            // 防止旧连接的异步清理误删新连接重连后写入的映射。
             userId?.let { uid ->
                 deviceType?.let { dt ->
-                    scope.launch {
-                        sessionRegistry.cleanupDeviceTypeMapping(uid, dt)
+                    token?.let { tok ->
+                        scope.launch {
+                            sessionRegistry.cleanupDeviceTypeMapping(uid, dt, tok)
+                        }
                     }
                 }
             }
