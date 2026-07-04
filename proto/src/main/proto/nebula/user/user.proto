@@ -32,12 +32,14 @@ message LoginResp {
 
 // ---- user/register ----
 // 注册请求：创建新用户账户（D-01）
-// 注意：不包含 device_type 字段 — 注册不创建 Session，设备类型在后续登录时提供
+// 注册成功后自动完成登录状态（注册即登录），无需客户端二次调用 login
 message RegisterReq {
   string username = 1;                // 用户名，登录唯一凭证
   string password = 2;                // 密码，BCrypt 哈希后存储
   string nickname = 3;                // 显示昵称
   optional string avatar = 4;         // 头像 URL，可选
+  common.DeviceType device_type = 5;  // 注册设备类型（注册即登录，ChatService 用于创建 Session）
+  string device_id = 6;               // 客户端设备唯一标识（ChatService 用于 Session 绑定）
 }
 
 // 注册响应

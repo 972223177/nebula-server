@@ -4,10 +4,13 @@ import com.nebula.chat.Direction
 import com.nebula.chat.Envelope
 import com.nebula.chat.Message
 import com.nebula.chat.PushEventType
+import com.nebula.chat.Request
 import com.nebula.chat.Response
 import com.nebula.chat.friend.StatusChangedPayload
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.user.LoginResp
+import com.nebula.chat.user.RegisterReq
+import com.nebula.chat.user.RegisterResp
 import com.nebula.common.BizCode
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerRegistry
@@ -522,9 +525,9 @@ class ChatService(
     /**
      * 处理业务请求（Direction.REQUEST）。
      *
-     * D-05 绑定流程：
+     * 绑定流程（D-05, CQ-13）：
      * 1. 调用 dispatcher.dispatch() 分发请求
-     * 2. 若响应是 user/login 且 code=BizCode.OK.code，执行 Session 绑定
+     * 2. 若响应是 user/login 或 user/register 成功，执行 Session 绑定
      * 3. 否则直接返回响应
      */
     private suspend fun handleRequest(
@@ -551,6 +554,9 @@ class ChatService(
         if (response.method == "user/login" && response.code == BizCode.OK.code) {
             // D-05 拦截：登录成功，绑定 Session
             handleLoginSuccess(response, responseObserver, envelope.requestId)
+        } else if (response.method == "user/register" && response.code == BizCode.OK.code) {
+            // CQ-13 拦截：注册成功，直接完成 Session 绑定（注册即登录）
+            handleRegisterSuccess(response, responseObserver, envelope.request, envelope.requestId)
         } else {
             // 其他响应，直接返回
             // 注：gRPC knownLengthPendingAllocation 已由 bindService() 中的自定义
@@ -646,6 +652,87 @@ class ChatService(
             .setResponse(response)
             .build()
         (responseObserver as ChatStreamObserver).sendEnvelope(loginRespEnvelope)
+    }
+
+    /**
+     * 处理注册成功响应 — 注册即登录（CQ-13）。
+     *
+     * 注册成功后自动完成 Session 绑定，客户端无需二次调用 user/login。
+     * 与 [handleLoginSuccess] 共享相同的 Session 注册 + StreamObserver 绑定流程。
+     *
+     * 注意：RegisterReq 中不含 deviceType 字段时（老客户端兼容），使用默认 MOBILE 类型。
+     *
+     * @param response 注册成功响应（code=BizCode.OK.code）
+     * @param responseObserver 当前连接的 StreamObserver
+     * @param request 客户端原始注册请求（含 device_type、device_id 等设备信息）
+     * @param requestId 客户端请求的 requestId
+     */
+    private suspend fun handleRegisterSuccess(
+        response: Response,
+        responseObserver: StreamObserver<Envelope>,
+        request: Request,
+        requestId: String
+    ) {
+        // 反序列化 RegisterResp（获取 uid + token）
+        val registerResp = RegisterResp.parseFrom(response.result.toByteArray())
+        // 反序列化 RegisterReq（获取 device_type + device_id，用于 Session 创建）
+        val registerReq = RegisterReq.parseFrom(request.params)
+
+        // CQ-13: 构建 Session，device_type 来自注册请求（兼容老客户端默认 MOBILE）
+        val deviceTypeName = if (registerReq.deviceTypeValue != 0) registerReq.deviceType.name else "MOBILE"
+        val deviceId = registerReq.deviceId
+        val session = Session(
+            userId = registerResp.uid,
+            token = registerResp.token,
+            deviceType = deviceTypeName,
+            deviceId = deviceId,
+            connectionId = UUID.randomUUID().toString()
+        )
+
+        // 注册 Session（同类型设备互踢，返回被驱逐的旧 token）
+        val evictedToken = sessionRegistry.registerWithDeviceType(session)
+
+        // 更新 tokenToObserver：清理旧 token 映射，设置新映射
+        if (evictedToken != null) {
+            tokenToObserver.remove(evictedToken)
+        }
+        tokenToObserver[session.token] = responseObserver
+
+        // D-01: 注册 StreamObserver 到 UserStreamRegistry
+        require(responseObserver is ChatStreamObserver) {
+            "responseObserver must be ChatStreamObserver"
+        }
+        responseObserver.userId = registerResp.uid
+        responseObserver.token = session.token
+        responseObserver.deviceType = session.deviceType
+
+        // D-57: 重连时取消旧的延迟离线任务
+        responseObserver.delayedOfflineJob?.cancel()
+
+        userStreamRegistry.register(registerResp.uid, responseObserver)
+
+        // D-57: 标记在线 + 推送状态变更给所有好友
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                onlineStatusService.setOnline(registerResp.uid)
+            }
+            pushStatusChangeToFriends(registerResp.uid, 1)
+        }
+
+        // D-67: 激活缓存再投递
+        if (evictedToken != null) {
+            responseObserver.activateDelivery()
+        } else {
+            responseObserver.deliveryActive = true
+        }
+
+        // 发送 RegisterResp Envelope 给客户端
+        val registerRespEnvelope = Envelope.newBuilder()
+            .setDirection(Direction.RESPONSE)
+            .setRequestId(requestId)
+            .setResponse(response)
+            .build()
+        (responseObserver as ChatStreamObserver).sendEnvelope(registerRespEnvelope)
     }
 
     // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。
