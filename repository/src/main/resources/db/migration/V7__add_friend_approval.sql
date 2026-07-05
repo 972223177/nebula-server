@@ -4,4 +4,4 @@
 -- 1=AUTO_ACCEPT（自动通过）
 -- 2=AUTO_REJECT（自动拒绝）
 
-ALTER TABLE users ADD COLUMN friend_approval TINYINT NOT NULL DEFAULT 0 AFTER privacy_status;
+ALTER TABLE users ADD COLUMN friend_approval INT NOT NULL DEFAULT 0 AFTER privacy_status;
