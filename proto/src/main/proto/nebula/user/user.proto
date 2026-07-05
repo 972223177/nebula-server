@@ -107,6 +107,8 @@ enum FriendApprovalMode {
 
 // ---- user/setPrivacy ----
 // 设置隐私选项
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果；
+// 隐私设置变更后会通过 PUSH 推送状态变更通知（StatusChangedPayload）
 message SetPrivacyReq {
   bool hide_online_status = 1;        // 是否隐藏在线状态
   optional FriendApprovalMode friend_approval = 2;  // 好友申请通过模式，不传时不修改现有设置

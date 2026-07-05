@@ -35,6 +35,7 @@ message CreateGroupResp {
 
 // ---- conversation/invite_member ----
 // 邀请成员加入群聊
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message InviteMemberReq {
   string conversation_id = 1;         // 会话ID
   repeated int64 uids = 2;            // 被邀请者 UID 列表
@@ -42,12 +43,14 @@ message InviteMemberReq {
 
 // ---- conversation/leave_group ----
 // 主动退出群聊
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message LeaveGroupReq {
   string conversation_id = 1;         // 会话ID
 }
 
 // ---- conversation/kick_member ----
 // 踢出群成员
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message KickMemberReq {
   string conversation_id = 1;         // 会话ID
   int64 uid = 2;                      // 被踢成员 UID
@@ -55,6 +58,7 @@ message KickMemberReq {
 
 // ---- conversation/edit_group_info ----
 // 编辑群资料（名称/头像）
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message EditGroupReq {
   string conversation_id = 1;         // 会话ID
   optional string name = 2;           // 新群名称，不传则不修改
@@ -148,6 +152,7 @@ message GroupListResp {
 
 // ---- conversation/delete ----
 // 从会话列表删除会话（软删除当前用户的 member 记录）
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message DeleteConversationReq {
   string conversation_id = 1;         // 会话 ID
 }

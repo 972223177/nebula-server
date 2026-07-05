@@ -19,18 +19,21 @@ message FriendAddResp {
 
 // ---- friend/accept ----
 // 同意好友申请
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message FriendAcceptReq {
   int64 request_id = 1;               // 好友申请 ID
 }
 
 // ---- friend/reject ----
 // 拒绝好友申请
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message FriendRejectReq {
   int64 request_id = 1;               // 好友申请 ID
 }
 
 // ---- friend/delete ----
 // 删除好友
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果
 message FriendDeleteReq {
   int64 uid = 1;                      // 好友 UID
 }

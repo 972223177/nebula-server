@@ -38,6 +38,8 @@ message ChatMessage {
 
 // ---- message/read ----
 // 已读报告请求：客户端上报已读到哪条消息
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果；
+// 已读回执通过 PUSH 推送（ReadReceiptPayload）告知对方，不走本接口的响应
 message ReadReportReq {
   string conversation_id = 1;         // 会话ID
   int64 last_read_msg_id = 2;         // 最后一条已读消息 ID
