@@ -17,3 +17,14 @@ im_test/accounts.json
 
 # CodeBuddy 计划文件（临时产物，不提交）
 .codebuddy/plans/
+
+# 临时搁置区：用户未批准提交的文件（详见 .codebuddy/staging/暂不需提交.md）
+# 后续 Agent 默认不要提交以下路径，除非用户提前明确说明
+docs/_meta/
+.codebuddy/agents/doc-coordinator.md
+.codebuddy/agents/doc-architect-expert.md
+.codebuddy/agents/doc-module-expert.md
+.codebuddy/agents/doc-business-expert.md
+.codebuddy/agents/doc-reliability-expert.md
+.codebuddy/agents/doc-security-expert.md
+.codebuddy/agents/doc-client-expert.md
