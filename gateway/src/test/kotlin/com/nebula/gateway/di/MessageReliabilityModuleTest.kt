@@ -58,7 +58,7 @@ class MessageReliabilityModuleTest {
         single { idGenerator }
         single { deadLetterService }
         single { seqService }
-        single(named("sendHandlerScope")) { scope }
+        single(named("serverScope")) { scope }
     }
 
     @AfterEach

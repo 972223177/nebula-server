@@ -33,9 +33,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -87,14 +87,15 @@ class ChatService(
     private val privacyService: UserPrivacyService,
     private val deadLetterService: DeadLetterService,
     /**
-     * 协程作用域 — 用于桥接 gRPC 回调线程与协程。
+     * 服务级后台任务协程作用域（D-85）。
      *
-     * gRPC 的 StreamObserver.onNext() 在 gRPC worker 线程调用，而 Dispatcher.dispatch() 是 suspend 函数。
-     * 通过此作用域启动协程执行异步操作。
+     * 用于跨连接存活的后台任务：延迟离线（60s 伪在线窗口）、死信补偿、设备类型清理、
+     * 在线状态变更推送、好友状态广播等。使用 IO 调度器 + SupervisorJob。
      *
-     * 可注入以支持测试：测试中传入 TestScope，确保所有 fire-and-forget 协程在 runTest 返回时完成。
+     * 与 per-connection 的 [ChatStreamObserver.connectionScope] 分离：serverScope 中的任务
+     * 不受连接断开的 cancel 影响。
      */
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val serverScope: CoroutineScope
 ) : BindableService {
 
     /** token → StreamObserver 映射，用于 eviction callback 查找对应连接推送 LOGOUT */
@@ -154,23 +155,34 @@ class ChatService(
         /** 连接编号（递增，用于关联同一连接的多帧消息）。非 private，允许 handlePing 等外部方法读取。 */
         internal val connId = observerCounter.incrementAndGet()
 
-        /** 协程互斥锁：gRPC MessageFramer 非线程安全，多个协程并发 onNext 会踩坏缓冲区 */
-        private val sendMutex = Mutex()
+        /** 协程互斥锁：gRPC MessageFramer 非线程安全，多个协程并发 onNext 会踩坏缓冲区。
+         * D-85: 改为 internal，eviction callback 同步发送 DISCONNECT 时需直接访问。 */
+        internal val sendMutex = Mutex()
 
         /**
-         * 线程安全的 Envelope 发送入口（D-67）。
+         * 每连接独立协程作用域（D-85）。
+         *
+         * 替换 ChatService 上的全局 scope，实现连接断开时自动取消所有在途请求和关联异步任务。
+         * 使用 IO 调度器 + SupervisorJob：单子协程崩溃不取消兄弟协程，连接 cancel 时一刀切。
+         */
+        internal val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+        /**
+         * 线程安全的 Envelope 发送入口（D-67, D-85 suspend 重构）。
          *
          * gRPC MessageFramer 非线程安全，多个协程并发调用 [responseObserver.onNext] 会踩坏缓冲区。
          * 本方法通过 [sendMutex] 串行化所有对 [responseObserver.onNext] 的调用。
          *
-         * 非 suspend 函数 — 内部使用 [runBlocking] 桥接协程锁。
-         * responseObserver.onNext(event) 本质是将字节写入 Netty 缓冲区（非阻塞），
-         * runBlocking 不会造成协程饥饿。suspend 调用方也可安全使用。
+         * D-85: 改为 suspend 函数，消除 [runBlocking] 对 IO 线程的阻塞。
+         * 调用方必须在协程上下文中（connectionScope.launch / serverScope.launch）。
+         * gRPC 线程上的 onNext 经 connectionScope.launch 桥接；handlePing 内部经
+         * connectionScope.launch 调用本方法；eviction DISCONNECT 经 serverScope.launch
+         * 异步发送（见 ensureEvictionCallbackRegistered，已不再使用 runBlocking）。
          *
          * @param envelope 待发送的 Envelope
          */
-        internal fun sendEnvelope(envelope: Envelope) {
-            runBlocking { sendMutex.withLock { responseObserver.onNext(envelope) } }
+        internal suspend fun sendEnvelope(envelope: Envelope) {
+            sendMutex.withLock { responseObserver.onNext(envelope) }
         }
 
         init {
@@ -267,7 +279,7 @@ class ChatService(
             when (envelope.direction) {
                 Direction.REQUEST -> {
                     logger.info { "[stream] 收到 REQUEST requestId=${envelope.requestId}，method=${envelope.request.method}，metadata=${envelope.request.metadataMap}" }
-                    scope.launch {
+                    connectionScope.launch {
                         // fix: 传递 ChatStreamObserver（this）而非 gRPC responseObserver，
                         // 确保 handleLoginSuccess 中的 require(responseObserver is ChatStreamObserver) 不会失败
                         handleRequest(envelope, this@ChatStreamObserver)
@@ -281,7 +293,7 @@ class ChatService(
                 // PUSH: PushService 通过 UserStreamRegistry 推送消息（聊天消息/已读回执/投递确认），
                 // 由于 UserStreamRegistry 存储的是 ChatStreamObserver 实例，需在此转发到 gRPC 客户端
                 Direction.RESPONSE, Direction.PONG, Direction.PUSH -> {
-                    sendEnvelope(envelope)
+                    connectionScope.launch { sendEnvelope(envelope) }
                 }
                 else -> logger.warn { "[stream] Unexpected direction: ${envelope.direction}" }
             }
@@ -292,6 +304,7 @@ class ChatService(
             try {
                 cleanupPending()
                 cleanupConnection()
+                connectionScope.cancel()
             } catch (e: Exception) {
                 logger.error(e) { "[stream] #$connId cleanupConnection 失败，跳过以释放 gRPC 资源" }
             } finally {
@@ -309,6 +322,7 @@ class ChatService(
             try {
                 cleanupPending()
                 cleanupConnection()
+                connectionScope.cancel()
             } catch (e: Exception) {
                 logger.error(e) { "[stream] #$connId cleanupConnection 失败，跳过以释放 gRPC 资源" }
             } finally {
@@ -336,25 +350,27 @@ class ChatService(
          */
         override fun deliver(envelope: Envelope) {
             if (deliveryActive) {
-                try {
-                    sendEnvelope(envelope)
-                } catch (e: Exception) {
-                    // D-75: 投递失败，跟踪重试次数
-                    val key = envelopeKey(envelope)
-                    val retryCount = requireNotNull(retryCountMap.merge(key, 1) { old, _ -> old + 1 }) { "merge 结果不能为null" }
-                    logger.warn(e) { "投递失败（第 $retryCount 次），envelopeKey=$key" }
-                    if (retryCount >= MAX_PENDING_RETRIES) {
-                        retryCountMap.remove(key)
-                        // 异步创建死信，不阻塞当前线程
-                        scope.launch { createDeadLetter(envelope, "投递失败已达${MAX_PENDING_RETRIES}次") }
-                    } else {
-                        // 重新入队等待下次重试
-                        if (pendingBuffer.size >= MAX_PENDING) {
-                            pendingBuffer.poll()
+                connectionScope.launch {
+                    try {
+                        sendEnvelope(envelope)
+                    } catch (e: Exception) {
+                        // D-75: 投递失败，跟踪重试次数（移入 launch 块以捕获 sendEnvelope suspend 异常）
+                        val key = envelopeKey(envelope)
+                        val retryCount = requireNotNull(retryCountMap.merge(key, 1) { old, _ -> old + 1 }) { "merge 结果不能为null" }
+                        logger.warn(e) { "投递失败（第 $retryCount 次），envelopeKey=$key" }
+                        if (retryCount >= MAX_PENDING_RETRIES) {
+                            retryCountMap.remove(key)
+                            // 死信通过 serverScope 保证不受连接 cancel 影响
+                            serverScope.launch { createDeadLetter(envelope, "投递失败已达${MAX_PENDING_RETRIES}次") }
+                        } else {
+                            // 重新入队等待下次重试
+                            if (pendingBuffer.size >= MAX_PENDING) {
+                                pendingBuffer.poll()
+                            }
+                            pendingBuffer.add(envelope)
+                            // 触发延迟投递防饿死（D-67）
+                            scheduleDelayedRetry()
                         }
-                        pendingBuffer.add(envelope)
-                        // 触发延迟投递防饿死（D-67）
-                        scheduleDelayedRetry()
                     }
                 }
             } else {
@@ -376,7 +392,7 @@ class ChatService(
          */
         private fun scheduleDelayedRetry() {
             delayedRetryJob?.cancel()
-            delayedRetryJob = scope.launch {
+            delayedRetryJob = connectionScope.launch {
                 delay(DELIVERY_TIMEOUT_MS)
                 if (deliveryActive) {
                     activateDeliveryInternal()
@@ -481,10 +497,11 @@ class ChatService(
             // H2: 条件清理 Redis 设备类型映射（CQ-12 竞态修复）。
             // 传递 expectedToken 参数，仅当 Redis 中映射值仍为旧 token 时才删除，
             // 防止旧连接的异步清理误删新连接重连后写入的映射。
+            // D-85: 使用 serverScope 保证断连后仍可执行 Redis 清理。
             userId?.let { uid ->
                 deviceType?.let { dt ->
                     token?.let { tok ->
-                        scope.launch {
+                        serverScope.launch {
                             sessionRegistry.cleanupDeviceTypeMapping(uid, dt, tok)
                         }
                     }
@@ -502,11 +519,11 @@ class ChatService(
                 }
             }
 
-            // D-57: 60s 延迟离线任务（伪在线）
+            // D-57: 60s 延迟离线任务（伪在线）。D-85: 使用 serverScope 保证断连后仍可执行。
             userId?.let { uid ->
                 // 取消旧的延迟任务防止泄漏（R-09-02）
                 delayedOfflineJob?.cancel()
-                delayedOfflineJob = scope.launch {
+                delayedOfflineJob = serverScope.launch {
                     delay(60_000)  // 60s 伪在线窗口
                     // 再次检查是否还有其他设备在线
                     if (userStreamRegistry.getStreams(uid).isEmpty()) {
@@ -623,8 +640,8 @@ class ChatService(
 
         userStreamRegistry.register(loginResp.userId, responseObserver)
 
-        // D-57: 标记在线 + 推送状态变更给所有好友
-        scope.launch {
+        // D-57: 标记在线 + 推送状态变更给所有好友。D-85: serverScope 保证跨连接存活
+        serverScope.launch {
             withContext(Dispatchers.IO) {
                 onlineStatusService.setOnline(loginResp.userId)
             }
@@ -711,8 +728,8 @@ class ChatService(
 
         userStreamRegistry.register(registerResp.uid, responseObserver)
 
-        // D-57: 标记在线 + 推送状态变更给所有好友
-        scope.launch {
+        // D-57: 标记在线 + 推送状态变更给所有好友。D-85: serverScope 保证跨连接存活
+        serverScope.launch {
             withContext(Dispatchers.IO) {
                 onlineStatusService.setOnline(registerResp.uid)
             }
@@ -751,11 +768,12 @@ class ChatService(
         envelope: Envelope,
         responseObserver: StreamObserver<Envelope>
     ) {
-        // 诊断：获取连接编号
-        val connId = (responseObserver as? ChatStreamObserver)?.let { "#${it.connId}" } ?: "#?"
-        // D-57: 刷新在线状态 TTL
-        (responseObserver as? ChatStreamObserver)?.userId?.let { uid ->
-            scope.launch {
+        val observer = responseObserver as? ChatStreamObserver ?: return
+        val connId = "#${observer.connId}"
+
+        // D-57: 刷新在线状态 TTL。D-85: connectionScope 跟随连接生命周期
+        observer.userId?.let { uid ->
+            observer.connectionScope.launch {
                 withContext(Dispatchers.IO) {
                     onlineStatusService.refreshTtl(uid)
                 }
@@ -767,17 +785,22 @@ class ChatService(
             .setRequestId(envelope.requestId)
             .build()
 
-        try {
-            (responseObserver as? ChatStreamObserver)?.sendEnvelope(pongEnvelope)
-//            logger.info { "[heartbeat] $connId 发送 PONG requestId=\"${envelope.requestId}\"" }
-        } catch (e: Exception) {
-//            logger.error(e) { "[heartbeat] $connId 发送 PONG 失败 requestId=\"${envelope.requestId}\"，流可能已损坏" }
-            // 流已损坏，清理连接避免资源泄漏
+        // D-85: PONG 发送改为 suspend，通过 connectionScope.launch 桥接。
+        // 清理逻辑移入 launch 块内，因为外层 try-catch 无法捕获 launch 内部异常。
+        observer.connectionScope.launch {
             try {
-                (responseObserver as? ChatStreamObserver)?.cleanupPending()
-                (responseObserver as? ChatStreamObserver)?.cleanupConnection()
-            } catch (cleanupEx: Exception) {
-                logger.error(cleanupEx) { "[heartbeat] $connId PONG 失败后清理连接异常" }
+                observer.sendEnvelope(pongEnvelope)
+            } catch (e: Exception) {
+                // 流已损坏，彻底关闭连接避免资源泄漏（P2 修复：补全 connectionScope.cancel + responseObserver.onCompleted）。
+                // 旧实现只清本地 pending/connection 缓存，但 gRPC 连接从视角上仍"开着"却已坏，残留悬死连接。
+                // onCompleted() 内部已完成 cleanupPending + cleanupConnection + connectionScope.cancel
+                // + responseObserver.onCompleted，一键彻底关闭。
+                logger.error(e) { "[heartbeat] $connId PONG 发送失败，关闭连接" }
+                try {
+                    observer.onCompleted()
+                } catch (cleanupEx: Exception) {
+                    logger.error(cleanupEx) { "[heartbeat] $connId PONG 失败后关闭连接异常" }
+                }
             }
         }
     }
@@ -799,10 +822,13 @@ class ChatService(
     private fun ensureEvictionCallbackRegistered() {
         if (evictionCallbackRegistered.compareAndSet(false, true)) {
             sessionRegistry.onEviction { token ->
-                val observer = tokenToObserver.remove(token)
-                if (observer != null) {
-                    // Step 1: 推送 DISCONNECT 通知（D-68）
-                    // G-02 修复：通过 deliver() 走 Mutex 串行化，避免与正常推送路径并发踩坏 MessageFramer
+                val observer = tokenToObserver.remove(token) ?: return@onEviction
+                // 2026-07 review F1：改为 serverScope.launch 异步写穿，避免 runBlocking 阻塞登录请求协程（互踢场景）。
+                // serverScope 不受连接取消链（connectionScope.cancel）影响，DISCONNECT 不会被取消，写穿比 runBlocking 更可靠。
+                // sendEnvelope 与 onCompleted 必须在同一 launch 块内顺序执行：sendMutex 保证 DISCONNECT 的 onNext
+                // 先于 onCompleted() 的 responseObserver.onCompleted() 写穿；onCompleted 内部不持 sendMutex，无重入风险。
+                serverScope.launch {
+                    // Step 1: 推送 DISCONNECT 通知（D-68, D-85）。
                     try {
                         val disconnectEnvelope = Envelope.newBuilder()
                             .setDirection(Direction.PUSH)
@@ -812,8 +838,12 @@ class ChatService(
                                 .setContent("连接将被关闭，请触发重连流程")
                                 .build())
                             .build()
-                        (observer as? DeliverableStreamObserver)?.deliver(disconnectEnvelope)
-                            ?: observer.onNext(disconnectEnvelope)
+                        val chatObserver = observer as? ChatStreamObserver
+                        if (chatObserver != null) {
+                            chatObserver.sendEnvelope(disconnectEnvelope)
+                        } else {
+                            observer.onNext(disconnectEnvelope)
+                        }
                     } catch (e: Exception) {
                         // 连接可能已损坏，推送失败不阻塞清理
                         logger.warn(e) { "Failed to push DISCONNECT, connection may already be broken" }
@@ -850,7 +880,7 @@ class ChatService(
      * @param status 新状态：0=离线 1=在线 2=隐藏
      */
     private fun pushStatusChangeToFriends(userId: Long, status: Int) {
-        scope.launch {
+        serverScope.launch {
             try {
                 val friendships = withContext(Dispatchers.IO) {
                     friendService.findFriendsByUserId(userId)

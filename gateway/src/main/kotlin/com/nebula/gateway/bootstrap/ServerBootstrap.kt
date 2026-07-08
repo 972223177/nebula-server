@@ -8,10 +8,13 @@ import com.nebula.service.init.ServiceInitModule
 import com.nebula.service.sequence.SeqService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.api.StatefulRedisConnection
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import javax.sql.DataSource
 import org.koin.core.Koin
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 
 /**
  * 服务启动引导器 — 封装所有跨层启动逻辑，供 server 层通过 gateway API 统一调用（D-28）。
@@ -160,6 +163,17 @@ object ServerBootstrap {
             logger.info { "数据库连接池已关闭" }
         } catch (e: Exception) {
             logger.error(e) { "关闭数据库连接池失败" }
+        }
+
+        // 2026-07 review F2：显式取消服务级后台协程作用域，避免进程级协程泄漏。
+        // serverScope（合并自原 sendHandlerScope，见 FrameworkModule）承载延迟离线、死信补偿、
+        // 设备类型清理、在线状态变更推送等跨连接存活任务；Koin 默认 stopKoin() 不会自动
+        // cancel 用户自定义的 CoroutineScope，需在此兜底释放。
+        try {
+            koin.get<CoroutineScope>(named("serverScope")).cancel()
+            logger.info { "serverScope 已取消" }
+        } catch (e: Exception) {
+            logger.error(e) { "取消 serverScope 失败" }
         }
     }
 }

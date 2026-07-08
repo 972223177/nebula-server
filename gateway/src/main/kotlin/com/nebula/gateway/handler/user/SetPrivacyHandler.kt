@@ -27,14 +27,18 @@ import kotlinx.coroutines.launch
  * @param onlineStatusService 用户在线状态服务
  * @param pushService 推送服务
  * @param friendService 好友业务服务
- * @param pushScope 协程作用域（fire-and-forget 推送，由 Koin 管理的 sendHandlerScope 注入）
+ * @param serverScope 服务级后台作用域，用于 fire-and-forget 推送，独立于请求上下文（不受 10s 超时/断连取消）
+ *
+ * 2026-07 review P1 修复：DB 写入（setHideOnlineStatus / setFriendApprovalMode / 在线状态切换）仍内联，
+ * 必须成功才返回；仅"查好友 + 推送状态变更"改为挂到 serverScope 的 fire-and-forget，
+ * 与响应解耦，且不被 Dispatcher 的 10s withTimeout 取消链波及（见 D-85 重构回归）。
  */
 class SetPrivacyHandler(
     private val userPrivacyService: UserPrivacyService,
     private val onlineStatusService: OnlineStatusService,
     private val pushService: PushService,
     private val friendService: FriendService,
-    private val pushScope: CoroutineScope
+    private val serverScope: CoroutineScope
 ) : Handler<SetPrivacyReq, Response> {
 
     override val method: String = "user/setPrivacy"
@@ -60,8 +64,10 @@ class SetPrivacyHandler(
             1
         }
 
-        // D-50: 推送状态变更给所有在线好友（fire-and-forget，gateway 层职责）
-        pushScope.launch {
+        // D-50: 推送状态变更给所有在线好友。
+        // 2026-07 review P1：查好友 + 推送挂到 serverScope 做 fire-and-forget，
+        // 与响应解耦，不受 Dispatcher 10s 超时 / 连接断开影响（保证收件人收到推送）。
+        serverScope.launch {
             try {
                 val friendships = friendService.findFriendsByUserId(userId)
                 val friendUids = friendships.map { f ->

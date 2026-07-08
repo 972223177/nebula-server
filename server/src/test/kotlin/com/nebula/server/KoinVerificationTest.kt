@@ -75,7 +75,7 @@ class KoinVerificationTest {
     fun tearDown() {
         // 取消 sendHandlerScope，释放 Dispatchers.IO 线程，避免非守护线程阻止 JVM 退出
         try {
-            GlobalContext.get().get<CoroutineScope>(named("sendHandlerScope")).cancel()
+            GlobalContext.get().get<CoroutineScope>(named("serverScope")).cancel()
         } catch (_: Exception) {}
         stopKoin()
     }
@@ -96,7 +96,7 @@ class KoinVerificationTest {
         assertNotNull(GlobalContext.get().get<ReadReportHandler>())
 
         // SendMessageHandler 的 named scope 可解析
-        assertNotNull(GlobalContext.get().get<CoroutineScope>(named("sendHandlerScope")))
+        assertNotNull(GlobalContext.get().get<CoroutineScope>(named("serverScope")))
 
         // Phase 7 基础设施
         assertNotNull(GlobalContext.get().get<ConversationLockManager>())

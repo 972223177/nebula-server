@@ -75,6 +75,7 @@ import org.junit.jupiter.api.TestInstance
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import org.koin.test.get
 import kotlin.test.assertNotNull
@@ -105,6 +106,7 @@ class GatewayModuleTest {
     private val deadLetterDao = mockk<DeadLetterDao>()
     private val deliveryTrackingService = mockk<DeliveryTrackingService>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     /** Service 层 mock */
     private val userService = mockk<UserService>()
@@ -135,6 +137,7 @@ class GatewayModuleTest {
         single { deadLetterDao }
         single { privacyRepo }
         single { deliveryTrackingService }
+        single(named("serverScope")) { serverScope }
     }
 
     /**
@@ -157,14 +160,13 @@ class GatewayModuleTest {
         single { GetProfileHandler(userService) }
         single { BatchGetUserHandler(userService) }
         single { BatchGetStatusHandler(get(), get()) }
-        single { SetPrivacyHandler(userPrivacyService, get(), get(), get(), scope) }
+        single { SetPrivacyHandler(userPrivacyService, get(), get(), get(), get(named("serverScope"))) }
         single { GetPrivacyHandler(userPrivacyService) }
 
         // Phase 6: Chat & Message
-        single { scope }
         single { UserStreamRegistry() }
         single { PushService(get(), get(), get()) }
-        single { SendMessageHandler(messageService, get(), get(), get(), get()) }
+        single { SendMessageHandler(messageService, get(), get(), get(), get(named("serverScope"))) }
         single { PullMessagesHandler(messageService) }
         single { ReadReportHandler(messageService, get(), get(), get()) }
 

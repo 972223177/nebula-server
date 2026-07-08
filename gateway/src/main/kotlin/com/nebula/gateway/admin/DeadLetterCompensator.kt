@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
  * 尝试重新入队。使用 CoroutineScope 控制生命周期，支持 start()/stop() 管理。
  *
  * @param deadLetterService 死信服务
- * @param scope 协程作用域（使用 sendHandlerScope，IO 调度器 + SupervisorJob）
+ * @param scope 协程作用域（使用 serverScope，IO 调度器 + SupervisorJob）
  */
 class DeadLetterCompensator(
     private val deadLetterService: DeadLetterService,

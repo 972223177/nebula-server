@@ -32,7 +32,7 @@ val messageReliabilityModule = module {
     single { DeliveryTrackingService(get()) }
 
     // 死信补偿
-    single { DeadLetterCompensator(get(), get(named("sendHandlerScope"))) }
+    single { DeadLetterCompensator(get(), get(named("serverScope"))) }
 
     // Admin 管理 Handler
     single { DeadLetterQueryHandler(get()) }

@@ -16,8 +16,8 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 
 /**
  * chat/send Handler（D-04, D-05, D-06, D-09, D-11, D-13, D-72）。
@@ -33,7 +33,11 @@ import kotlinx.coroutines.currentCoroutineContext
  * @param pushService 推送服务（异步 fire-and-forget）
  * @param conversationService 会话业务服务（成员查询）
  * @param connection Redis 连接（未读计数 INCR 操作）
- * @param scope 协程作用域（Dispatcher.IO + SupervisorJob，D-85）
+ * @param serverScope 服务级后台作用域，用于 fire-and-forget 推送，独立于请求上下文（不受 10s 超时/断连取消）
+ *
+ * 2026-07 review P1 修复：恢复 asyncUnreadAndPush 的 fire-and-forget 语义，挂到 serverScope。
+ * 原 D-85 改为内联 suspend 调用，会使响应耗时包含推送 fan-out，且被 Dispatcher 的 10s withTimeout
+ * 取消链波及（连接断开/超时直接中断推送），收件人收不到消息。serverScope 不在该取消链上。
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandler(
@@ -41,7 +45,7 @@ class SendMessageHandler(
     private val pushService: PushService,
     private val conversationService: ConversationService,
     private val connection: StatefulRedisConnection<String, String>,
-    private val scope: CoroutineScope
+    private val serverScope: CoroutineScope
 ) : Handler<SendMessageReq, SendMessageResp> {
 
     /** Lettuce Redis 协程命令接口，由 connection.reactive() 构建 */
@@ -109,10 +113,9 @@ class SendMessageHandler(
 
             val response = responseBuilder.build()
 
-            // Step 3: 异步 fire-and-forget：未读计数 + 推送
-            scope.launch {
-                asyncUnreadAndPush(result)
-            }
+            // Step 3: 未读计数 + 推送。2026-07 review P1：挂到 serverScope 做 fire-and-forget，
+            // 与响应解耦，且不随请求上下文的 10s 超时 / 连接断开被取消。
+            serverScope.launch { asyncUnreadAndPush(result) }
 
             response
         } catch (e: BizException) {

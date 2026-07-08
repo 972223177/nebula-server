@@ -14,12 +14,15 @@ import com.nebula.service.chat.SendMessageResult
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.BeforeEach
@@ -161,5 +164,53 @@ class SendMessageHandlerTest {
         }
         assertEquals(BizCode.INTERNAL_ERROR, exception.bizCode)
         assertTrue(exception.message!!.contains("Redis connection timeout"))
+    }
+
+    /**
+     * F5（2026-07 review）：推送必须挂在 serverScope 上，不随调用方请求上下文（连接断开 / 10s 超时取消）丢失。
+     * 验证：即使发送方协程被取消，pushService.pushMessageToMembers 仍被调用。
+     */
+    @Test
+    fun pushSurvivesCallerContextCancellation() = runTest {
+        val chatMsg = ChatMessage.newBuilder()
+            .setMsgId(50001L)
+            .setConversationId("conv-001")
+            .setSenderUid(1001L)
+            .build()
+        val sendResult = SendMessageResult(
+            msgId = 50001L,
+            serverTs = 1700000000000L,
+            conversationId = "conv-001",
+            senderUid = 1001L,
+            chatMessage = chatMsg,
+            conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
+            conversationCreated = false
+        )
+        coEvery { messageService.sendMessage(any(), any()) } returns sendResult
+        // 返回空成员列表：刻意跳过 redis.incr 循环与 userId 过滤，使推送路径不依赖 Redis 副作用，
+        // 从而精准验证「推送是否挂在 serverScope 上、不随调用方请求上下文取消而丢失」这一 P1 语义
+        // （真实多成员 + Redis 写入路径由集成测试覆盖）。
+        coEvery { conversationService.getConversationMembers("conv-001") } returns emptyList()
+
+        // 调用方协程（模拟发送方连接上下文）
+        val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        callerScope.launch(SessionKey(session)) {
+            handler.handle(
+                SendMessageReq.newBuilder()
+                    .setConversationId("conv-001")
+                    .setContent("Hello")
+                    .setClientMessageId("msg-f5")
+                    .build()
+            )
+        }.join()
+        // 模拟发送方连接断开 / 请求上下文被取消
+        callerScope.cancel()
+
+        // 推送挂在 serverScope（= 注入的 scope）上，不受 callerScope 取消影响。
+        // 若 P1 回归（推送错误绑在 callerScope），callerScope.cancel() 会取消它，
+        // pushMessageToMembers 不会被调用，coVerify 将失败。
+        delay(1000)
+        coVerify(exactly = 1) { pushService.pushMessageToMembers(any(), any()) }
+        callerScope.cancel()
     }
 }

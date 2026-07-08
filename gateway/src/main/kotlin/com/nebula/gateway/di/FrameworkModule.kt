@@ -29,8 +29,8 @@ import org.koin.dsl.module
  * - D-07: 拦截器顺序 Auth → Log → RateLimit → Exception
  */
 val frameworkModule = module {
-    /** 用于 fire-and-forget 后台任务的共享协程作用域（IO 调度器 + SupervisorJob） */
-    single(named("sendHandlerScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
+    /** 服务级后台任务作用域（D-85）— 延迟离线、死信补偿、设备类型清理、在线状态变更推送等跨连接存活的任务使用（IO 调度器 + SupervisorJob） */
+    single(named("serverScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
     single { HandlerRegistry() }
     single { ProtoCodec }
     single { SessionRegistry(get()) } // SessionStore 从 Koin 注入
@@ -60,7 +60,8 @@ val frameworkModule = module {
     ) }
 
     // ChatService 注册 — 依赖 gateway 组件 + service 层组件，全部从 Koin 解析（D-28）
-    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    // D-85: 注入 serverScope 用于跨连接存活的后台任务
+    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(named("serverScope"))) }
 
     // 系统级组件
     single { PingHandler() }

@@ -201,7 +201,7 @@ class ChatServiceReconnectIntegrationTest {
         method.invoke(chatService)
     }
 
-    /** 使用可供 scope 参数构造 ChatService，支持测试中注入 TestScope */
+    /** 使用可供 serverScope 参数构造 ChatService，支持测试中注入 TestScope */
     private fun createChatService(scope: CoroutineScope): ChatService {
         return ChatService(
             dispatcher = dispatcher,
@@ -213,7 +213,7 @@ class ChatServiceReconnectIntegrationTest {
             pushService = pushService,
             privacyService = privacyService,
             deadLetterService = deadLetterService,
-            scope = scope
+            serverScope = scope
         )
     }
 
@@ -258,7 +258,7 @@ class ChatServiceReconnectIntegrationTest {
      */
     @AfterEach
     fun tearDown() {
-        val scope: CoroutineScope = getField(chatService, "scope")
+        val scope: CoroutineScope = getField(chatService, "serverScope")
         scope.cancel()
     }
 
@@ -550,9 +550,12 @@ class ChatServiceReconnectIntegrationTest {
 
     @Test
     fun evictionCallbackShouldRemoveObserverAndPushDISCONNECTWhenTokenMatches() {
-        // Given: 确保 eviction callback 已注册 + tokenToObserver 包含 token→observer 映射
+        // Given: 确保 eviction callback 已注册 + tokenToObserver 包含 token→ChatStreamObserver 映射。
+        // 注意：必须用真实 ChatStreamObserver 实例（与生产 handleLoginSuccess 存入的类型一致），
+        // 否则 eviction 回调走 else 分支（observer.onNext），无法覆盖 P0 修复的真实 if 分支
+        // （chatObserver.sendEnvelope 同步写穿 DISCONNECT）。
         ensureEvictionRegistered()
-        val evictedObserver = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val evictedObserver = createChatStreamObserver(mockResponseObserver)
         val tokenToObserver: ConcurrentHashMap<String, StreamObserver<Envelope>> =
             getField(chatService, "tokenToObserver")
         tokenToObserver["target-token"] = evictedObserver
@@ -565,9 +568,9 @@ class ChatServiceReconnectIntegrationTest {
         assert(!tokenToObserver.containsKey("target-token")) {
             "Expected token removed from tokenToObserver"
         }
-        // 2. DISCONNECT Envelope 被发送到旧 observer
+        // 2. DISCONNECT Envelope 被同步写穿到旧连接的 responseObserver（P0 修复核心断言）
         val disconnectSlot = slot<Envelope>()
-        verify(exactly = 1) { evictedObserver.onNext(capture(disconnectSlot)) }
+        verify(exactly = 1) { mockResponseObserver.onNext(capture(disconnectSlot)) }
         assert(disconnectSlot.captured.direction == Direction.PUSH) {
             "Expected PUSH direction for DISCONNECT"
         }
@@ -575,7 +578,7 @@ class ChatServiceReconnectIntegrationTest {
             "Expected DISCONNECT event type"
         }
         // 3. onCompleted 被调用（连接关闭）
-        verify(exactly = 1) { evictedObserver.onCompleted() }
+        verify(exactly = 1) { mockResponseObserver.onCompleted() }
     }
 
     @Test

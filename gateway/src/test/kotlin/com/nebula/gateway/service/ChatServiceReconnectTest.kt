@@ -15,6 +15,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import org.junit.jupiter.api.Test
 import kotlinx.coroutines.test.runTest
 
@@ -56,7 +59,8 @@ class ChatServiceReconnectTest {
             friendService = mockk<FriendService>(relaxed = true),
             pushService = mockk<PushService>(relaxed = true),
             privacyService = mockk<UserPrivacyService>(relaxed = true),
-            deadLetterService = mockk<DeadLetterService>(relaxed = true)
+            deadLetterService = mockk<DeadLetterService>(relaxed = true),
+            serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         )
 
         evictionCallback = { token -> capturedCallback?.invoke(token) }
