@@ -149,6 +149,17 @@ object ServerBootstrap {
      * @param koin Koin 容器实例
      */
     fun executeShutdown(koin: Koin) {
+        // 2026-07 review R2（F2 加固）：先取消服务级后台协程作用域，再释放底层资源。
+        // serverScope 承载延迟离线、死信补偿、设备类型清理、在线状态变更推送等跨连接存活任务；
+        // Koin 默认 stopKoin() 不会自动 cancel 用户自定义的 CoroutineScope，需在此兜底释放。
+        // 放在 Redis/DB 关闭之前，确保关闭瞬间的在途后台任务先被取消，避免其访问已关闭的连接而报错。
+        try {
+            koin.get<CoroutineScope>(named("serverScope")).cancel()
+            logger.info { "serverScope 已取消" }
+        } catch (e: Exception) {
+            logger.error(e) { "取消 serverScope 失败" }
+        }
+
         try {
             val redisConn = koin.get<StatefulRedisConnection<String, String>>()
             redisConn.close()
@@ -163,17 +174,6 @@ object ServerBootstrap {
             logger.info { "数据库连接池已关闭" }
         } catch (e: Exception) {
             logger.error(e) { "关闭数据库连接池失败" }
-        }
-
-        // 2026-07 review F2：显式取消服务级后台协程作用域，避免进程级协程泄漏。
-        // serverScope（合并自原 sendHandlerScope，见 FrameworkModule）承载延迟离线、死信补偿、
-        // 设备类型清理、在线状态变更推送等跨连接存活任务；Koin 默认 stopKoin() 不会自动
-        // cancel 用户自定义的 CoroutineScope，需在此兜底释放。
-        try {
-            koin.get<CoroutineScope>(named("serverScope")).cancel()
-            logger.info { "serverScope 已取消" }
-        } catch (e: Exception) {
-            logger.error(e) { "取消 serverScope 失败" }
         }
     }
 }

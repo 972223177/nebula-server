@@ -15,6 +15,8 @@ import com.nebula.gateway.interceptor.LogInterceptor
 import com.nebula.gateway.interceptor.RateLimitInterceptor
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
+import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,9 +30,17 @@ import org.koin.dsl.module
  * - D-06: 拦截器通过 Koin List<Interceptor> 注入
  * - D-07: 拦截器顺序 Auth → Log → RateLimit → Exception
  */
+private val logger = KotlinLogging.logger {}
+
 val frameworkModule = module {
-    /** 服务级后台任务作用域（D-85）— 延迟离线、死信补偿、设备类型清理、在线状态变更推送等跨连接存活的任务使用（IO 调度器 + SupervisorJob） */
-    single(named("serverScope")) { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
+    /** 服务级后台任务作用域（D-85）— 延迟离线、死信补偿、设备类型清理、在线状态变更推送等跨连接存活的任务使用（IO 调度器 + SupervisorJob + 统一异常处理器） */
+    single(named("serverScope")) {
+        CoroutineScope(
+            Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
+                logger.error("serverScope 未捕获异常（后台任务异常已被兜底吞掉，请检查任务内部 try-catch 是否遗漏）: ${e.stackTraceToString()}")
+            }
+        )
+    }
     single { HandlerRegistry() }
     single { ProtoCodec }
     single { SessionRegistry(get()) } // SessionStore 从 Koin 注入
