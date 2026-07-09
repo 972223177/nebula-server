@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package com.nebula.chat.sensitiveword;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.sensitiveword";
+
+// ---- system/sensitive-word/download 词库下载（分页）----
+// 客户端启动后调用此接口拉取敏感词列表，用于在本地构建过滤结构。
+// 词库可能较大，采用分页拉取，客户端根据 has_more 循环翻页直到取完。
+message SensitiveWordDownloadReq {
+  int32 offset = 1;    // 分页偏移，从 0 开始
+  int32 limit = 2;     // 每页条数，<=0 表示使用服务端默认（1000），上限 5000
+}
+
+message SensitiveWordDownloadResp {
+  repeated string words = 1;   // 本页敏感词（原文，一行一词）
+  int32 total = 2;             // 词库总词数
+  string version = 3;          // 词库版本（内容哈希），客户端据此判断是否需重新拉取
+  bool has_more = 4;           // 是否还有下一页
+}
+
+// ---- admin/sensitive-word/reload 手动重载 ----
+// 强制从源（Gitee）重新拉取词库并重建内存匹配器，成功后向所有在线客户端 PUSH 更新通知。
+// 源不可达或返回为空时返回错误（SENSITIVE_WORD_FETCH_FAILED），不影响现有词库。
+// 此接口响应包含业务数据（版本信息），因此定义 Resp。
+message SensitiveWordReloadReq {
+  // 空请求，仅通过 code+msg 表示结果；重载成功后返回版本信息
+}
+
+message SensitiveWordReloadResp {
+  bool success = 1;        // 是否重载成功
+  int32 word_count = 2;    // 重载后词库词数
+  string version = 3;      // 重载后词库版本
+  int64 reloaded_at = 4;   // 重载完成时间戳（毫秒）
+}
+
+// ---- PUSH SENSITIVE_WORD_UPDATED 推送通知 payload ----
+// 服务端词库重载成功后，主动推送此事件给所有在线客户端，客户端收到后重新调用 download 接口。
+message SensitiveWordUpdatedPayload {
+  string version = 1;      // 新词库版本
+  int32 word_count = 2;    // 新词库词数
+  int64 updated_at = 3;    // 更新时间戳（毫秒）
+}

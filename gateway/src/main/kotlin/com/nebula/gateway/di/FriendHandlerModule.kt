@@ -25,7 +25,7 @@ val friendHandlerModule = module {
     single { FriendListHandler(get()) }                              // FriendService
     single { FriendDeleteHandler(get()) }                            // FriendService
     // FriendAdd/FriendAccept 保留 lockManager 依赖（占位），事务由 Service 管理
-    single { FriendAddHandler(get(), get(), get()) }                 // FriendService + PushService + LockManager
+    single { FriendAddHandler(get(), get(), get(), get()) }           // SensitiveWordService + FriendService + PushService + LockManager
     single { FriendAcceptHandler(get(), get(), get()) }              // FriendService + PushService + LockManager
     single { FriendCheckRelationHandler(get()) }                     // FriendService
     single { FriendBatchCheckRelationHandler(get()) }                 // FriendService

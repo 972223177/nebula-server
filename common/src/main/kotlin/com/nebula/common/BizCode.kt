@@ -70,6 +70,8 @@ enum class BizCode(val code: Int, val msg: String) {
     UNSUPPORTED_MSG_TYPE(1502, "unsupported message type"),
     /** 消息内容违反安全或合规策略 */
     CONTENT_VIOLATION(1503, "content violation"),
+    /** 敏感词库拉取失败（源不可达或返回为空），重载场景返回此错误 */
+    SENSITIVE_WORD_FETCH_FAILED(1504, "sensitive word fetch failed"),
     /** 服务器内部未预期异常 */
     INTERNAL_ERROR(9000, "internal error"),
     /** 数据库操作失败，如连接超时或约束冲突 */

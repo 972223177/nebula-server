@@ -4,6 +4,7 @@ import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.message.ChatMessage
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
@@ -17,6 +18,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,6 +49,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandlerTest {
 
+    private lateinit var sensitiveWordService: SensitiveWordService
     private lateinit var messageService: MessageService
     private lateinit var pushService: PushService
     private lateinit var conversationService: ConversationService
@@ -58,15 +61,18 @@ class SendMessageHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        sensitiveWordService = mockk<SensitiveWordService>()
         messageService = mockk()
         pushService = mockk<PushService>(relaxed = true)
         conversationService = mockk<ConversationService>(relaxed = true)
         connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
         scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
+        // 默认不脱敏，filter 返回原文本，避免影响既有用例；敏感词用例单独 stub
+        every { sensitiveWordService.filter(any()) } returnsArgument 0
         coEvery { messageService.checkAndSetDedup(any(), any()) } returns true
 
-        handler = SendMessageHandler(messageService, pushService, conversationService, connection, scope)
+        handler = SendMessageHandler(sensitiveWordService, messageService, pushService, conversationService, connection, scope)
     }
 
     /**
@@ -114,6 +120,43 @@ class SendMessageHandlerTest {
         assertNotNull(resp)
         assertEquals(50001L, resp.msgId, "应返回 MessageService 设置的 msgId")
         assertTrue(resp.serverTs > 0, "应返回服务端时间戳")
+    }
+
+    /**
+     * 敏感词脱敏：文本内容命中敏感词时，handler 应先脱敏（替换为 *）再照常发送，
+     * 落库与推送的内容均为脱敏结果，且 MessageService.sendMessage 被调用。
+     */
+    @Test
+    fun sensitiveContentShouldBeMaskedAndSent() = runTest(sessionContext()) {
+        every { sensitiveWordService.filter("你是个傻逼") } returns "你是个***"
+
+        val chatMsg = ChatMessage.newBuilder()
+            .setMsgId(50001L)
+            .setConversationId("conv-001")
+            .setSenderUid(1001L)
+            .build()
+        val sendResult = SendMessageResult(
+            msgId = 50001L,
+            serverTs = 1700000000000L,
+            conversationId = "conv-001",
+            senderUid = 1001L,
+            chatMessage = chatMsg,
+            conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
+            conversationCreated = false
+        )
+        val reqSlot = slot<SendMessageReq>()
+        coEvery { messageService.sendMessage(req = capture(reqSlot), senderUid = any()) } returns sendResult
+
+        val req = SendMessageReq.newBuilder()
+            .setConversationId("conv-001")
+            .setContent("你是个傻逼")
+            .setClientMessageId("msg-sensitive")
+            .build()
+
+        withContext(SessionKey(session)) {
+            handler.handle(req)
+        }
+        assertEquals("你是个***", reqSlot.captured.content, "落库/推送内容应为脱敏后结果")
     }
 
     /**

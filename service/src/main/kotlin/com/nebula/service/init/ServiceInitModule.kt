@@ -1,6 +1,7 @@
 package com.nebula.service.init
 
 import com.nebula.common.init.commonInitModule
+import com.nebula.common.sensitiveword.sensitiveWordModule
 import com.nebula.repository.init.repositoryInitModule
 import org.koin.core.module.Module
 
@@ -17,6 +18,7 @@ object ServiceInitModule {
      */
     val allModules: List<Module> = listOf(
         commonInitModule,
+        sensitiveWordModule,
         repositoryInitModule,
         serviceKoinModule
     )

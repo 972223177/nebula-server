@@ -22,7 +22,7 @@ import org.koin.dsl.module
 val userHandlerModule = module {
     // Phase 5: User Handler — 依赖 Service 层
     single { LoginHandler(get(), get()) }                     // UserService + SessionRegistry
-    single { RegisterHandler(get()) }                         // UserService
+    single { RegisterHandler(get(), get()) }                   // SensitiveWordService + UserService
     single { SearchUserHandler(get()) }                       // UserService
     single { GetProfileHandler(get()) }                       // UserService
     single { BatchGetUserHandler(get()) }                     // UserService

@@ -78,6 +78,18 @@ class UserStreamRegistry {
         return userStreams[userId]?.toList() ?: emptyList()
     }
 
+    /**
+     * 获取所有在线用户的全部 StreamObserver（跨用户广播用）。
+     *
+     * 返回所有 userId 下所有设备的快照扁平列表，供全量推送（如敏感词更新通知）使用。
+     * 返回的快照可能在遍历期间过期，调用方应通过 try-catch 处理单流异常。
+     *
+     * @return 所有在线 StreamObserver 列表
+     */
+    fun getAllStreams(): List<StreamObserver<Envelope>> {
+        return userStreams.values.flatMap { it.toList() }
+    }
+
     companion object {
         private val logger = KotlinLogging.logger {}
     }

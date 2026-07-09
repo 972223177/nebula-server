@@ -4,6 +4,7 @@ import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.chat.SendMessageResp
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
@@ -29,6 +30,7 @@ import kotlinx.coroutines.launch
  * D-72：Redis SETNX 去重逻辑已下沉到 MessageService.checkAndSetDedup() 中，
  * handler 层不再处理去重。
  *
+ * @param sensitiveWordService 敏感词服务（发送前内容脱敏，含敏感词则替换为 * 后照常发送）
  * @param messageService 消息业务服务（去重 + 写入 + 未读计数）
  * @param pushService 推送服务（异步 fire-and-forget）
  * @param conversationService 会话业务服务（成员查询）
@@ -41,6 +43,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandler(
+    private val sensitiveWordService: SensitiveWordService,
     private val messageService: MessageService,
     private val pushService: PushService,
     private val conversationService: ConversationService,
@@ -61,6 +64,18 @@ class SendMessageHandler(
     override suspend fun handle(req: SendMessageReq): SendMessageResp {
         val session = currentCoroutineContext().requireSession()
         val senderUid = session.userId
+
+        // 敏感词脱敏（D-119）：文本内容含敏感词则替换为 *，照常发送，避免违规内容入库与扩散。
+        // 仅对非空文本内容检测；图片等非文本消息 content 通常为空，跳过。
+        // 放在去重之前：脱敏后的内容参与去重与后续入库，保证落库与推送均为脱敏结果。
+        var effectiveReq = req
+        if (req.content.isNotBlank()) {
+            val filtered = sensitiveWordService.filter(req.content)
+            if (filtered != req.content) {
+                logger.info { "消息含敏感词已脱敏: senderUid=$senderUid" }
+                effectiveReq = req.toBuilder().setContent(filtered).build()
+            }
+        }
 
         // M17/M20: 去重检查 — 相同 clientMessageId 重复发送时返回幂等 ACK
         if (req.clientMessageId.isNotEmpty()) {
@@ -85,11 +100,11 @@ class SendMessageHandler(
             // 2026-07 review 遗漏 #4 优化：仅在懒加载实际触发了 createPrivateConversation 时
             //                         重新构造 req（toBuilder 涉及 proto 内部对象分配）；
             //                         常规路径（target_uid=0）直接传原 req，避免内存毛刺。
-            val (resolvedConvId, didCreate) = ensurePrivateConversationIfNeeded(req, senderUid)
-            val effectiveReq = if (resolvedConvId != null) {
-                req.toBuilder().setConversationId(resolvedConvId).build()
+            val (resolvedConvId, didCreate) = ensurePrivateConversationIfNeeded(effectiveReq, senderUid)
+            effectiveReq = if (resolvedConvId != null) {
+                effectiveReq.toBuilder().setConversationId(resolvedConvId).build()
             } else {
-                req
+                effectiveReq
             }
 
             // Step 1: 委托 MessageService 处理核心业务逻辑

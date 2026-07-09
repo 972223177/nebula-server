@@ -5,7 +5,9 @@ import com.nebula.chat.PushEventType
 import com.nebula.chat.friend.FriendAddReq
 import com.nebula.chat.friend.FriendAddResp
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.common.exception.FriendException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
@@ -14,6 +16,7 @@ import com.nebula.service.friend.FriendAddResult
 import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -35,6 +38,7 @@ import kotlin.test.assertNotNull
  */
 class FriendAddHandlerTest {
 
+    private lateinit var sensitiveWordService: SensitiveWordService
     private lateinit var friendService: FriendService
     private lateinit var pushService: PushService
     private lateinit var handler: FriendAddHandler
@@ -45,12 +49,16 @@ class FriendAddHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        sensitiveWordService = mockk<SensitiveWordService>()
+        // 默认不含敏感词，避免影响既有用例；拒绝用例单独 stub
+        every { sensitiveWordService.contains(any()) } returns false
         friendService = mockk()
         pushService = mockk(relaxed = true)
 
         val lockManager = mockLockManager()
 
         handler = FriendAddHandler(
+            sensitiveWordService,
             friendService,
             pushService,
             lockManager
@@ -244,6 +252,26 @@ class FriendAddHandlerTest {
             handler.handle(req)
         }
         kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
+    }
+
+    /**
+     * 敏感词检测：好友申请附言命中敏感词时，handler 应拒绝发送并抛出 CONTENT_VIOLATION，
+     * 且不调用 FriendService.addFriend（验证语不入库、不推送）。
+     */
+    @Test
+    fun sensitiveMessageShouldBeRejected() = runTest(sessionContext) {
+        every { sensitiveWordService.contains("傻逼附言") } returns true
+
+        val req = FriendAddReq.newBuilder()
+            .setToUid(2001L)
+            .setMessage("傻逼附言")
+            .build()
+
+        val exception = assertFailsWith<BizException> {
+            handler.handle(req)
+        }
+        assertEquals(BizCode.CONTENT_VIOLATION, exception.bizCode)
+        coVerify(exactly = 0) { friendService.addFriend(any(), any()) }
     }
 
 }

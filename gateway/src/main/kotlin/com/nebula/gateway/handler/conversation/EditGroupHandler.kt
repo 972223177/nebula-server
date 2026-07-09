@@ -5,6 +5,8 @@ import com.nebula.chat.Response
 import com.nebula.chat.conversation.EditGroupReq
 import com.nebula.chat.conversation.GroupUpdatedPayload
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
@@ -20,6 +22,7 @@ import com.nebula.gateway.handler.requireSession
  * @param pushService 推送服务
  */
 class EditGroupHandler(
+    private val sensitiveWordService: SensitiveWordService,
     private val conversationService: ConversationService,
     private val pushService: PushService
 ) : Handler<EditGroupReq, Response> {
@@ -28,6 +31,13 @@ class EditGroupHandler(
 
     override suspend fun handle(req: EditGroupReq): Response {
         val session = currentCoroutineContext().requireSession()
+
+        // 敏感词检测：群名称含敏感词则拒绝编辑，直接报接口错误（CONTENT_VIOLATION）。
+        // 群名是公开可见文本，采用拒绝策略（与 chat/send 的脱敏策略不同）。
+        if (req.hasName() && req.name.isNotBlank() && sensitiveWordService.contains(req.name)) {
+            throw BizException(BizCode.CONTENT_VIOLATION, "群名称包含敏感内容")
+        }
+
         conversationService.editGroupInfo(req, session.userId)
 
         // 异步推送 GROUP_UPDATED（D-15）

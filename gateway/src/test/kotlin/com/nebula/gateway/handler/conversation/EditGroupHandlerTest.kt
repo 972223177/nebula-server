@@ -3,13 +3,16 @@ package com.nebula.gateway.handler.conversation
 import com.nebula.chat.PushEventType
 import com.nebula.chat.conversation.EditGroupReq
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.common.exception.ConversationException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -34,6 +37,7 @@ import kotlin.test.assertTrue
  */
 class EditGroupHandlerTest {
 
+    private lateinit var sensitiveWordService: SensitiveWordService
     private lateinit var conversationService: ConversationService
     private lateinit var pushService: PushService
     private lateinit var handler: EditGroupHandler
@@ -42,9 +46,12 @@ class EditGroupHandlerTest {
 
     @BeforeEach
     fun setUp() {
+        sensitiveWordService = mockk<SensitiveWordService>()
+        // 默认不含敏感词，避免影响既有用例；拒绝用例单独 stub
+        every { sensitiveWordService.contains(any()) } returns false
         conversationService = mockk()
         pushService = mockk(relaxed = true)
-        handler = EditGroupHandler(conversationService, pushService)
+        handler = EditGroupHandler(sensitiveWordService, conversationService, pushService)
     }
 
     @Test
@@ -210,6 +217,26 @@ class EditGroupHandlerTest {
             handler.handle(req)
         }
         kotlin.test.assertEquals(com.nebula.common.BizCode.UNAUTHORIZED, exception.bizCode, "无 Session 时应抛出 UNAUTHORIZED")
+    }
+
+    /**
+     * 敏感词检测：群名称命中敏感词时，handler 应拒绝编辑并抛出 CONTENT_VIOLATION，
+     * 且不调用 ConversationService.editGroupInfo。
+     */
+    @Test
+    fun sensitiveNameShouldBeRejected() = runTest {
+        every { sensitiveWordService.contains("傻逼群名") } returns true
+
+        val req = EditGroupReq.newBuilder()
+            .setConversationId("conv-001")
+            .setName("傻逼群名")
+            .build()
+
+        val exception = assertFailsWith<BizException> {
+            withContext(SessionKey(session)) { handler.handle(req) }
+        }
+        assertEquals(BizCode.CONTENT_VIOLATION, exception.bizCode)
+        coVerify(exactly = 0) { conversationService.editGroupInfo(any(), any()) }
     }
 
 }

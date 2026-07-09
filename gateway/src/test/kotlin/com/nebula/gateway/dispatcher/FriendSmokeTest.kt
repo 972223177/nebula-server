@@ -14,6 +14,7 @@ import com.nebula.chat.friend.FriendRequestItem
 import com.nebula.chat.friend.FriendRequestsReq
 import com.nebula.chat.friend.FriendRequestsResp
 import com.nebula.common.BizCode
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.friend.FriendAcceptHandler
 import com.nebula.gateway.handler.friend.FriendAddHandler
 import com.nebula.gateway.handler.friend.FriendDeleteHandler
@@ -50,6 +51,7 @@ class FriendSmokeTest {
     private lateinit var friendService: FriendService
     private lateinit var pushService: PushService
     private lateinit var sessionRegistry: SessionRegistry
+    private lateinit var sensitiveWordService: SensitiveWordService
 
     /** 用户 A（主动方） */
     private val userA = Session(1001L, "token-a", "MOBILE", "dev-1", "conn-1")
@@ -66,6 +68,7 @@ class FriendSmokeTest {
         friendService = mockk()
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
+        sensitiveWordService = mockk()
     }
 
     // ===================================================================
@@ -76,7 +79,7 @@ class FriendSmokeTest {
     fun fullFlowShouldCompleteFriendLifecycle() = runTest {
         // 预创建所有 Handler
         val addHandler = FriendAddHandler(
-            friendService, pushService, mockLockManager()
+            sensitiveWordService, friendService, pushService, mockLockManager()
         )
         val acceptHandler = FriendAcceptHandler(
             friendService, pushService, mockLockManager()

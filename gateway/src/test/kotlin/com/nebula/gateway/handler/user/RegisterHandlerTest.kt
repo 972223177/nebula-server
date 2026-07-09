@@ -3,9 +3,13 @@ package com.nebula.gateway.handler.user
 import com.nebula.chat.common.DeviceType
 import com.nebula.chat.user.RegisterReq
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.common.exception.UserException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.service.user.UserService
 import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -26,13 +30,17 @@ import kotlin.test.assertTrue
  */
 class RegisterHandlerTest {
 
+    private lateinit var sensitiveWordService: SensitiveWordService
     private lateinit var userService: UserService
     private lateinit var handler: RegisterHandler
 
     @BeforeEach
     fun setUp() {
+        sensitiveWordService = mockk<SensitiveWordService>()
+        // 默认不含敏感词，避免影响既有用例；拒绝用例单独 stub
+        every { sensitiveWordService.contains(any()) } returns false
         userService = mockk()
-        handler = RegisterHandler(userService)
+        handler = RegisterHandler(sensitiveWordService, userService)
     }
 
     @Test
@@ -107,5 +115,28 @@ class RegisterHandlerTest {
             handler.handle(req)
         }
         assertEquals(BizCode.INVALID_PARAM, e.bizCode)
+    }
+
+    /**
+     * 敏感词检测：昵称命中敏感词时，handler 应拒绝注册并抛出 CONTENT_VIOLATION，
+     * 且不调用 UserService.register（脏昵称不入库）。
+     */
+    @Test
+    fun sensitiveNicknameShouldBeRejected() = runTest {
+        every { sensitiveWordService.contains("傻逼昵称") } returns true
+
+        val req = RegisterReq.newBuilder()
+            .setUsername("newuser")
+            .setPassword("password123")
+            .setNickname("傻逼昵称")
+            .setDeviceType(DeviceType.MOBILE)
+            .setDeviceId("device-001")
+            .build()
+
+        val e = assertFailsWith<BizException> {
+            handler.handle(req)
+        }
+        assertEquals(BizCode.CONTENT_VIOLATION, e.bizCode)
+        coVerify(exactly = 0) { userService.register(any()) }
     }
 }

@@ -2,6 +2,7 @@ package com.nebula.server.config
 
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.config.DatabaseConfig
+import com.nebula.common.config.SensitiveWordConfig
 import com.nebula.common.config.RedisConfig
 import com.nebula.common.config.ServerConfig
 import com.nebula.common.config.SnowflakeConfig
@@ -118,6 +119,18 @@ object ConfigLoader {
                 enabled = config.getBoolean("ssl.enabled"),
                 certChainPath = config.getString("ssl.cert-chain-path"),
                 privateKeyPath = config.getString("ssl.private-key-path")
+            ),
+            sensitiveWord = SensitiveWordConfig(
+                sourceUrl = if (config.hasPath("sensitive-word.source-url")) {
+                    config.getString("sensitive-word.source-url")
+                } else {
+                    SensitiveWordConfig.DEFAULT_SOURCE_URL
+                },
+                resourcePath = if (config.hasPath("sensitive-word.resource-path")) {
+                    config.getString("sensitive-word.resource-path")
+                } else {
+                    SensitiveWordConfig().resourcePath
+                }
             )
         )
     }

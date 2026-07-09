@@ -17,5 +17,7 @@ data class ApplicationConfig(
     /** Redis 缓存服务器配置 — Phase 3 引入 */
     val redis: RedisConfig,
     /** gRPC TLS/SSL 传输层安全配置 */
-    val ssl: SslConfig
+    val ssl: SslConfig,
+    /** 敏感词库配置（源地址、加载策略） */
+    val sensitiveWord: SensitiveWordConfig
 )

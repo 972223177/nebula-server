@@ -26,7 +26,7 @@ val conversationHandlerModule = module {
     single { ConversationLockManager() }
     single { ListConversationsHandler(get()) }                        // ConversationService
     single { GroupMembersHandler(get()) }                             // ConversationService
-    single { EditGroupHandler(get(), get()) }                         // ConversationService + PushService
+    single { EditGroupHandler(get(), get(), get()) }                  // SensitiveWordService + ConversationService + PushService
     // 创建群聊无需会话级锁，Service 内置事务
     single { CreateGroupHandler(get(), get()) }                       // ConversationService + PushService
     // 邀请/踢人/退群/删除群会话需要会话级锁保护并发

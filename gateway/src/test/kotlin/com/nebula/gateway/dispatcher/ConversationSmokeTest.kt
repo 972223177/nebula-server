@@ -11,6 +11,7 @@ import com.nebula.chat.conversation.KickMemberReq
 import com.nebula.chat.conversation.LeaveGroupReq
 import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
 import com.nebula.gateway.handler.conversation.EditGroupHandler
 import com.nebula.gateway.handler.conversation.GroupMembersHandler
@@ -47,6 +48,7 @@ class ConversationSmokeTest {
     private lateinit var conversationService: ConversationService
     private lateinit var pushService: PushService
     private lateinit var sessionRegistry: SessionRegistry
+    private lateinit var sensitiveWordService: SensitiveWordService
 
     /** 测试用户 Session（userId=1001，群主） */
     private val ownerSession = Session(1001L, "token-owner", "MOBILE", "dev-1", "conn-1")
@@ -58,6 +60,7 @@ class ConversationSmokeTest {
         conversationService = mockk()
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
+        sensitiveWordService = mockk()
     }
 
     // ===================================================================
@@ -73,7 +76,7 @@ class ConversationSmokeTest {
             conversationService, pushService
         )
         val membersHandler = GroupMembersHandler(conversationService)
-        val editHandler = EditGroupHandler(conversationService, pushService)
+        val editHandler = EditGroupHandler(sensitiveWordService, conversationService, pushService)
         val inviteHandler = InviteMemberHandler(
             conversationService, lockManager, pushService
         )

@@ -6,7 +6,9 @@ import com.nebula.chat.friend.FriendAddReq
 import com.nebula.chat.friend.FriendAddResp
 import com.nebula.chat.friend.FriendRequestPayload
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.common.exception.FriendException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.requireSession
@@ -29,6 +31,7 @@ import kotlinx.coroutines.currentCoroutineContext
  * @param lockManager 会话级互斥锁管理器（保留以维持 API 兼容，Friend 流程不依赖会话级锁）
  */
 class FriendAddHandler(
+    private val sensitiveWordService: SensitiveWordService,
     private val friendService: FriendService,
     private val pushService: PushService,
     @Suppress("unused") private val lockManager: ConversationLockManager
@@ -39,6 +42,12 @@ class FriendAddHandler(
     override suspend fun handle(req: FriendAddReq): FriendAddResp {
         val session = currentCoroutineContext().requireSession()
         val fromUid = session.userId
+
+        // 敏感词检测：好友申请附言含敏感词则拒绝发送，直接报接口错误（CONTENT_VIOLATION）。
+        // 验证语是公开文本，采用拒绝策略（与 chat/send 的脱敏策略不同）。
+        if (req.message.isNotBlank() && sensitiveWordService.contains(req.message)) {
+            throw BizException(BizCode.CONTENT_VIOLATION, "好友申请附言包含敏感内容")
+        }
 
         // Service 内部事务（D-79 + D-80）
         // PersistenceException 幂等 catch 处理双向竞赛

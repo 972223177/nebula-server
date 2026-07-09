@@ -209,4 +209,27 @@ class PushService(
             }
         }
     }
+
+    /**
+     * 向所有在线客户端广播推送事件（如敏感词库重载完成通知）。
+     *
+     * 遍历 [UserStreamRegistry.getAllStreams] 返回的全体在线流，逐流串行化投递。
+     * 单流异常时 try-catch 保护，不影响其他流。
+     *
+     * @param eventType 推送事件类型
+     * @param payloadBytes 序列化后的 Payload 字节
+     */
+    fun pushToAll(
+        eventType: PushEventType,
+        payloadBytes: com.google.protobuf.ByteString
+    ) {
+        val envelope = buildPushEnvelope(eventType, payloadBytes)
+        for (observer in userStreamRegistry.getAllStreams()) {
+            try {
+                deliverEnvelope(observer, envelope)
+            } catch (e: Exception) {
+                logger.error(e) { "Failed to push $eventType to a stream during broadcast" }
+            }
+        }
+    }
 }

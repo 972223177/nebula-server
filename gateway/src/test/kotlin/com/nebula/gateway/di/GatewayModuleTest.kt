@@ -2,6 +2,7 @@ package com.nebula.gateway.di
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.common.session.SessionStore
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.dispatcher.HandlerRegistry
@@ -32,6 +33,9 @@ import com.nebula.gateway.handler.friend.FriendRequestsHandler
 import com.nebula.gateway.handler.message.MessageSeqHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
+import com.nebula.gateway.handler.sensitiveword.SensitiveWordDownloadHandler
+import com.nebula.gateway.handler.sensitiveword.SensitiveWordHandlerCollector
+import com.nebula.gateway.handler.sensitiveword.SensitiveWordReloadHandler
 import com.nebula.gateway.handler.system.SystemHandlerCollector
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
@@ -115,6 +119,7 @@ class GatewayModuleTest {
     private val conversationService = mockk<ConversationService>()
     private val friendService = mockk<FriendService>()
     private val onlineStatusService = mockk<OnlineStatusService>()
+    private val sensitiveWordService = mockk<SensitiveWordService>()
 
     /**
      * 构建外部 Repository Koin 模块。
@@ -155,7 +160,7 @@ class GatewayModuleTest {
         // Phase 5: User Handler
         single { PingHandler() }
         single { LoginHandler(userService, get()) }
-        single { RegisterHandler(userService) }
+        single { RegisterHandler(sensitiveWordService, userService) }
         single { SearchUserHandler(userService) }
         single { GetProfileHandler(userService) }
         single { BatchGetUserHandler(userService) }
@@ -166,7 +171,7 @@ class GatewayModuleTest {
         // Phase 6: Chat & Message
         single { UserStreamRegistry() }
         single { PushService(get(), get(), get()) }
-        single { SendMessageHandler(messageService, get(), get(), get(), get(named("serverScope"))) }
+        single { SendMessageHandler(sensitiveWordService, messageService, get(), get(), get(), get(named("serverScope"))) }
         single { PullMessagesHandler(messageService) }
         single { ReadReportHandler(messageService, get(), get(), get()) }
 
@@ -178,7 +183,7 @@ class GatewayModuleTest {
         single { ConversationLockManager() }
         single { ListConversationsHandler(conversationService) }
         single { GroupMembersHandler(conversationService) }
-        single { EditGroupHandler(conversationService, get()) }
+        single { EditGroupHandler(sensitiveWordService, conversationService, get()) }
         single { CreateGroupHandler(conversationService, get()) }
         single { InviteMemberHandler(conversationService, get(), get()) }
         single { LeaveGroupHandler(conversationService, get(), get()) }
@@ -192,10 +197,15 @@ class GatewayModuleTest {
         single { FriendRequestsHandler(friendService) }
         single { FriendListHandler(friendService) }
         single { FriendDeleteHandler(friendService) }
-        single { FriendAddHandler(friendService, get(), get()) }
+        single { FriendAddHandler(sensitiveWordService, friendService, get(), get()) }
         single { FriendAcceptHandler(friendService, get(), get()) }
         single { FriendCheckRelationHandler(friendService) }
         single { FriendBatchCheckRelationHandler(friendService) }
+
+        // 敏感词：下载（免登录）+ 重载（admin）
+        single { sensitiveWordService }
+        single { SensitiveWordDownloadHandler(get()) }
+        single { SensitiveWordReloadHandler(get(), get()) }
     }
 
     @AfterEach
@@ -450,5 +460,23 @@ class GatewayModuleTest {
         assertNotNull(registry.get("user/batchGetStatus"))
         assertNotNull(registry.get("user/setPrivacy"))
         assertNotNull(registry.get("user/getPrivacy"))
+    }
+
+    /**
+     * 验证敏感词 Handler Collector 注册 download 与 reload 两个 method 名称。
+     */
+    @Test
+    fun sensitiveWordHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val collector = SensitiveWordHandlerCollector(
+            GlobalContext.get().get<SensitiveWordDownloadHandler>(),
+            GlobalContext.get().get<SensitiveWordReloadHandler>()
+        )
+        collector.registerAll(registry)
+        assertNotNull(registry.get("system/sensitive-word/download"))
+        assertNotNull(registry.get("admin/sensitive-word/reload"))
     }
 }

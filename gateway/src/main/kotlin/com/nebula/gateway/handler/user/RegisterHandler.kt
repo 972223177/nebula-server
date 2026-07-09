@@ -2,6 +2,9 @@ package com.nebula.gateway.handler.user
 
 import com.nebula.chat.user.RegisterReq
 import com.nebula.chat.user.RegisterResp
+import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
+import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
 import com.nebula.service.user.UserService
 import java.util.UUID
@@ -20,12 +23,20 @@ import java.util.UUID
  * @param userService 用户业务服务
  */
 class RegisterHandler(
+    private val sensitiveWordService: SensitiveWordService,
     private val userService: UserService
 ) : Handler<RegisterReq, RegisterResp> {
 
     override val method: String = "user/register"
 
     override suspend fun handle(req: RegisterReq): RegisterResp {
+        // 敏感词检测：昵称含敏感词则拒绝注册，直接报接口错误（CONTENT_VIOLATION）。
+        // 昵称是公开展示文本，采用拒绝策略（与 chat/send 的脱敏策略不同）。
+        // 注册即登录，此处在生成 token 之前检测，避免脏昵称入库。
+        if (req.nickname.isNotBlank() && sensitiveWordService.contains(req.nickname)) {
+            throw BizException(BizCode.CONTENT_VIOLATION, "昵称包含敏感内容")
+        }
+
         val uid = userService.register(req)
         // CQ-13: 注册即登录 — 生成 Session Token，由 ChatService 完成 Session 绑定
         val token = UUID.randomUUID().toString()
