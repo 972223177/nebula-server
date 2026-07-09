@@ -29,6 +29,9 @@ dependencies {
     // kotlinx.coroutines — SnowflakeIdGenerator 使用 Mutex 替代 @Synchronized
     implementation(libs.kotlinx.coroutines.core)
 
+    // 敏感词匹配内核（houbb/sensitive-word DFA 引擎，仅 HoubbSensitiveWordService 依赖，接口隔离）
+    implementation(libs.sensitive.word)
+
     // ─── 测试依赖 ───
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)

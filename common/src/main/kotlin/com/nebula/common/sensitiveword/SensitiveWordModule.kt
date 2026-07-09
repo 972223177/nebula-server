@@ -11,7 +11,7 @@ import org.koin.dsl.module
  * 注册：
  * - [SensitiveWordFetcher]：配置了远程源（source-url 非空）时绑定 [GiteeHttpWordFetcher]，
  *   否则绑定 [NoopWordFetcher]（不发起网络请求，仅用内嵌资源）
- * - [SensitiveWordService]：内存词库服务（含内嵌资源路径与远程开关）
+ * - [SensitiveWordService]：抽象层接口，绑定 houbb 实现 [HoubbSensitiveWordService]（接口隔离，D-120）
  * - [SensitiveWordInitializer]：启动初始化器（ModuleInitializer），在 ServerBootstrap 启动时加载词库
  */
 val sensitiveWordModule: Module = module {
@@ -19,9 +19,9 @@ val sensitiveWordModule: Module = module {
         val cfg = get<ApplicationConfig>().sensitiveWord
         if (cfg.sourceUrl.isBlank()) NoopWordFetcher() else GiteeHttpWordFetcher(cfg.sourceUrl)
     }
-    single {
+    single<SensitiveWordService> {
         val cfg = get<ApplicationConfig>().sensitiveWord
-        SensitiveWordService(
+        HoubbSensitiveWordService(
             fetcher = get(),
             resourcePath = cfg.resourcePath,
             remoteEnabled = cfg.sourceUrl.isNotBlank()

@@ -1,24 +1,18 @@
 package com.nebula.common.sensitiveword
 
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * 归一化层（M1 review）验证：确保常见变形绕过无法逃逸检测。
+ * [HoubbSensitiveWordService] 行为验证：覆盖常见变形绕过（D-108 绕过防御）与脱敏保留分隔符（D-119）。
  */
-class SensitiveWordNormalizerTest {
+class HoubbSensitiveWordServiceTest {
 
-    private val service = SensitiveWordService(NoopWordFetcher(), "sensitive/does-not-exist.txt", false).apply {
+    private val service = HoubbSensitiveWordService(NoopWordFetcher(), "sensitive/does-not-exist.txt", false).apply {
         swap(listOf("fuck", "傻逼"))
-    }
-
-    @Test
-    fun normalizeFoldsCaseAndWidthAndStripsNoise() {
-        val n = SensitiveWordNormalizer.normalize("ＦＵＣＫ") // 全角大写
-        assertEquals("fuck", n.text, "全角大写应折叠为半角小写")
-        assertEquals(listOf(0, 1, 2, 3), n.srcIndex.toList())
     }
 
     @Test
@@ -52,10 +46,12 @@ class SensitiveWordNormalizerTest {
     }
 
     @Test
-    fun filterMasksOriginalIncludingSeparators() {
-        // 掩码区间映射回原串，连被剔除的分隔符/空格一并覆盖
+    fun filterMasksMatchedRegion() {
+        // houbb 命中后替换整个匹配区间（含被忽略的分隔符/空格），统一打码
         assertEquals("你**好", service.filter("你傻逼好"))
         assertEquals("***", service.filter("傻 逼"))
         assertEquals("*******", service.filter("f.u.c.k"))
+        assertEquals("*******", service.filter("f u c k"))
+        assertEquals("***", service.filter("傻*逼"))
     }
 }
