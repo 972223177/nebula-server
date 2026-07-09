@@ -476,7 +476,7 @@ class GatewayModuleTest {
             GlobalContext.get().get<SensitiveWordReloadHandler>()
         )
         collector.registerAll(registry)
-        assertNotNull(registry.get("system/sensitive-word/download"))
-        assertNotNull(registry.get("admin/sensitive-word/reload"))
+        assertNotNull(registry.get("system/sensitive_word_download"))
+        assertNotNull(registry.get("admin/sensitive_word_reload"))
     }
 }

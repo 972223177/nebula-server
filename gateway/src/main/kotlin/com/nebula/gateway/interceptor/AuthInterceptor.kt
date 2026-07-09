@@ -24,7 +24,7 @@ import kotlinx.coroutines.withContext
  */
 open class AuthInterceptor(
     private val sessionRegistry: SessionRegistry,
-    private val skipMethods: Set<String> = setOf("system/ping", "admin/", "system/sensitive-word")
+    private val skipMethods: Set<String> = setOf("system/ping", "admin/", "system/sensitive_word")
 ) : Interceptor {
 
     override suspend fun intercept(request: Request, chain: Interceptor.Chain): Response {

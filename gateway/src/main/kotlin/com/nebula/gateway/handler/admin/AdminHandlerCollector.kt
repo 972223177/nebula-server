@@ -8,8 +8,8 @@ import com.nebula.gateway.di.register
  * Admin 管理 Handler 收集器 — 注册所有 Admin 模块的 Handler（Phase 10）。
  *
  * 注册的 Handler：
- * - [DeadLetterQueryHandler]：死信记录查询（admin/dead-letters）
- * - [RetryDeadLetterHandler]：死信手动重试（admin/retry-dead-letter）
+ * - [DeadLetterQueryHandler]：死信记录查询（admin/dead_letters）
+ * - [RetryDeadLetterHandler]：死信手动重试（admin/retry_dead_letter）
  */
 class AdminHandlerCollector(
     private val deadLetterQueryHandler: DeadLetterQueryHandler,

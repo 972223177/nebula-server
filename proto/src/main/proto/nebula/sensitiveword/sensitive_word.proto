@@ -5,7 +5,7 @@ package com.nebula.chat.sensitiveword;
 option java_multiple_files = true;
 option java_package = "com.nebula.chat.sensitiveword";
 
-// ---- system/sensitive-word/download 词库下载（分页）----
+// ---- system/sensitive_word_download 词库下载（分页）----
 // 客户端启动后调用此接口拉取敏感词列表，用于在本地构建过滤结构。
 // 词库可能较大，采用分页拉取，客户端根据 has_more 循环翻页直到取完。
 message SensitiveWordDownloadReq {
@@ -20,7 +20,7 @@ message SensitiveWordDownloadResp {
   bool has_more = 4;           // 是否还有下一页
 }
 
-// ---- admin/sensitive-word/reload 手动重载 ----
+// ---- admin/sensitive_word_reload 手动重载 ----
 // 强制从源（Gitee）重新拉取词库并重建内存匹配器，成功后向所有在线客户端 PUSH 更新通知。
 // 源不可达或返回为空时返回错误（SENSITIVE_WORD_FETCH_FAILED），不影响现有词库。
 // 此接口响应包含业务数据（版本信息），因此定义 Resp。

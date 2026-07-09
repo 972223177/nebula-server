@@ -14,10 +14,10 @@ import kotlin.test.assertTrue
 class AdminHandlerCollectorTest {
 
     /** 死信查询 Handler 的 method 名称 */
-    private val deadLetterMethod = "admin/dead-letters"
+    private val deadLetterMethod = "admin/dead_letters"
 
     /** 死信重试 Handler 的 method 名称 */
-    private val retryDeadLetterMethod = "admin/retry-dead-letter"
+    private val retryDeadLetterMethod = "admin/retry_dead_letter"
 
     @Test
     fun registerAllShouldRegisterBothHandlers() = runTest {
@@ -32,8 +32,8 @@ class AdminHandlerCollectorTest {
 
         collector.registerAll(registry)
 
-        assertNotNull(registry.get(deadLetterMethod), "admin/dead-letters 应已注册")
-        assertNotNull(registry.get(retryDeadLetterMethod), "admin/retry-dead-letter 应已注册")
+        assertNotNull(registry.get(deadLetterMethod), "admin/dead_letters 应已注册")
+        assertNotNull(registry.get(retryDeadLetterMethod), "admin/retry_dead_letter 应已注册")
     }
 
     @Test
@@ -63,11 +63,11 @@ class AdminHandlerCollectorTest {
         collector.registerAll(registry)
 
         val deadLetterEntry = registry.get(deadLetterMethod)
-        assertNotNull(deadLetterEntry, "admin/dead-letters 应已注册")
-        assertTrue(deadLetterEntry.handler is DeadLetterQueryHandler, "admin/dead-letters 应返回 DeadLetterQueryHandler 类型")
+        assertNotNull(deadLetterEntry, "admin/dead_letters 应已注册")
+        assertTrue(deadLetterEntry.handler is DeadLetterQueryHandler, "admin/dead_letters 应返回 DeadLetterQueryHandler 类型")
 
         val retryDeadLetterEntry = registry.get(retryDeadLetterMethod)
-        assertNotNull(retryDeadLetterEntry, "admin/retry-dead-letter 应已注册")
-        assertTrue(retryDeadLetterEntry.handler is RetryDeadLetterHandler, "admin/retry-dead-letter 应返回 RetryDeadLetterHandler 类型")
+        assertNotNull(retryDeadLetterEntry, "admin/retry_dead_letter 应已注册")
+        assertTrue(retryDeadLetterEntry.handler is RetryDeadLetterHandler, "admin/retry_dead_letter 应返回 RetryDeadLetterHandler 类型")
     }
 }

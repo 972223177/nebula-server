@@ -11,7 +11,7 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.push.PushService
 
 /**
- * 敏感词库手动重载 Handler — method = "admin/sensitive-word/reload"（D-117）。
+ * 敏感词库手动重载 Handler — method = "admin/sensitive_word_reload"（D-117）。
  *
  * 强制重新加载词库并重建内存匹配器：若配置了可达的远程源（source-url 非空）则从远程拉取，
  * 否则重读内嵌资源文件（便于直接编辑 builtin-words.txt 后热更新）。成功后向所有在线客户端 PUSH
@@ -26,8 +26,8 @@ class SensitiveWordReloadHandler(
     private val pushService: PushService
 ) : Handler<SensitiveWordReloadReq, SensitiveWordReloadResp> {
 
-    /** method 路由：admin/sensitive-word/reload（admin/ 前缀跳过认证，与其他 admin 接口一致） */
-    override val method: String = "admin/sensitive-word/reload"
+    /** method 路由：admin/sensitive_word_reload（admin/ 前缀跳过认证，与其他 admin 接口一致） */
+    override val method: String = "admin/sensitive_word_reload"
 
     override suspend fun handle(req: SensitiveWordReloadReq): SensitiveWordReloadResp {
         val ok = sensitiveWordService.reload()
