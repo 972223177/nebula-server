@@ -91,10 +91,20 @@ class MessageRepositoryImpl(
             parseToEntity(entry)?.let { entry to it }
         }
 
-        // D-03: 无法解析的条目直接 XACK（毒消息，重试无意义）
-        val unparseableIds = entries.filter { entry -> parsed.none { it.first == entry } }
-            .map { it.id }
-        unparseableIds.forEach { messageQueue.acknowledge(it) }
+        // D-03 修复: 无法解析的条目不再静默 XACK 丢弃，而是先录死信（保留原始 body 便于排查），
+        // 再 XACK 释放 pending，避免 Stream 无限堆积且无痕丢失。
+        val unparseableEntries = entries.filter { entry -> parsed.none { it.first == entry } }
+        for (entry in unparseableEntries) {
+            try {
+                onDeadLetter?.onUnparseableMessage(
+                    entry.body ?: emptyMap(),
+                    "无法解析的毒消息，关键字段缺失或非法: conv=${entry.body?.get("conversationId")}"
+                )
+            } catch (dlEx: Exception) {
+                logger.error(dlEx) { "毒消息录死信失败，仍 XACK 避免堆积: id=${entry.id}" }
+            }
+            messageQueue.acknowledge(entry.id)
+        }
 
         if (parsed.isEmpty()) return 0
 

@@ -84,6 +84,65 @@ class DeadLetterService(
     }
 
     /**
+     * 毒消息死信回调实现（D-03 修复）。
+     *
+     * 由 repository 模块在 Redis Stream 条目无法反序列化为 [com.nebula.repository.entity.MessageEntity]
+     * 时调用。关键字段已缺失，直接落地为 [STATUS_PERMANENT_FAILED] 死信并保留原始 body，
+     * 便于人工排查数据损坏，且不进入补偿重试循环（重试必败）。
+     */
+    override suspend fun onUnparseableMessage(
+        rawBody: Map<String, String>,
+        reason: String
+    ) {
+        createUnparseable(rawBody, reason)
+    }
+
+    /**
+     * 创建毒消息死信记录（D-03 修复）。
+     *
+     * 条目因缺少关键字段无法解析为完整消息，无法可靠还原，故不再重试。
+     * 以占位值填充必填字段（conversationId 空串、senderUid/messageType/clientTs 为 0），
+     * 状态直接置 [STATUS_PERMANENT_FAILED]，避免补偿任务空转；
+     * 原始 body 摘要写入 [failReason] 以保留排查线索。
+     *
+     * @param rawBody 原始 Stream 条目 body（字段可能缺失或非法）
+     * @param reason 无法解析的原因描述
+     * @return 创建的死信 DTO
+     */
+    suspend fun createUnparseable(
+        rawBody: Map<String, String>,
+        reason: String
+    ): DeadLetterDTO {
+        val conversationId = rawBody["conversationId"] ?: ""
+        val senderUid = rawBody["senderUid"]?.toLongOrNull() ?: 0L
+        val messageType = rawBody["messageType"]?.toIntOrNull() ?: 0
+        val content = rawBody["content"] ?: ""
+        val payload = rawBody["payload"]?.let { runCatching { java.util.Base64.getDecoder().decode(it) }.getOrNull() }
+        val clientMsgId = rawBody["clientMessageId"]
+        val clientTs = rawBody["clientTs"]?.toLongOrNull() ?: 0L
+        val detail = "rawBody=[${rawBody.entries.joinToString(", ") { "${it.key}=${it.value.take(128)}" }}]"
+
+        val entity = DeadLetterEntity(
+            conversationId = conversationId,
+            senderUid = senderUid,
+            messageType = messageType,
+            content = content,
+            payload = payload,
+            clientMsgId = clientMsgId,
+            clientTs = clientTs,
+            failReason = "$reason | $detail",
+            failCount = 0,
+            status = STATUS_PERMANENT_FAILED
+        ).apply {
+            createdAt = java.time.LocalDateTime.now()
+            updatedAt = java.time.LocalDateTime.now()
+        }
+        val saved = txRunner.execute { em -> deadLetterDao.insert(em, entity) }
+        logger.warn { "毒消息死信已创建(永久失败): id=${saved.id}, conv=$conversationId, reason=$reason" }
+        return saved.toDTO()
+    }
+
+    /**
      * 创建死信记录（D-75）。
      *
      * 当消息投递失败达到最大重试次数时，由 ChatService 调用此方法写入死信表。

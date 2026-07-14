@@ -29,4 +29,23 @@ interface DeadLetterCallback {
         clientTs: Long,
         reason: String
     )
+
+    /**
+     * 无法解析的毒消息回调（D-03 修复：原先静默 XACK 丢弃，无痕丢失）。
+     *
+     * 当 Redis Stream 条目缺少关键字段（conversationId / senderUid / messageType /
+     * content / clientTs / serverTs 之一缺失或格式非法）导致无法反序列化为
+     * [com.nebula.repository.entity.MessageEntity] 时调用。
+     *
+     * 因关键字段缺失，无法可靠还原为完整消息，故不再重试（重试必败），而是将原始
+     * body 落地到死信表并标记为 [com.nebula.service.admin.DeadLetterService.STATUS_PERMANENT_FAILED]，
+     * 以便人工排查数据损坏来源，同时 XACK 释放 pending 避免 Stream 无限堆积。
+     *
+     * @param rawBody 原始 Stream 条目 body（Map，字段可能缺失或非法）
+     * @param reason 无法解析的原因描述
+     */
+    suspend fun onUnparseableMessage(
+        rawBody: Map<String, String>,
+        reason: String
+    )
 }
