@@ -30,11 +30,11 @@ class SessionRepository(
      * 保存 session token。
      *
      * @param token Session 令牌
-     * @param userData 用户数据（JSON 格式）
+     * @param sessionJson 用户数据（JSON 格式）
      * @param ttlSeconds TTL 秒数，默认 7 天
      */
-    override suspend fun save(token: String, userData: String, ttlSeconds: Long) {
-        redis.setex("$KEY_PREFIX$token", ttlSeconds, userData)
+    override suspend fun save(token: String, sessionJson: String, ttlSeconds: Long) {
+        redis.setex("$KEY_PREFIX$token", ttlSeconds, sessionJson)
     }
 
     /**

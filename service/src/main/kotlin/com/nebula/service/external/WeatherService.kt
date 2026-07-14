@@ -122,7 +122,7 @@ class WeatherService(
         val warningDef = async { getQWJson("/v7/warning/now", locationId) }
         val indicesDef = async { getQWJson("/v7/indices/1d?type=1,2,3,5,8,9", locationId) }
         val astronomyDef = async { getQWJson("/v7/astronomy/sunrise-sunset", locationId) }
-        val minutelyDef = if (latlon != null) async { getQWJson("/v7/minutely/5m", latlon) } else null
+        val minutelyDef = if (latlon.isNotEmpty()) async { getQWJson("/v7/minutely/5m", latlon) } else null
 
         val data = WeatherData(
             current = formatNow(nowDef.await()),

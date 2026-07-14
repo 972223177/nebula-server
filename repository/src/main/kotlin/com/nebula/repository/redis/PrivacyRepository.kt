@@ -8,6 +8,7 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -252,8 +253,8 @@ class PrivacyRepository(
         return try {
             withTimeout(REDIS_TIMEOUT_MS) {
                 val keys: kotlin.Array<String> = userIds.map { "$KEY_PREFIX$it" }.toTypedArray()
-                // Lettuce 6.5 协程 mget 泛型擦除，需要显式类型转换；as? 安全处理防止 ClassCastException
-                val mgetResult = (redis.mget(*keys) as? List<io.lettuce.core.KeyValue<String, String>>) ?: return@withTimeout emptySet<Long>()
+                // Lettuce 协程 mget 返回 Flow，collect 为 List 后按索引取用；避免未检查转换与运行时恒为 null
+                val mgetResult = redis.mget(*keys).toList()
 
                 val hiddenUsers = mutableSetOf<Long>()
                 for (i in userIds.indices) {

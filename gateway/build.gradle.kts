@@ -10,6 +10,10 @@ java {
 
 kotlin {
     jvmToolchain(21)
+    compilerOptions {
+        // 统一开启 Lettuce 协程实验 API 的 opt-in，消除大量 ExperimentalLettuceCoroutinesApi 警告
+        freeCompilerArgs.add("-opt-in=io.lettuce.core.ExperimentalLettuceCoroutinesApi")
+    }
 }
 
 tasks.register<Test>("koinDiTest") {
