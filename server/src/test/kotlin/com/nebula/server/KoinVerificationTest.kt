@@ -27,6 +27,7 @@ import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
+import com.nebula.common.sensitiveword.SensitiveWordService
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -66,6 +67,7 @@ class KoinVerificationTest {
         single<DeadLetterDao> { mockk() }
         single<JpaTxRunner> { mockk() }
         single<StatefulRedisConnection<String, String>> { mockk(relaxed = true) }
+        single<SensitiveWordService> { mockk(relaxed = true) }
         single<SnowflakeIdGenerator> { mockk() }
         single<OnlineStatusRepository> { OnlineStatusRepository(get()) }
         single<PrivacyRepository> { mockk() }

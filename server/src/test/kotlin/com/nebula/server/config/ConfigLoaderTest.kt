@@ -36,6 +36,56 @@ class ConfigLoaderTest {
      *
      * 各测试方法可通过字符串替换覆盖特定字段，减少重复代码。
      */
+    /**
+     * 外部服务（和风天气 / wttr.in / Serper 搜索 / 配额 / 缓存）配置段。
+     *
+     * 对应生产 [ConfigLoader.parseExternalService] 的必填项：
+     * qweather/wttr/serper/quota/cache.l1/cache.l2 均为必填子配置，缺失会抛 ConfigException。
+     * api-key 等可选字段此处省略（解析层以 hasPath 兜底为空串）。
+     */
+    private val externalServiceHocon: String = """
+        external-service {
+            qweather {
+                base-url = "https://devapi.qweather.com"
+                timeout-ms = 5000
+            }
+            wttr {
+                base-url = "https://wttr.in"
+                lang = "zh"
+                timeout-ms = 5000
+            }
+            serper {
+                base-url = "https://google.serper.dev"
+                timeout-ms = 8000
+            }
+            quota {
+                file-path = "~/.nebula/external_service_quota.yaml"
+                weather-daily-limit = 1000
+                search-monthly-limit = 2500
+                weather-per-user-daily-limit = 250
+                search-per-user-monthly-limit = 500
+                warning-threshold = 80
+                reject-threshold = 95
+                flush-interval-seconds = 10
+            }
+            cache {
+                l1 {
+                    weather-ttl-seconds = 120
+                    search-ttl-seconds = 300
+                    max-entries = 100
+                }
+                l2 {
+                    key-prefix = "ext:"
+                    weather-ttl-seconds = 1800
+                    geo-ttl-seconds = 86400
+                    search-ttl-seconds = 3600
+                    search-stable-ttl-seconds = 21600
+                    search-news-ttl-seconds = 600
+                }
+            }
+        }
+    """.trimIndent()
+
     private fun validHocon(): String = """
         server.port = 8080
         snowflake.worker-id = 1
@@ -56,6 +106,7 @@ class ConfigLoaderTest {
         ssl.enabled = false
         ssl.cert-chain-path = "/path/to/cert"
         ssl.private-key-path = "/path/to/key"
+        ${externalServiceHocon.prependIndent("        ")}
     """.trimIndent()
 
     // ─── 1. 正常配置加载 ──────────────────────────────────────────────────────
@@ -289,6 +340,7 @@ class ConfigLoaderTest {
             ssl.enabled = false
             ssl.cert-chain-path = "/path/to/cert"
             ssl.private-key-path = "/path/to/key"
+            ${externalServiceHocon.prependIndent("            ")}
         """.trimIndent()
         val configFile = tempDir.resolve("application.conf").toFile()
         writeHocon(configFile, hocon)

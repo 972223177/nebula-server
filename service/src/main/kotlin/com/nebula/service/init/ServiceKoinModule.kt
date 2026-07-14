@@ -48,5 +48,6 @@ val serviceKoinModule = module {
     single { ExternalServiceOrchestrator(get(), get(), get(), get(), get(), get(), get()) }
 
     // 配额模块生命周期（由 ModuleInitializer 在启动/关闭时管理，遵守分层依赖）
-    single<ModuleInitializer> { QuotaModuleInitializer(get()) }
+    // 注意：无参构造 —— QuotaManager 在 init() 阶段才懒解析，避免收集阶段急切依赖运行时 declare 的 Redis 连接
+    single<ModuleInitializer> { QuotaModuleInitializer() }
 }
