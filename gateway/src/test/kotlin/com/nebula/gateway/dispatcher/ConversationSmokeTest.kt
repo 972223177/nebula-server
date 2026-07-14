@@ -29,6 +29,7 @@ import com.nebula.service.conversation.ConversationMemberInfo
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.conversation.CreateGroupResult
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -61,6 +62,7 @@ class ConversationSmokeTest {
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
         sensitiveWordService = mockk()
+        every { sensitiveWordService.contains(any()) } returns false
     }
 
     // ===================================================================

@@ -8,5 +8,5 @@ group = "com.nebula"
 version = "1.0.0-SNAPSHOT"
 
 repositories {
-    mavenCentral()
+    maven { url = uri("https://maven.aliyun.com/repository/public") }
 }

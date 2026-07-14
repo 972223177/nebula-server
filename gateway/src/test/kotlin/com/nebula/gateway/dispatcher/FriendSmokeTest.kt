@@ -32,6 +32,7 @@ import com.nebula.service.friend.FriendAcceptResult
 import com.nebula.service.friend.FriendAddResult
 import com.nebula.service.friend.FriendService
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -69,6 +70,7 @@ class FriendSmokeTest {
         pushService = mockk(relaxed = true)
         sessionRegistry = mockk()
         sensitiveWordService = mockk()
+        every { sensitiveWordService.contains(any()) } returns false
     }
 
     // ===================================================================

@@ -207,7 +207,7 @@ class ConversationAndFriendshipDaoIntegrationTest : DatabaseTestBase() {
         val affected = txRunner.execute { em -> memberDao.softDeleteByConversationIdAndUserId(em, convId, userId) }
         assertEquals(1, affected)
 
-        val member = txRunner.execute { em -> memberDao.findByConversationIdAndUserId(em, convId, userId) }
+        val member = txRunner.execute { em -> memberDao.findByConversationIdAndUserIdIncludingDeleted(em, convId, userId) }
         assertNotNull(member)
         assertEquals(1, member.deleted, "deleted 应为 1")
         assertTrue(!member.isActive, "isActive 应为 false")

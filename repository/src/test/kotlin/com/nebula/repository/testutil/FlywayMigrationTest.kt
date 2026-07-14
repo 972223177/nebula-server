@@ -174,7 +174,7 @@ class FlywayMigrationTest : DatabaseTestBase() {
             val countRs = stmt.executeQuery("SELECT COUNT(*) FROM users")
             assertTrue(countRs.next(), "users 表无数据，种子数据未导入")
             val count = countRs.getInt(1)
-            assertEquals(3, count, "Expected 3 seed users, actual: $count")
+            assertEquals(13, count, "Expected 13 seed users (3 base + 10 auto-accept bots), actual: $count")
 
             // 验证特定用户记录
             val expectedUsers = mapOf(

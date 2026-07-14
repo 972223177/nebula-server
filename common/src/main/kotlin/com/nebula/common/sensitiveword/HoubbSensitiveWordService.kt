@@ -226,8 +226,8 @@ class HoubbSensitiveWordService(
          * 中文与字母数字均保留，不影响正常匹配。
          */
         private val SKIP_CHARS_IGNORE: ISensitiveWordCharIgnore = object : ISensitiveWordCharIgnore {
-            override fun ignore(index: Int, chars: CharArray, context: InnerSensitiveWordContext): Boolean =
-                !chars[index].isLetterOrDigit()
+            override fun ignore(index: Int, text: String, context: InnerSensitiveWordContext): Boolean =
+                !text[index].isLetterOrDigit()
         }
 
         private val logger = KotlinLogging.logger {}
