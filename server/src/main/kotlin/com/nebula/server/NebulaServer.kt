@@ -6,6 +6,7 @@ import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.service.ChatService
+import com.nebula.common.external.ExternalServiceConfig
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -55,7 +56,13 @@ fun main() {
     // ServerBootstrap 聚合了所有层的 Koin 模块定义，server 无需直接 import 下层模块
     startKoin {
         modules(
-            module { single { config } },
+            module {
+                single { config }
+                // 外部服务配置 bean（Orchestrator / QuotaManager / Cache 按类型注入，见 external-service-backend.md §4.7）
+                single<ExternalServiceConfig> { config.externalService }
+                single { config.externalService.quota }
+                single { config.externalService.cache }
+            },
             *ServerBootstrap.koinModules.toTypedArray()
         )
     }
@@ -105,7 +112,8 @@ fun main() {
             logger.error(e) { "停止 gRPC 服务失败" }
         }
 
-        // 2-4. 停止消息刷盘、关闭 Redis、关闭数据库连接池（由 ServerBootstrap 处理）
+        // 2-4. 停止消息刷盘、关闭 Redis、关闭数据库连接池（由 ServerBootstrap 处理；
+        //      配额优雅刷盘由 QuotaModuleInitializer.shutdown() 在逆序关闭时执行）
         ServerBootstrap.executeShutdown(koin)
 
         logger.info { "优雅关闭完成" }

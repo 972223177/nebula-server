@@ -7,6 +7,7 @@ import com.nebula.common.config.RedisConfig
 import com.nebula.common.config.ServerConfig
 import com.nebula.common.config.SnowflakeConfig
 import com.nebula.common.config.SslConfig
+import com.nebula.common.external.*
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -43,6 +44,7 @@ object ConfigLoader {
      * 3. 默认引用 (reference.conf) — Typesafe Config 库和依赖的默认值
      */
     fun load(configPath: String = "config/application.conf"): ApplicationConfig {
+        loadDotEnv() // 本地开发：自动加载项目根 .env，与 Docker Compose 行为一致（仅补充缺失项，不覆盖已有环境变量）
         val env = System.getenv("ENV") ?: "dev"
         log.info { "Loading configuration from $configPath (env: $env)" }
 
@@ -67,7 +69,8 @@ object ConfigLoader {
         val resolvedConfig = ConfigFactory.systemProperties()
             .withFallback(fileConfig)                          // 第二优先级: 文件配置
             .withFallback(envConfig)                           // 第三优先级: 环境回退
-            .withFallback(ConfigFactory.defaultReference())    // 第四优先级: 库默认值
+            .withFallback(ConfigFactory.systemEnvironment())    // 第四优先级: 容器环境变量(Docker compose 注入)
+            .withFallback(ConfigFactory.defaultReference())    // 第五优先级: 库默认值
             .resolve()
 
         val appConfig = parseConfig(resolvedConfig, env)
@@ -131,7 +134,8 @@ object ConfigLoader {
                 } else {
                     SensitiveWordConfig().resourcePath
                 }
-            )
+            ),
+            externalService = parseExternalService(config)
         )
     }
 
@@ -170,5 +174,97 @@ object ConfigLoader {
         }
 
         log.info { "配置校验通过 — server.port=${config.server.port}, db.poolSize=${config.database.poolSize}, redis.port=${config.redis.port}" }
+    }
+
+    /**
+     * 解析 `external-service` 配置段为类型安全的 [ExternalServiceConfig]（D-XX）。
+     *
+     * @param config 已 resolved 的 Typesafe Config 对象
+     * @return 外部服务配置实例
+     *
+     * 可选字段（api-key / file-path）缺失时回退默认值；其余为必填项，缺失将抛 ConfigException。
+     */
+    private fun parseExternalService(config: Config): ExternalServiceConfig {
+        val qw = config.getConfig("external-service.qweather")
+        val wttr = config.getConfig("external-service.wttr")
+        val serper = config.getConfig("external-service.serper")
+        val quota = config.getConfig("external-service.quota")
+        val cache = config.getConfig("external-service.cache")
+        val l1 = cache.getConfig("l1")
+        val l2 = cache.getConfig("l2")
+        return ExternalServiceConfig(
+            qweather = QWeatherConfig(
+                apiKey = if (qw.hasPath("api-key")) qw.getString("api-key") else "",
+                baseUrl = qw.getString("base-url"),
+                timeoutMs = qw.getInt("timeout-ms")
+            ),
+            wttr = WttrConfig(
+                baseUrl = wttr.getString("base-url"),
+                lang = wttr.getString("lang"),
+                timeoutMs = wttr.getInt("timeout-ms")
+            ),
+            serper = SerperConfig(
+                apiKey = if (serper.hasPath("api-key")) serper.getString("api-key") else "",
+                baseUrl = serper.getString("base-url"),
+                timeoutMs = serper.getInt("timeout-ms")
+            ),
+            quota = ExternalServiceQuotaConfig(
+                filePath = if (quota.hasPath("file-path")) quota.getString("file-path") else "~/.nebula/external_service_quota.yaml",
+                weatherDailyLimit = quota.getInt("weather-daily-limit"),
+                searchMonthlyLimit = quota.getInt("search-monthly-limit"),
+                weatherPerUserDailyLimit = quota.getInt("weather-per-user-daily-limit"),
+                searchPerUserMonthlyLimit = quota.getInt("search-per-user-monthly-limit"),
+                warnThreshold = quota.getInt("warning-threshold"),
+                rejectThreshold = quota.getInt("reject-threshold"),
+                flushIntervalSeconds = quota.getInt("flush-interval-seconds")
+            ),
+            cache = ExternalServiceCacheConfig(
+                l1 = L1Config(
+                    weatherTtlSeconds = l1.getInt("weather-ttl-seconds"),
+                    searchTtlSeconds = l1.getInt("search-ttl-seconds"),
+                    maxEntries = l1.getInt("max-entries")
+                ),
+                l2 = L2Config(
+                    keyPrefix = l2.getString("key-prefix"),
+                    weatherTtlSeconds = l2.getInt("weather-ttl-seconds"),
+                    geoTtlSeconds = l2.getInt("geo-ttl-seconds"),
+                    searchTtlSeconds = l2.getInt("search-ttl-seconds"),
+                    searchStableTtlSeconds = l2.getInt("search-stable-ttl-seconds"),
+                    searchNewsTtlSeconds = l2.getInt("search-news-ttl-seconds")
+                )
+            )
+        )
+    }
+
+    /**
+     * 本地开发辅助：若进程环境变量缺失外部 Key / DB 密码等，则从项目根 `.env` 补充加载，
+     * 使本地 `./gradlew :server:run` 与 Docker Compose（自动 source .env）行为一致。
+     *
+     * 仅补充**缺失项**：已存在于进程环境变量或系统属性的 key 不被覆盖（生产 env 注入优先）。
+     * 解析：`key=value`（跳过空行与 `#` 注释；value 自动去引号包裹）。
+     */
+    private fun loadDotEnv() {
+        val envFile = File(".env")
+        if (!envFile.exists()) return
+        try {
+            var loaded = false
+            envFile.readLines().forEach { line ->
+                val t = line.trim()
+                if (t.isEmpty() || t.startsWith("#")) return@forEach
+                val idx = t.indexOf('=')
+                if (idx <= 0) return@forEach
+                val key = t.substring(0, idx).trim()
+                val value = t.substring(idx + 1).trim().removeSurrounding("\"")
+                if (System.getenv(key) == null && System.getProperty(key) == null) {
+                    System.setProperty(key, value)
+                    loaded = true
+                }
+            }
+            if (loaded) {
+                log.info { "已从项目根 .env 补充加载缺失的环境变量" }
+            }
+        } catch (e: Exception) {
+            log.warn { "加载 .env 失败（已忽略，依赖环境变量/默认值）: ${e.message}" }
+        }
     }
 }

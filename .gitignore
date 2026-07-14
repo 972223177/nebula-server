@@ -28,3 +28,4 @@ docs/_meta/
 .codebuddy/agents/doc-reliability-expert.md
 .codebuddy/agents/doc-security-expert.md
 .codebuddy/agents/doc-client-expert.md
+external-service-backend.md

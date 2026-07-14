@@ -3,7 +3,8 @@ services:
     image: mysql:8.0
     container_name: nebula-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root123
+      # 与 server 的 DB_PASSWORD 同源，统一从项目根 .env 注入（缺失时兜底 root123，仅本地开发）
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root123}
       MYSQL_DATABASE: nebula
     ports:
       - "3306:3306"
@@ -36,6 +37,12 @@ services:
       # Docker 容器网络内用服务名通信，覆盖 application.conf 的 127.0.0.1
       DB_HOST: mysql
       REDIS_HOST: redis
+      # DB 密码与 mysql 容器 MYSQL_ROOT_PASSWORD 同源，统一从 .env 注入（缺失时兜底 root123，仅本地开发）
+      # 显式注入避免只依赖 dev.conf 兜底：一旦 ENV=prod（不加载 dev.conf）也能正常连库
+      DB_PASSWORD: ${DB_PASSWORD:-root123}
+      # 外部服务 Key：从 host 环境变量 / 本地 .env 注入（与 DB_PASSWORD 同模式，不写死在仓库）
+      QWEATHER_API_KEY: ${QWEATHER_API_KEY}
+      SERPER_API_KEY: ${SERPER_API_KEY}
       # 开发环境，自动加载 config/dev.conf 的默认密码
       ENV: dev
     depends_on:

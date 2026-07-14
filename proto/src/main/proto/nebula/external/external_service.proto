@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package com.nebula.chat.external;
+
+option java_multiple_files = true;
+option java_package = "com.nebula.chat.external";
+
+// ============================================================================
+// 外部服务集成（天气 / 网页搜索）—— 仅新增 message，不新增 gRPC service。
+//
+// 项目传输仅 ChatService.chat(stream Envelope) returns (stream Envelope) 双向流
+// （见 nebula/chat_service.proto），所有业务经 Envelope 进出：
+//   请求：Request.method = "external/query_weather"（或 "external/web_search"），
+//        params = WeatherRequest.toByteArray()（bytes 负载，由 ProtoCodec 按 Handler 泛型反序列化）；
+//   响应：Response.result = WeatherResponse.toByteArray()（由 ProtoCodec 按 Handler 泛型序列化），
+//        code/msg 走统一 BizCode。
+//
+// 错误码（common/BizCode.kt 16xx 段，由 ExceptionInterceptor 统一写入 Response.code/msg）：
+//   QUOTA_EXCEEDED(1600)      免费配额已用完（msg 折叠剩余重置秒数）
+//   SERVICE_UNAVAILABLE(1601) 服务暂时不可用（Key 缺失 / 超时 / 熔断降级失败）
+//   INVALID_CITY(1602)        城市不存在
+//   RATE_LIMITED(1004)        限流 / 上游 429 退避（复用既有码）
+// ============================================================================
+
+// ─── 天气查询 ───
+
+// external/query_weather 请求。
+message WeatherRequest {
+  string city = 1;          // 城市名，如 "北京"
+}
+
+// external/query_weather 响应。
+message WeatherResponse {
+  string formatted = 1;     // 格式化天气文本，直接注入 LLM context
+  // 格式示例：
+  // 北京（北京市）
+  // 当前晴，25°C（体感23°C）
+  // 未来三天：2026-07-15: 晴 22~31°C；2026-07-16: 多云 23~30°C
+  // 分钟降水：未来2小时无降水
+  // 空气质量：AQI 35（等级1），PM2.5 25μg/m³
+  // 天气预警：无
+  // 生活指数：穿衣：1 舒适；紫外线：2 中等；感冒：1 低发
+  // 日出：05:30 日落：19:45，月相：亏凸月
+}
+
+// ─── 网页搜索 ───
+
+// external/web_search 请求。
+message SearchRequest {
+  string query = 1;         // 用户搜索词
+  int32 max_results = 2;    // 最大结果数，默认 5（Serper 支持 1-10，服务端裁剪到 [1,10]）
+  string search_type = 3;   // 搜索类型：search（默认网页）、news（新闻）等，服务端白名单校验
+}
+
+message SearchResultItem {
+  string title = 1;         // 标题
+  string snippet = 2;       // 摘要
+  string url = 3;           // 来源链接
+}
+
+// external/web_search 响应。
+message SearchResponse {
+  string formatted = 1;                 // 格式化搜索结果文本，直接注入 LLM context
+  repeated SearchResultItem items = 2;  // 结构化结果（可选）
+  // formatted 格式示例：
+  // 搜索结果（共 5 条）：
+  // 1. [标题] ...摘要...
+  // 2. [标题] ...摘要...
+}

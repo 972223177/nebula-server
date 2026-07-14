@@ -9,6 +9,7 @@ package com.nebula.common
  * - 13xx：好友
  * - 14xx：会话 / 群组
  * - 15xx：消息
+ * - 16xx：外部服务（天气 / 搜索等第三方 API 集成）
  * - 9xxx：系统内部异常（数据库、缓存等）
  *
  * 每个枚举值包含整数码（code）和前端展示文案（msg）。
@@ -72,6 +73,12 @@ enum class BizCode(val code: Int, val msg: String) {
     CONTENT_VIOLATION(1503, "content violation"),
     /** 敏感词库拉取失败（源不可达或返回为空），重载场景返回此错误 */
     SENSITIVE_WORD_FETCH_FAILED(1504, "sensitive word fetch failed"),
+    /** 外部服务免费配额已耗尽（天气日限额 / 搜索月限额），msg 折叠剩余重置秒数 */
+    QUOTA_EXCEEDED(1600, "external quota exceeded"),
+    /** 外部服务暂时不可用（API Key 缺失 / 上游超时 / 熔断降级失败） */
+    SERVICE_UNAVAILABLE(1601, "external service unavailable"),
+    /** 天气查询城市不存在（GeoAPI 未匹配到 LocationID） */
+    INVALID_CITY(1602, "invalid city"),
     /** 服务器内部未预期异常 */
     INTERNAL_ERROR(9000, "internal error"),
     /** 数据库操作失败，如连接超时或约束冲突 */

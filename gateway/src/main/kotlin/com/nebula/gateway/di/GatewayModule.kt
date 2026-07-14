@@ -1,6 +1,7 @@
 package com.nebula.gateway.di
 
 import com.nebula.service.init.serviceKoinModule
+import com.nebula.gateway.di.externalHandlerModule
 import com.nebula.gateway.di.sensitiveWordHandlerModule
 
 /**
@@ -25,5 +26,6 @@ val gatewayModules = listOf(
     conversationHandlerModule,
     friendHandlerModule,
     messageReliabilityModule,
-    sensitiveWordHandlerModule
+    sensitiveWordHandlerModule,
+    externalHandlerModule       // ← 新增：外部服务 Handler/Collector（天气 / 搜索）
 )

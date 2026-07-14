@@ -1,5 +1,7 @@
 package com.nebula.common.config
 
+import com.nebula.common.external.ExternalServiceConfig
+
 /**
  * 应用顶层配置聚合类，承载所有子模块配置，外部由 [ConfigFactory] 从 YAML/HOCON 文件反序列化注入。
  *
@@ -19,5 +21,7 @@ data class ApplicationConfig(
     /** gRPC TLS/SSL 传输层安全配置 */
     val ssl: SslConfig,
     /** 敏感词库配置（源地址、加载策略） */
-    val sensitiveWord: SensitiveWordConfig
+    val sensitiveWord: SensitiveWordConfig,
+    /** 外部服务配置（天气 / 搜索第三方 API 集成，详见 external-service-backend.md） */
+    val externalService: ExternalServiceConfig
 )

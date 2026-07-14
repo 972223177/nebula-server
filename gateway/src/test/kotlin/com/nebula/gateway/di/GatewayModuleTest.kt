@@ -6,6 +6,7 @@ import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.dispatcher.HandlerRegistry
+import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
@@ -36,6 +37,9 @@ import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.sensitiveword.SensitiveWordDownloadHandler
 import com.nebula.gateway.handler.sensitiveword.SensitiveWordHandlerCollector
 import com.nebula.gateway.handler.sensitiveword.SensitiveWordReloadHandler
+import com.nebula.gateway.handler.external.ExternalHandlerCollector
+import com.nebula.gateway.handler.external.QueryWeatherHandler
+import com.nebula.gateway.handler.external.WebSearchHandler
 import com.nebula.gateway.handler.system.SystemHandlerCollector
 import com.nebula.gateway.handler.user.BatchGetStatusHandler
 import com.nebula.gateway.handler.user.BatchGetUserHandler
@@ -62,6 +66,7 @@ import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationService
+import com.nebula.service.external.ExternalServiceOrchestrator
 import com.nebula.service.friend.FriendService
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
@@ -120,6 +125,7 @@ class GatewayModuleTest {
     private val friendService = mockk<FriendService>()
     private val onlineStatusService = mockk<OnlineStatusService>()
     private val sensitiveWordService = mockk<SensitiveWordService>()
+    private val externalOrchestrator = mockk<ExternalServiceOrchestrator>()
 
     /**
      * 构建外部 Repository Koin 模块。
@@ -206,6 +212,12 @@ class GatewayModuleTest {
         single { sensitiveWordService }
         single { SensitiveWordDownloadHandler(get()) }
         single { SensitiveWordReloadHandler(get(), get()) }
+
+        // 外部服务（天气 / 搜索）—— 镜像生产 externalHandlerModule
+        single { externalOrchestrator }
+        single { QueryWeatherHandler(get()) }
+        single { WebSearchHandler(get()) }
+        single<HandlerCollector>(named("external")) { ExternalHandlerCollector(get(), get()) }
     }
 
     @AfterEach
@@ -478,5 +490,23 @@ class GatewayModuleTest {
         collector.registerAll(registry)
         assertNotNull(registry.get("system/sensitive_word_download"))
         assertNotNull(registry.get("admin/sensitive_word_reload"))
+    }
+
+    /**
+     * 验证外部服务 Handler Collector 注册 query_weather 与 web_search 两个 method 名称。
+     */
+    @Test
+    fun externalHandlersRegisteredCorrectly() = runTest {
+        startKoin {
+            modules(frameworkModule, buildHandlerModule(), buildExternalModule())
+        }
+        val registry = GlobalContext.get().get<HandlerRegistry>()
+        val collector = ExternalHandlerCollector(
+            GlobalContext.get().get<QueryWeatherHandler>(),
+            GlobalContext.get().get<WebSearchHandler>()
+        )
+        collector.registerAll(registry)
+        assertNotNull(registry.get("external/query_weather"))
+        assertNotNull(registry.get("external/web_search"))
     }
 }
