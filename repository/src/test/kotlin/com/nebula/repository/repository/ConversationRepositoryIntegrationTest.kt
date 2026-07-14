@@ -95,7 +95,7 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         doInSession { session ->
-            val loaded = session.get(ConversationEntity::class.java, convId)
+            val loaded = requireNotNull(session.find(ConversationEntity::class.java, convId))
             assertNotNull(loaded, "Private conversation failed to persist")
             assertEquals(0, loaded.type, "Private conv type should be 0")
             assertNotNull(loaded.createdAt, "createdAt 应为非空")
@@ -130,7 +130,7 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         doInSession { session ->
-            val loaded = session.get(ConversationEntity::class.java, convId)
+            val loaded = requireNotNull(session.find(ConversationEntity::class.java, convId))
             assertNotNull(loaded, "Group conversation failed to persist")
             assertEquals(2, loaded.type, "Group conv type should be 2")
             assertEquals("testGroup", loaded.name, "Group name mismatch")
@@ -164,7 +164,7 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         doInSession { session ->
-            val loaded = session.get(ConversationEntity::class.java, convId)
+            val loaded = requireNotNull(session.find(ConversationEntity::class.java, convId))
             assertNotNull(loaded, "Failed to find conversation by ID")
             assertEquals("findTestConv", loaded.name)
             assertEquals(0, loaded.type)
@@ -210,7 +210,7 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         doInSession { session ->
-            val loaded = session.get(ConversationEntity::class.java, convId)
+            val loaded = requireNotNull(session.find(ConversationEntity::class.java, convId))
             assertNotNull(loaded, "Conversation should still exist after update")
             assertEquals(10001L, loaded.lastMessageId, "lastMessageId 更新不匹配")
             assertEquals("Hello, this is a test message", loaded.lastMessagePreview, "lastMessagePreview update mismatch")
@@ -247,7 +247,7 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         doInSession { session ->
-            val loaded = session.get(ConversationEntity::class.java, convId)
+            val loaded = requireNotNull(session.find(ConversationEntity::class.java, convId))
             assertNotNull(loaded, "Conversation should still exist after update")
             assertEquals(3, loaded.memberCount, "memberCount 应更新为 3")
         }
@@ -278,8 +278,7 @@ class ConversationRepositoryIntegrationTest : DatabaseTestBase() {
         }
 
         doInSession { session ->
-            val loaded = session.get(ConversationMemberEntity::class.java, 1L)
-            // 由于使用自增 ID，此处通过业务查询验证
+            // 由于使用自增 ID，此处通过业务查询验证（不使用硬编码自增 ID 按主键查找）
             val hql = "FROM ConversationMemberEntity cm WHERE cm.conversationId = :cid AND cm.userId = :uid"
             val result = session.createSelectionQuery(hql, ConversationMemberEntity::class.java)
                 .setParameter("cid", convId)

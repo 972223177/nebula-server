@@ -189,14 +189,14 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
 
         // 执行软删除
         doInSession { session ->
-            val toDelete = requireNotNull(session.get(FriendshipEntity::class.java, friendship.id))
+            val toDelete = requireNotNull(session.find(FriendshipEntity::class.java, friendship.id))
             toDelete.deleted = 1
             session.merge(toDelete)
         }
 
         // 验证 deleted=1
         val deletedEntity = doInReadOnlySession { session ->
-            session.get(FriendshipEntity::class.java, friendship.id)
+            session.find(FriendshipEntity::class.java, friendship.id)
         }
         val deleted = requireNotNull(deletedEntity)
         assertTrue(deleted.deleted == 1, "Deleted flag should be 1 after soft delete")
@@ -326,26 +326,26 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
 
         // 接受申请
         doInSession { session ->
-            val loaded = requireNotNull(session.get(FriendRequestEntity::class.java, request.id))
+            val loaded = requireNotNull(session.find(FriendRequestEntity::class.java, request.id))
             loaded.status = 1
             session.merge(loaded)
         }
 
         val accepted = doInReadOnlySession { session ->
-            session.get(FriendRequestEntity::class.java, request.id)
+            session.find(FriendRequestEntity::class.java, request.id)
         }
         val acceptedRequest = requireNotNull(accepted)
         assertTrue(acceptedRequest.status == 1, "Status should be 1 after accept")
 
         // 拒绝申请
         doInSession { session ->
-            val loaded = requireNotNull(session.get(FriendRequestEntity::class.java, request.id))
+            val loaded = requireNotNull(session.find(FriendRequestEntity::class.java, request.id))
             loaded.status = 2
             session.merge(loaded)
         }
 
         val rejected = doInReadOnlySession { session ->
-            session.get(FriendRequestEntity::class.java, request.id)
+            session.find(FriendRequestEntity::class.java, request.id)
         }
         val rejectedRequest = requireNotNull(rejected)
         assertTrue(rejectedRequest.status == 2, "Status should be 2 after reject")
@@ -355,7 +355,7 @@ class FriendshipRepositoryIntegrationTest : DatabaseTestBase() {
     @Test
     fun requestNotFoundForNonExistentId() {
         val notFound = doInReadOnlySession { session ->
-            session.get(FriendRequestEntity::class.java, NON_EXISTENT_ID)
+            session.find(FriendRequestEntity::class.java, NON_EXISTENT_ID)
         }
         assertNull(notFound, "Non-existent ID should return null")
     }
