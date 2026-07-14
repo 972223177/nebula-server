@@ -301,6 +301,12 @@ class FriendService(
                 throw FriendException(BizCode.REQUEST_HANDLED)
             }
 
+            // 防御性自校验：fromUid==toUid 的异常申请（多为历史脏数据）直接拒绝，
+            // 避免建立 (uid,uid) 自好友关系与 private:uid:uid 自会话
+            if (request.fromUid == request.toUid) {
+                throw FriendException(BizCode.SELF_FRIEND)
+            }
+
             if (request.toUid != userId) {
                 throw FriendException(BizCode.FORBIDDEN, "无权处理此申请")
             }
@@ -425,11 +431,13 @@ class FriendService(
             val friendships = friendshipDao.findFriendsByUserId(em, userId, cursor, limit + 1)
             val hasMore = friendships.size > limit
             val page = if (hasMore) friendships.dropLast(1) else friendships
-            val uids = page.map { f -> if (f.userId == userId) f.friendId else f.userId }
+            // 过滤异常的自好友数据(user_id == friend_id), 避免好友列表出现自己账户
+            val filtered = page.filter { it.userId != it.friendId }
+            val uids = filtered.map { f -> if (f.userId == userId) f.friendId else f.userId }
             val users = if (uids.isNotEmpty()) {
                 userDao.findAllById(em, uids).associateBy { it.id }
             } else emptyMap()
-            Triple(page, users, hasMore)
+            Triple(filtered, users, hasMore)
         }
 
         val friendUids = result.map { f ->

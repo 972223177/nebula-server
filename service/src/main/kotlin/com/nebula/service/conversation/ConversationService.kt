@@ -171,7 +171,7 @@ class ConversationService(
         // 私聊会话：批量查对方用户信息，填充 name 字段
         val privateConvIds = result.filter { it.type == CONV_TYPE_PRIVATE }.mapNotNull { it.id }
         // convId → 对方显示名（昵称优先，若无则用用户名）
-        val peerNameByConvId: Map<String, String> = if (privateConvIds.isNotEmpty()) {
+        val (peerNameByConvId, selfOnlyConvIds) = if (privateConvIds.isNotEmpty()) {
             val allMembers = txRunner.execute { em ->
                 conversationMemberDao.findAllByConversationIds(em, privateConvIds)
             }
@@ -179,17 +179,26 @@ class ConversationService(
             val peerUidByConvId = allMembers
                 .filter { it.userId != userId }
                 .associate { it.conversationId to it.userId }
+            // 自会话防护：成员全部是自己的 private:uid:uid 异常会话，不展示
+            val selfOnly = allMembers
+                .groupBy { it.conversationId }
+                .filter { (_, members) -> members.none { m -> m.userId != userId } }
+                .keys
+                .toSet()
             val peerUids = peerUidByConvId.values.distinct()
             val userMap = if (peerUids.isNotEmpty()) {
                 txRunner.execute { em -> userDao.findAllById(em, peerUids) }
                     .associate { it.id to (it.nickname.ifBlank { it.username }) }
             } else emptyMap()
             // convId → 对方显示名
-            peerUidByConvId.mapValues { (_, uid) -> userMap[uid] ?: "" }
-        } else emptyMap()
+            peerUidByConvId.mapValues { (_, uid) -> userMap[uid] ?: "" } to selfOnly
+        } else emptyMap<String, String>() to emptySet()
+
+        // 过滤自会话(成员全是自己), 避免会话列表出现自己账户
+        val displayResult = result.filterNot { it.id in selfOnlyConvIds }
 
         val builder = ConvListResp.newBuilder()
-        result.forEach { entity ->
+        displayResult.forEach { entity ->
             val member = memberMap[entity.id]
             val convId = requireNotNull(entity.id) { "会话ID不能为null" }
             // 私聊：用对方昵称/用户名填充 name；群聊：直接用 entity.name
