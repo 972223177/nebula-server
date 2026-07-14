@@ -12,9 +12,12 @@ mysql-connector = "9.7.0"
 grpc = "1.82.2"
 grpc-kotlin = "1.5.0"
 netty-tcnative = "2.0.80.Final"
+# 未 shaded 的 Netty 版本，由 Lettuce 间接引入（runtimeClasspath 实测 4.2.13.Final）。
+# 用于对齐 netty-resolver-dns-native-macos 等原生扩展版本，避免与 classpath 上的 netty 不一致。
+netty = "4.2.13.Final"
 hibernate = "7.4.5.Final"
 lettuce = "7.6.0.RELEASE"
-flyway = "10.22.0"
+flyway = "12.11.0"
 kotlinx-coroutines = "1.11.0"
 koin = "4.2.2"
 mockk = "1.14.11"
@@ -44,6 +47,9 @@ grpc-kotlin-stub = { module = "io.grpc:grpc-kotlin-stub", version.ref = "grpc-ko
 grpc-services = { module = "io.grpc:grpc-services", version.ref = "grpc" }
 grpc-api = { module = "io.grpc:grpc-api", version.ref = "grpc" }
 netty-tcnative = { module = "io.netty:netty-tcnative-boringssl-static", version.ref = "netty-tcnative" }
+# macOS 原生 DNS 解析器，消除 Netty 的 MacOSDnsServerAddressStreamProvider 警告。
+# 仅在 macOS 本机引入（见 server/build.gradle.kts），生产 Linux/Docker 不打包该原生库。
+netty-resolver-dns-native-macos = { module = "io.netty:netty-resolver-dns-native-macos", version.ref = "netty" }
 hibernate-core = { module = "org.hibernate.orm:hibernate-core", version.ref = "hibernate" }
 lettuce-core = { module = "io.lettuce:lettuce-core", version.ref = "lettuce" }
 flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }

@@ -42,6 +42,16 @@ dependencies {
     implementation(libs.grpc.api)
     implementation(libs.netty.tcnative)
 
+    // 消除 Netty「Can not find io.netty.resolver.dns.macos.MacOSDnsServerAddressStreamProvider」警告：
+    // 该警告来自 Lettuce 引入的未 shaded Netty 在 macOS 上缺少原生 DNS 解析实现。
+    // 仅在本机为 macOS 时按架构引入对应原生 jar（osx-aarch_64 / osx-x86_64），
+    // 生产 Linux/Docker 不打包此原生库（Linux 走系统默认解析，无该警告）。
+    // 版本需与 libs.versions.netty（classpath 实测 4.2.13.Final）保持对齐。
+    if (System.getProperty("os.name").contains("Mac", ignoreCase = true)) {
+        val macClassifier = if (System.getProperty("os.arch").contains("aarch64")) "osx-aarch_64" else "osx-x86_64"
+        runtimeOnly("io.netty:netty-resolver-dns-native-macos:4.2.13.Final:$macClassifier")
+    }
+
     // Phase 3 新增 — 持久化层（测试依赖，生产代码通过 gateway 间接访问）
     testImplementation(project(":repository"))
     testImplementation(project(":service"))
