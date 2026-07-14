@@ -62,6 +62,7 @@ dependencies {
     testImplementation(libs.flyway.core)
     testImplementation(libs.flyway.mysql)
     testImplementation(libs.mysql.connector)
+    // Testcontainers 2.0 模块坐标改为 testcontainers- 前缀（mysql / junit-jupiter 为独立 artifact）
     testImplementation(libs.testcontainers.core)
     testImplementation(libs.testcontainers.mysql)
     testImplementation(libs.testcontainers.junit.jupiter)

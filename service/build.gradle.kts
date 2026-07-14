@@ -52,7 +52,8 @@ dependencies {
     // 需显式声明为 implementation 以确保运行时可见）
     implementation("commons-logging:commons-logging:1.3.2")
 
-    // Testcontainers — Redis 集成测试容器
+    // Testcontainers 2.0 模块坐标改为 testcontainers- 前缀（junit-jupiter 为独立 artifact）
+    // Redis 集成测试容器（GenericContainer）由核心提供；@Testcontainers/@Container 注解来自 junit-jupiter
     testImplementation(libs.testcontainers.core)
     testImplementation(libs.testcontainers.junit.jupiter)
 }

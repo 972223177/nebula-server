@@ -6,7 +6,7 @@ import org.flywaydb.core.Flyway
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.MySQLContainer
+import org.testcontainers.mysql.MySQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
 import javax.sql.DataSource
@@ -29,7 +29,7 @@ abstract class DatabaseTestBase {
 
     companion object {
         @Container
-        private val mysql: MySQLContainer<*> = MySQLContainer<Nothing>("mysql:8.0")
+        private val mysql: MySQLContainer = MySQLContainer("mysql:8.0")
             .withDatabaseName("nebula_test")
 
         private lateinit var dataSource: DataSource
