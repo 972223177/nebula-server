@@ -2,7 +2,6 @@ package com.nebula.server
 
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.gateway.bootstrap.ServerBootstrap
-import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.service.ChatService
@@ -80,17 +79,9 @@ fun main() {
     ServerBootstrap.setupDeadLetterBridge(koin)
 
     // Step 7: 通过 HandlerCollector 模式统一注册所有 Handler 到 HandlerRegistry
-    val registry = koin.get<HandlerRegistry>()
-    val codec = koin.get<ProtoCodec>()
+    val handlerRegistry = koin.get<HandlerRegistry>()
     val collectors: List<HandlerCollector> = koin.getAll()
-    logger.info { "HandlerCollector 注册阶段: 共发现 ${collectors.size} 个 Collector，将注册到 HandlerRegistry@${System.identityHashCode(registry)}" }
-    if (collectors.isEmpty()) {
-        logger.warn { "未发现任何 HandlerCollector 实例！请检查 Koin 模块是否加载了 HandlerCollector 定义" }
-    }
-    collectors.forEach { collector ->
-        logger.info { "正在注册 Collector: ${collector::class.qualifiedName}" }
-        collector.registerAll(registry)
-    }
+    collectors.forEach { it.registerAll(handlerRegistry) }
 
     // Step 8: ServerBootstrap 构造 ChatService（封装 repository/service 依赖）
     val chatService: ChatService = ServerBootstrap.createChatService(koin)

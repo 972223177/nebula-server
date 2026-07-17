@@ -1,7 +1,6 @@
 package com.nebula.gateway.delivery
 
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.KeyValue
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl

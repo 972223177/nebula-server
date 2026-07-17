@@ -21,15 +21,16 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * 限流拦截器 — 基于 Semaphore 的每用户并发限流骨架（D-08）。
+ * 限流拦截器 — TokenBucket QPS 限流 + Semaphore 并发限流 双层防护（D-08, C-05）。
  *
  * 职责：
  * - 已认证请求按 userId 限流，每用户最大并发 20 个请求
  * - 未认证请求按来源 IP 限流（当前骨架占位，返回 "unknown"）
  * - 超限请求返回 BizCode.RATE_LIMITED（rate limit exceeded）
  *
- * 当前阶段（Phase 4）实现为基于 Semaphore 的简单并发限流，提供基础保护。
- * TODO: Phase 11 替换为令牌桶算法（如 Bucket4j），支持更精细的速率限制。
+ * 双层限流机制：
+ * - TokenBucket（C-05）：QPS 限流，容量 200、100/s 补充，先于并发限流快速拒绝突发流量
+ * - Semaphore：每用户最大并发 20 个请求，防止协程耗尽
  *
  * 限流阈值（20）和超时时间（100ms）通过常量定义，方便后续配置化。
  *

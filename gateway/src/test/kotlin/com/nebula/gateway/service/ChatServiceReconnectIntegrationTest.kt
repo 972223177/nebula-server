@@ -7,7 +7,6 @@ import com.nebula.chat.Response
 import com.nebula.chat.common.DeviceType
 import com.nebula.chat.user.LoginResp
 import com.nebula.gateway.dispatcher.Dispatcher
-import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
@@ -56,7 +55,6 @@ class ChatServiceReconnectIntegrationTest {
     private lateinit var sessionRegistry: SessionRegistry
     private lateinit var userStreamRegistry: UserStreamRegistry
     private lateinit var dispatcher: Dispatcher
-    private lateinit var handlerRegistry: HandlerRegistry
     private lateinit var onlineStatusService: OnlineStatusService
     private lateinit var friendService: FriendService
     private lateinit var pushService: PushService
@@ -206,7 +204,6 @@ class ChatServiceReconnectIntegrationTest {
         return ChatService(
             dispatcher = dispatcher,
             sessionRegistry = sessionRegistry,
-            registry = handlerRegistry,
             userStreamRegistry = userStreamRegistry,
             onlineStatusService = onlineStatusService,
             friendService = friendService,
@@ -227,7 +224,6 @@ class ChatServiceReconnectIntegrationTest {
         sessionRegistry = mockk(relaxed = true)
         userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true)
         dispatcher = mockk<Dispatcher>(relaxed = true)
-        handlerRegistry = mockk<HandlerRegistry>(relaxed = true)
         onlineStatusService = mockk<OnlineStatusService>(relaxed = true)
         friendService = mockk<FriendService>(relaxed = true)
         pushService = mockk<PushService>(relaxed = true)

@@ -2,7 +2,6 @@ package com.nebula.gateway.service
 
 import com.nebula.chat.Envelope
 import com.nebula.gateway.dispatcher.Dispatcher
-import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
@@ -53,7 +52,6 @@ class ChatServiceReconnectTest {
         ChatService(
             dispatcher = mockk<Dispatcher>(relaxed = true),
             sessionRegistry = sessionRegistry,
-            registry = mockk<HandlerRegistry>(relaxed = true),
             userStreamRegistry = mockk<UserStreamRegistry>(relaxed = true),
             onlineStatusService = mockk<OnlineStatusService>(relaxed = true),
             friendService = mockk<FriendService>(relaxed = true),

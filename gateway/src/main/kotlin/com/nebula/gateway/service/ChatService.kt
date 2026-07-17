@@ -13,7 +13,6 @@ import com.nebula.chat.user.RegisterReq
 import com.nebula.chat.user.RegisterResp
 import com.nebula.common.BizCode
 import com.nebula.gateway.dispatcher.Dispatcher
-import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.push.PushService
 import com.nebula.service.admin.DeadLetterService
 import com.nebula.gateway.session.DeliverableStreamObserver
@@ -43,6 +42,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.time.Duration.Companion.milliseconds
 
 /** 缓存再投递缓冲区上限（D-67）：超过此数量丢弃最旧消息，防止内存泄漏 */
 private const val MAX_PENDING = 1000
@@ -68,7 +68,6 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
  *
  * @param dispatcher 请求分发器
  * @param sessionRegistry Session 注册中心（含设备类型互踢逻辑）
- * @param registry Handler 注册中心
  * @param userStreamRegistry 用户 StreamObserver 注册中心（D-01）
  * @param onlineStatusService 在线状态服务（D-57）
  * @param friendService 好友服务（查询好友列表用于推送）
@@ -79,7 +78,6 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
 class ChatService(
     private val dispatcher: Dispatcher,
     private val sessionRegistry: SessionRegistry,
-    private val registry: HandlerRegistry,
     private val userStreamRegistry: UserStreamRegistry,
     private val onlineStatusService: OnlineStatusService,
     private val friendService: FriendService,
@@ -131,7 +129,7 @@ class ChatService(
         return ServerServiceDefinition.builder("nebula.chat.ChatService")
             .addMethod(
                 chatMethod,
-                ServerCalls.asyncBidiStreamingCall<Envelope, Envelope> { responseObserver ->
+                ServerCalls.asyncBidiStreamingCall { responseObserver ->
                     ChatStreamObserver(responseObserver)
                 }
             )
@@ -152,12 +150,12 @@ class ChatService(
         private val responseObserver: StreamObserver<Envelope>
     ) : DeliverableStreamObserver {
 
-        /** 连接编号（递增，用于关联同一连接的多帧消息）。非 private，允许 handlePing 等外部方法读取。 */
-        internal val connId = observerCounter.incrementAndGet()
+        /** 连接编号（递增，用于关联同一连接的多帧消息）。仅 ChatService 内部使用（handlePing 等）。 */
+        val connId = observerCounter.incrementAndGet()
 
         /** 协程互斥锁：gRPC MessageFramer 非线程安全，多个协程并发 onNext 会踩坏缓冲区。
-         * D-85: 改为 internal，eviction callback 同步发送 DISCONNECT 时需直接访问。 */
-        internal val sendMutex = Mutex()
+         * 通过 [sendEnvelope] 间接使用，ChatStreamObserver 内部访问。 */
+        val sendMutex = Mutex()
 
         /**
          * 每连接独立协程作用域（D-85）。
@@ -165,15 +163,15 @@ class ChatService(
          * 替换 ChatService 上的全局 scope，实现连接断开时自动取消所有在途请求和关联异步任务。
          * 使用 IO 调度器 + SupervisorJob：单子协程崩溃不取消兄弟协程，连接 cancel 时一刀切。
          */
-        internal val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         /**
          * 线程安全的 Envelope 发送入口（D-67, D-85 suspend 重构）。
          *
-         * gRPC MessageFramer 非线程安全，多个协程并发调用 [responseObserver.onNext] 会踩坏缓冲区。
-         * 本方法通过 [sendMutex] 串行化所有对 [responseObserver.onNext] 的调用。
+         * gRPC MessageFramer 非线程安全，多个协程并发调用 responseObserver.onNext 会踩坏缓冲区。
+         * 本方法通过 [sendMutex] 串行化所有写入操作。
          *
-         * D-85: 改为 suspend 函数，消除 [runBlocking] 对 IO 线程的阻塞。
+         * D-85: 改为 suspend 函数，消除 runBlocking 对 IO 线程的阻塞。
          * 调用方必须在协程上下文中（connectionScope.launch / serverScope.launch）。
          * gRPC 线程上的 onNext 经 connectionScope.launch 桥接；handlePing 内部经
          * connectionScope.launch 调用本方法；eviction DISCONNECT 经 serverScope.launch
@@ -181,7 +179,7 @@ class ChatService(
          *
          * @param envelope 待发送的 Envelope
          */
-        internal suspend fun sendEnvelope(envelope: Envelope) {
+        suspend fun sendEnvelope(envelope: Envelope) {
             sendMutex.withLock { responseObserver.onNext(envelope) }
         }
 
@@ -393,7 +391,7 @@ class ChatService(
         private fun scheduleDelayedRetry() {
             delayedRetryJob?.cancel()
             delayedRetryJob = connectionScope.launch {
-                delay(DELIVERY_TIMEOUT_MS)
+                delay(DELIVERY_TIMEOUT_MS.milliseconds)
                 if (deliveryActive) {
                     activateDeliveryInternal()
                 }
@@ -524,7 +522,7 @@ class ChatService(
                 // 取消旧的延迟任务防止泄漏（R-09-02）
                 delayedOfflineJob?.cancel()
                 delayedOfflineJob = serverScope.launch {
-                    delay(60_000)  // 60s 伪在线窗口
+                    delay(60_000.milliseconds)  // 60s 伪在线窗口
                     // 再次检查是否还有其他设备在线
                     if (userStreamRegistry.getStreams(uid).isEmpty()) {
                         // 无剩余设备，标记离线
@@ -568,24 +566,53 @@ class ChatService(
 
         // 修复（2026-06-20）：原硬编码 response.code == 200，与 BizCode 解耦后存在断裂风险。
         // 改用 BizCode.OK.code 与 LogInterceptor/全项目 BizCode 编码保持一致。
-        if (response.method == "user/login" && response.code == BizCode.OK.code) {
-            // D-05 拦截：登录成功，绑定 Session
-            handleLoginSuccess(response, responseObserver, envelope.requestId)
-        } else if (response.method == "user/register" && response.code == BizCode.OK.code) {
-            // CQ-13 拦截：注册成功，直接完成 Session 绑定（注册即登录）
-            handleRegisterSuccess(response, responseObserver, envelope.request, envelope.requestId)
-        } else {
-            // 其他响应，直接返回
-            // 注：gRPC knownLengthPendingAllocation 已由 bindService() 中的自定义
-            // Marshaller（ByteArrayInputStream 替代 ProtoInputStream）在全局层面修复，
-            // 此处不再需要应用层序列化修复。
-            val responseEnvelope = Envelope.newBuilder()
-                .setDirection(Direction.RESPONSE)
-                .setRequestId(envelope.requestId)
-                .setResponse(response)
-                .build()
-            (responseObserver as ChatStreamObserver).sendEnvelope(responseEnvelope)
+        when (response.method) {
+            "user/login" -> {
+                // D-05 拦截：登录成功，绑定 Session
+                if (response.code == BizCode.OK.code) {
+                    handleLoginSuccess(response, responseObserver, envelope.requestId)
+                } else {
+                    sendResponseEnvelope(response, responseObserver, envelope.requestId)
+                }
+            }
+            "user/register" -> {
+                // CQ-13 拦截：注册成功，直接完成 Session 绑定（注册即登录）
+                if (response.code == BizCode.OK.code) {
+                    handleRegisterSuccess(response, responseObserver, envelope.request, envelope.requestId)
+                } else {
+                    sendResponseEnvelope(response, responseObserver, envelope.requestId)
+                }
+            }
+            else -> {
+                // 其他响应，直接返回
+                // 注：gRPC knownLengthPendingAllocation 已由 bindService() 中的自定义
+                // Marshaller（ByteArrayInputStream 替代 ProtoInputStream）在全局层面修复，
+                // 此处不再需要应用层序列化修复。
+                sendResponseEnvelope(response, responseObserver, envelope.requestId)
+            }
         }
+    }
+
+    /**
+     * 透传响应 Envelope 给客户端（无 Session 绑定逻辑）。
+     *
+     * 用于：
+     * - 非 user/login / user/register 的响应
+     * - user/login / user/register 失败（非 OK 状态码）的错误响应
+     *
+     * 注：gRPC 序列化一致性已由 bindService() 中的自定义 Marshaller 在全局层面保证。
+     */
+    private suspend fun sendResponseEnvelope(
+        response: Response,
+        responseObserver: StreamObserver<Envelope>,
+        requestId: String
+    ) {
+        val responseEnvelope = Envelope.newBuilder()
+            .setDirection(Direction.RESPONSE)
+            .setRequestId(requestId)
+            .setResponse(response)
+            .build()
+        (responseObserver as ChatStreamObserver).sendEnvelope(responseEnvelope)
     }
 
     /**
@@ -615,67 +642,14 @@ class ChatService(
             deviceId = loginResp.deviceId,
             connectionId = UUID.randomUUID().toString()
         )
-
-        // 注册 Session（同类型设备互踢，返回被驱逐的旧 token）
-        val evictedToken = sessionRegistry.registerWithDeviceType(session)
-
-        // 更新 tokenToObserver：清理旧 token 映射，设置新映射
-        if (evictedToken != null) {
-            tokenToObserver.remove(evictedToken)
-        }
-        tokenToObserver[session.token] = responseObserver
-
-        // D-01: 注册 StreamObserver 到 UserStreamRegistry（REVIEW-MEDIUM-7: 使用 require 替代 as? 静默转换）
-        require(responseObserver is ChatStreamObserver) {
-            "responseObserver must be ChatStreamObserver"
-        }
-        responseObserver.userId = loginResp.userId
-
-        // CQ-05: 记录 token 用于连接断开时清理 SessionRegistry
-        responseObserver.token = session.token
-        responseObserver.deviceType = session.deviceType  // H2: 记录设备类型，用于断连清理
-
-        // D-57: 重连时取消旧的延迟离线任务
-        responseObserver.delayedOfflineJob?.cancel()
-
-        userStreamRegistry.register(loginResp.userId, responseObserver)
-
-        // D-57: 标记在线 + 推送状态变更给所有好友。D-85: serverScope 保证跨连接存活
-        serverScope.launch {
-            withContext(Dispatchers.IO) {
-                onlineStatusService.setOnline(loginResp.userId)
-            }
-            pushStatusChangeToFriends(loginResp.userId, 1)
-        }
-
-        // D-67: 激活缓存再投递
-        if (evictedToken != null) {
-            // eviction callback 在 registerWithDeviceType 中同步执行完成
-            // 注意：如果旧连接清理超过 10s，缓冲区超时保护会强制激活投递。
-            // 此时旧连接可能仍在，投递到旧连接的消息在 onCompleted 后丢失。
-            // 这是"防饿死"权衡：宁可丢失少量消息也不阻塞新连接。
-            // 丢失的消息可通过 Phase 10 的 gap detect + auto-pull 恢复。
-            responseObserver.activateDelivery()
-        } else {
-            // 无旧连接，直接激活投递（首次登录或超时重连后旧连接已清理）
-            responseObserver.deliveryActive = true
-        }
-
-        // 发送 LoginResp Envelope 给客户端
-        // 注：gRPC 序列化一致性已由 bindService() 中的自定义 Marshaller 在全局层面保证
-        val loginRespEnvelope = Envelope.newBuilder()
-            .setDirection(Direction.RESPONSE)
-            .setRequestId(requestId)
-            .setResponse(response)
-            .build()
-        (responseObserver as ChatStreamObserver).sendEnvelope(loginRespEnvelope)
+        bindSession(session, loginResp.userId, response, responseObserver, requestId)
     }
 
     /**
      * 处理注册成功响应 — 注册即登录（CQ-13）。
      *
      * 注册成功后自动完成 Session 绑定，客户端无需二次调用 user/login。
-     * 与 [handleLoginSuccess] 共享相同的 Session 注册 + StreamObserver 绑定流程。
+     * 与 [handleLoginSuccess] 共享相同的 Session 注册 + StreamObserver 绑定流程（通过 [bindSession]）。
      *
      * 注意：RegisterReq 中不含 deviceType 字段时（老客户端兼容），使用默认 MOBILE 类型。
      *
@@ -697,15 +671,46 @@ class ChatService(
 
         // CQ-13: 构建 Session，device_type 来自注册请求（兼容老客户端默认 MOBILE）
         val deviceTypeName = if (registerReq.deviceTypeValue != 0) registerReq.deviceType.name else "MOBILE"
-        val deviceId = registerReq.deviceId
         val session = Session(
             userId = registerResp.uid,
             token = registerResp.token,
             deviceType = deviceTypeName,
-            deviceId = deviceId,
+            deviceId = registerReq.deviceId,
             connectionId = UUID.randomUUID().toString()
         )
+        bindSession(session, registerResp.uid, response, responseObserver, requestId)
+    }
 
+    /**
+     * 绑定 Session 并完成 StreamObserver 注册 + 在线状态通知 + 投递激活 + 响应发送（D-05, D-67, CQ-13）。
+     *
+     * 由 [handleLoginSuccess] 与 [handleRegisterSuccess] 共享，避免重复代码。
+     *
+     * 流程：
+     * 1. 注册 Session 到 SessionRegistry（同类型设备互踢，返回被驱逐的旧 token）
+     * 2. 更新 tokenToObserver 映射（清理旧 token，设置新映射）
+     * 3. 校验 responseObserver 类型 + 设置 userId/token/deviceType
+     * 4. 取消旧延迟离线任务（D-57）
+     * 5. 注册到 UserStreamRegistry（D-01）
+     * 6. 标记在线 + 推送状态变更给好友（D-57, D-85 serverScope 跨连接存活）
+     * 7. 激活缓存再投递（D-67：驱逐场景下需等待旧连接清理；首次登录直接激活）
+     * 8. 发送响应 Envelope 给客户端
+     *
+     * 注：gRPC 序列化一致性已由 bindService() 中的自定义 Marshaller 在全局层面保证。
+     *
+     * @param session 待注册的 Session
+     * @param uid 用户 ID（用于在线状态推送和 UserStreamRegistry）
+     * @param response 业务响应（直接透传到 Envelope）
+     * @param responseObserver 当前连接的 StreamObserver
+     * @param requestId 客户端请求的 requestId
+     */
+    private suspend fun bindSession(
+        session: Session,
+        uid: Long,
+        response: Response,
+        responseObserver: StreamObserver<Envelope>,
+        requestId: String
+    ) {
         // 注册 Session（同类型设备互踢，返回被驱逐的旧 token）
         val evictedToken = sessionRegistry.registerWithDeviceType(session)
 
@@ -715,41 +720,51 @@ class ChatService(
         }
         tokenToObserver[session.token] = responseObserver
 
-        // D-01: 注册 StreamObserver 到 UserStreamRegistry
+        // D-01: 注册 StreamObserver 到 UserStreamRegistry（REVIEW-MEDIUM-7: 使用 require 替代 as? 静默转换）
         require(responseObserver is ChatStreamObserver) {
             "responseObserver must be ChatStreamObserver"
         }
-        responseObserver.userId = registerResp.uid
+        responseObserver.userId = uid
+
+        // CQ-05: 记录 token 用于连接断开时清理 SessionRegistry
         responseObserver.token = session.token
+        // H2: 记录设备类型，用于断连清理
         responseObserver.deviceType = session.deviceType
 
         // D-57: 重连时取消旧的延迟离线任务
         responseObserver.delayedOfflineJob?.cancel()
 
-        userStreamRegistry.register(registerResp.uid, responseObserver)
+        userStreamRegistry.register(uid, responseObserver)
 
         // D-57: 标记在线 + 推送状态变更给所有好友。D-85: serverScope 保证跨连接存活
         serverScope.launch {
             withContext(Dispatchers.IO) {
-                onlineStatusService.setOnline(registerResp.uid)
+                onlineStatusService.setOnline(uid)
             }
-            pushStatusChangeToFriends(registerResp.uid, 1)
+            pushStatusChangeToFriends(uid, 1)
         }
 
         // D-67: 激活缓存再投递
         if (evictedToken != null) {
+            // eviction callback 在 registerWithDeviceType 中同步执行完成
+            // 注意：如果旧连接清理超过 10s，缓冲区超时保护会强制激活投递。
+            // 此时旧连接可能仍在，投递到旧连接的消息在 onCompleted 后丢失。
+            // 这是"防饿死"权衡：宁可丢失少量消息也不阻塞新连接。
+            // 丢失的消息可通过 Phase 10 的 gap detect + auto-pull 恢复。
             responseObserver.activateDelivery()
         } else {
+            // 无旧连接，直接激活投递（首次登录或超时重连后旧连接已清理）
             responseObserver.deliveryActive = true
         }
 
-        // 发送 RegisterResp Envelope 给客户端
-        val registerRespEnvelope = Envelope.newBuilder()
+        // 发送响应 Envelope 给客户端
+        val responseEnvelope = Envelope.newBuilder()
             .setDirection(Direction.RESPONSE)
             .setRequestId(requestId)
             .setResponse(response)
             .build()
-        (responseObserver as ChatStreamObserver).sendEnvelope(registerRespEnvelope)
+        // responseObserver 已被 require 智能转换为 ChatStreamObserver，可直接调用 sendEnvelope
+        responseObserver.sendEnvelope(responseEnvelope)
     }
 
     // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。

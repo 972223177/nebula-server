@@ -50,10 +50,12 @@ val frameworkModule = module {
     // single<Interceptor> 时 Koin 会以最后一个覆盖前面的。
     // 改用 named qualifier + 显式列表以保证所有 4 个拦截器都被包含
     // 必须显式使用 single<Interceptor>(named(...)) 将类型声明为 Interceptor 而非具体实现类，
-    // 否则 get<Interceptor>(named(...)) 在 Dispatcher 中将找不到匹配的 bean。
+    // D-30, D-77: 白名单覆盖 — 在 AuthInterceptor 默认（system/ping + admin/ + system/sensitive_word）
+    // 基础上额外加入 user/login 和 user/register（未持有 Token 也能调用）。
+    // 使用前缀匹配：admin/ 覆盖所有 admin/* 管理接口，system/sensitive_word 覆盖客户端下载接口。
     single<Interceptor>(named("authInterceptor")) { AuthInterceptor(
         get(),
-        skipMethods = setOf("system/ping", "user/login", "user/register")
+        skipMethods = setOf("system/ping", "admin/", "system/sensitive_word", "user/login", "user/register")
     ) }
     single<Interceptor>(named("logInterceptor")) { LogInterceptor() }
     single<Interceptor>(named("rateLimitInterceptor")) { RateLimitInterceptor() }
@@ -71,7 +73,7 @@ val frameworkModule = module {
 
     // ChatService 注册 — 依赖 gateway 组件 + service 层组件，全部从 Koin 解析（D-28）
     // D-85: 注入 serverScope 用于跨连接存活的后台任务
-    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(named("serverScope"))) }
+    single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get(named("serverScope"))) }
 
     // 系统级组件
     single { PingHandler() }

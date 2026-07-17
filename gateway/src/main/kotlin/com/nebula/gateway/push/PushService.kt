@@ -4,12 +4,6 @@ import com.nebula.chat.Direction
 import com.nebula.chat.Envelope
 import com.nebula.chat.Message
 import com.nebula.chat.PushEventType
-import com.nebula.chat.conversation.GroupCreatedPayload
-import com.nebula.chat.conversation.GroupDissolvedPayload
-import com.nebula.chat.conversation.GroupUpdatedPayload
-import com.nebula.chat.conversation.MemberJoinedPayload
-import com.nebula.chat.conversation.MemberKickedPayload
-import com.nebula.chat.conversation.MemberLeftPayload
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.DeliveryAckPayload
 import com.nebula.chat.message.ReadReceiptPayload

@@ -8,6 +8,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Session 注册中心 — L1(ConcurrentHashMap) + L2(SessionStore) 二级缓存（D-18）。
@@ -20,7 +21,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * L2 调用使用 500ms 超时保护，后端不可用时降级为纯 L1 缓存（Review 反馈#6）。
  * 已登录用户不受影响（Session 在 L1 中），新登录用户在后端恢复前无法完成跨节点认证。
- * TODO: Phase 11 添加熔断器（如 Resilience4j）保护后端调用。
+ * Redis 调用由 [redisCircuitBreaker] 保护：连续 5 次失败熔断 10s，期间快速失败。
  *
  * @param sessionStore Session 持久化存储接口
  */
@@ -135,7 +136,7 @@ class SessionRegistry(
             return
         }
         try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 val sessionJson = json.encodeToString(session)
                 sessionStore.save(session.token, sessionJson)
             }
@@ -160,7 +161,7 @@ class SessionRegistry(
             return
         }
         try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 sessionStore.delete(token)
             }
             redisCircuitBreaker.recordSuccess()
@@ -188,7 +189,7 @@ class SessionRegistry(
             return null
         }
         return try {
-            val result = withTimeout(redisTimeoutMs) {
+            val result = withTimeout(redisTimeoutMs.milliseconds) {
                 val sessionJson = sessionStore.findByToken(token)
                 if (sessionJson != null) {
                     json.decodeFromString<Session>(sessionJson)
@@ -253,7 +254,7 @@ class SessionRegistry(
             return
         }
         try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 sessionStore.refreshTtl(token)
             }
             redisCircuitBreaker.recordSuccess()
@@ -347,7 +348,7 @@ class SessionRegistry(
      */
     private suspend fun saveDeviceTypeMapping(session: Session) {
         try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 sessionStore.saveRaw(
                     "session:${session.userId}:${session.deviceType}",
                     session.token
@@ -367,7 +368,7 @@ class SessionRegistry(
      */
     private suspend fun deleteDeviceTypeMapping(session: Session) {
         try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 sessionStore.deleteKey("session:${session.userId}:${session.deviceType}")
             }
         } catch (e: TimeoutCancellationException) {
@@ -393,7 +394,7 @@ class SessionRegistry(
      */
     suspend fun cleanupDeviceTypeMapping(userId: Long, deviceType: String, expectedToken: String) {
         try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 val key = "session:$userId:$deviceType"
                 val currentValue = sessionStore.findRaw(key)
                 // CQ-12: 仅当 Redis 中的值仍为旧 token 时才删除，防止误删新连接的映射
@@ -417,7 +418,7 @@ class SessionRegistry(
      */
     private suspend fun findDeviceTokenFromRedis(userId: Long, deviceType: String): String? {
         return try {
-            withTimeout(redisTimeoutMs) {
+            withTimeout(redisTimeoutMs.milliseconds) {
                 sessionStore.findRaw("session:$userId:$deviceType")
             }
         } catch (e: TimeoutCancellationException) {
