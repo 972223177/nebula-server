@@ -60,7 +60,7 @@ class MessageRepositoryImplTest {
             "clientTs" to "100",
             "serverTs" to "200"
         )
-        coEvery { messageQueue.consume(any(), any()) } returns listOf(entry)
+        coEvery { messageQueue.consumeWithRetry(any(), any()) } returns listOf(entry)
 
         val n = impl.flushBatch()
 
@@ -74,7 +74,7 @@ class MessageRepositoryImplTest {
         every { poison.id } returns "poison:1"
         // 缺少 conversationId 等关键字段 → 无法解析为 MessageEntity（毒消息）
         every { poison.body } returns mapOf("content" to "corrupted")
-        coEvery { messageQueue.consume(any(), any()) } returns listOf(poison)
+        coEvery { messageQueue.consumeWithRetry(any(), any()) } returns listOf(poison)
 
         val deadLetter = mockk<DeadLetterCallback>(relaxed = true)
         impl.onDeadLetter = deadLetter

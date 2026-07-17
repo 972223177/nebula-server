@@ -83,7 +83,9 @@ class MessageRepositoryImpl(
      * @see MessageWriteRepository.flushBatch
      */
     override suspend fun flushBatch(): Int {
-        val entries = messageQueue.consume(batchSize = 30, blockMs = 0)
+        // D-xx 修复: 用 consumeWithRetry 替代 consume，兼顾 PEL 中因非 UK 异常失败而滞留、
+        // 需重试的消息（XREADGROUP "0" 读取 PEL）与从未投递的新消息（XREADGROUP ">"）。
+        val entries = messageQueue.consumeWithRetry(batchSize = 30, blockMs = 0)
         if (entries.isEmpty()) return 0
 
         // 解析并保留 entry ↔ entity 映射

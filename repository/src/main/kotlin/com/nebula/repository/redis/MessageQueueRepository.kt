@@ -1,5 +1,6 @@
 package com.nebula.repository.redis
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.*
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
@@ -22,6 +23,8 @@ class MessageQueueRepository(
     private val connection: StatefulRedisConnection<String, String>
 ) {
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
+
+    private val logger = KotlinLogging.logger {}
 
     companion object {
         /** Redis Stream 键名 */
@@ -86,6 +89,53 @@ class MessageQueueRepository(
             args,
             XReadArgs.StreamOffset.lastConsumed(STREAM_KEY)
         ).toList()
+    }
+
+    /**
+     * 消费一批消息，兼顾「新消息」与「PEL 中待重试消息」（D-xx 修复 PEL 重试）。
+     *
+     * 原 [consume] 仅用 XREADGROUP ">" 读取从未投递的新消息；若某条消息被投递进 PEL 后
+     * 因非 UK 异常（如 DB 抖动）插入失败且未 XACK，它会一直卡在 PEL，" > " 不会再重新读到它 ——
+     * 注释里写的「保留重试」实际不成立，消息会永久滞留 PEL 永不落库。
+     *
+     * 本方法分两步（均走已验证的 XREADGROUP）：
+     * 1. offset "0" 读取 PEL 中已投递但未确认的消息（上次失败、保留重试的），
+     *    空闲阈值由 Redis 端 PEL 自然保证：仅投递后未 ack 的消息才会出现，且每 500ms 一轮重试；
+     * 2. offset ">" 读取从未投递过的新消息。
+     * 两者返回集合天然不相交（PEL 消息 vs 新消息），无需去重。
+     *
+     * @param batchSize 单步消费条数上限
+     * @param blockMs 阻塞等待时间（毫秒），0 表示非阻塞
+     * @return 合并后的消息列表
+     */
+    suspend fun consumeWithRetry(batchSize: Long, blockMs: Long): List<StreamMessage<String, String>> {
+        val result = mutableListOf<StreamMessage<String, String>>()
+        // 1. 读取 PEL 中已投递但未确认的消息（上次因非 UK 异常失败、保留重试的）
+        try {
+            val pendingArgs = XReadArgs.Builder.count(batchSize)
+            if (blockMs > 0) {
+                pendingArgs.block(blockMs)
+            }
+            result += redis.xreadgroup(
+                Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
+                pendingArgs,
+                XReadArgs.StreamOffset.from(STREAM_KEY, "0") // "0" = 仅读取 PEL 中未确认消息
+            ).toList()
+        } catch (e: Exception) {
+            // PEL 读取异常时降级：仅丢失重试能力，不影响新消息消费主路径
+            logger.warn(e) { "读取 PEL 待重试消息失败，跳过（仅影响历史失败消息的重投）" }
+        }
+        // 2. 读取从未投递过的新消息
+        val newArgs = XReadArgs.Builder.count(batchSize)
+        if (blockMs > 0) {
+            newArgs.block(blockMs)
+        }
+        result += redis.xreadgroup(
+            Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
+            newArgs,
+            XReadArgs.StreamOffset.lastConsumed(STREAM_KEY) // ">" = 新消息
+        ).toList()
+        return result
     }
 
     /**

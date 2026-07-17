@@ -9,8 +9,10 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -44,9 +46,9 @@ class MessageQueueRepositoryTest {
         connection = mockk(relaxed = true)
         repository = MessageQueueRepository(connection)
 
-        val field = MessageQueueRepository::class.java.getDeclaredField("redis")
-        field.isAccessible = true
-        field.set(repository, redis)
+        val redisField = MessageQueueRepository::class.java.getDeclaredField("redis")
+        redisField.isAccessible = true
+        redisField.set(repository, redis)
     }
 
     // ==================== enqueue ====================
@@ -81,6 +83,45 @@ class MessageQueueRepositoryTest {
 
         assertTrue(result.isEmpty(), "无消息时应返回空列表")
         coVerify(exactly = 1) { redis.xreadgroup(any<Consumer<String>>(), any<XReadArgs>(), any<XReadArgs.StreamOffset<String>>()) }
+    }
+
+    // ==================== consumeWithRetry ====================
+
+    @Test
+    fun consumeWithRetryShouldMergePendingAndNewMessages() = runTest {
+        // PEL 中因非 UK 异常失败、待重试的消息（第 1 次 xreadgroup，offset "0"）
+        val pending = mockk<StreamMessage<String, String>>()
+        every { pending.id } returns "pending:1"
+        every { pending.body } returns mapOf("content" to "retry")
+        // 从未投递过的新消息（第 2 次 xreadgroup，offset ">"）
+        val fresh = mockk<StreamMessage<String, String>>()
+        every { fresh.id } returns "fresh:1"
+        every { fresh.body } returns mapOf("content" to "new")
+        // consumeWithRetry 先读 PEL 再读新消息，按调用顺序分别返回
+        coEvery { redis.xreadgroup(any<Consumer<String>>(), any<XReadArgs>(), any<XReadArgs.StreamOffset<String>>()) } returnsMany
+            listOf(flowOf(pending), flowOf(fresh))
+
+        val result = repository.consumeWithRetry(batchSize = 10, blockMs = 0)
+
+        // 合并后应包含 PEL 待重试消息与新消息，且两者不相交无需去重
+        assertEquals(2, result.size, "应合并 PEL 待重试消息与新消息")
+        assertEquals(setOf("pending:1", "fresh:1"), result.map { it.id }.toSet())
+        coVerify(exactly = 2) { redis.xreadgroup(any<Consumer<String>>(), any<XReadArgs>(), any<XReadArgs.StreamOffset<String>>()) }
+    }
+
+    @Test
+    fun consumeWithRetryShouldStillReturnNewMessagesWhenPendingReadFails() = runTest {
+        // 读取 PEL 抛异常时降级：仅丢失重试能力，新消息消费主路径不受影响
+        val fresh = mockk<StreamMessage<String, String>>()
+        every { fresh.id } returns "fresh:1"
+        every { fresh.body } returns mapOf("content" to "new")
+        coEvery { redis.xreadgroup(any<Consumer<String>>(), any<XReadArgs>(), any<XReadArgs.StreamOffset<String>>()) } returnsMany
+            listOf(flow { throw RuntimeException("redis down") }, flowOf(fresh))
+
+        val result = repository.consumeWithRetry(batchSize = 10, blockMs = 0)
+
+        assertEquals(1, result.size, "PEL 读取失败时仍应返回新消息")
+        assertEquals("fresh:1", result.first().id)
     }
 
     // ==================== acknowledge ====================

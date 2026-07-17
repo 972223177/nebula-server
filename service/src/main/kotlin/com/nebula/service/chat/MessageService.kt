@@ -140,7 +140,12 @@ class MessageService(
             "id" to msgId.toString(),
             "conversationId" to conversationId,
             "senderUid" to senderUid.toString(),
-            "messageType" to req.messageType.toString(),
+            // 必须写枚举的数字值（messageTypeValue），不能写 req.messageType.toString()：
+            // req.messageType 是 proto 枚举 ChatContentType，其 toString() 返回枚举名（如 "TEXT"），
+            // 而 MessageRepositoryImpl.parseToEntity() 用 body["messageType"]?.toIntOrNull() 解析，
+            // "TEXT".toIntOrNull() == null 会使整条消息被判为「毒消息」→ 死信 + XACK，永不落库，
+            // 表现为「会话有概要、message/pull 却为空」。
+            "messageType" to req.messageTypeValue.toString(),
             "content" to req.content,
             "clientMessageId" to req.clientMessageId,
             "clientTs" to req.clientTs.toString(),
