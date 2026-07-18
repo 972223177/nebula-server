@@ -32,3 +32,7 @@ docs/_meta/
 .codebuddy/agents/doc-security-expert.md
 .codebuddy/agents/doc-client-expert.md
 external-service-backend.md
+
+# 所有 Markdown 文档不入库（仅代码上传 GitHub），做法同隐私文件移除
+# 仅忽略 .md，不影响任何代码文件（.kt/.proto/.kts/.toml/.conf/.sh/.sql/.py 等）
+*.md
