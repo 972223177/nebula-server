@@ -1,36 +1,15 @@
 package com.nebula.service.friend
 
-import com.nebula.chat.friend.FriendAcceptReq
-import com.nebula.chat.friend.FriendAddReq
-import com.nebula.chat.friend.FriendAddResp
-import com.nebula.chat.friend.FriendDeleteReq
-import com.nebula.chat.friend.FriendListReq
-import com.nebula.chat.friend.FriendListResp
-import com.nebula.chat.friend.FriendRejectReq
-import com.nebula.chat.friend.FriendRequestsReq
-import com.nebula.chat.friend.FriendRequestsResp
-import com.nebula.chat.friend.FriendRelationStatus
-import com.nebula.chat.friend.FriendRequestDirection
-import com.nebula.chat.friend.FriendRequestItem
-import com.nebula.common.util.toEpochMillis
-import com.nebula.chat.friend.FriendBrief
+import com.nebula.chat.friend.*
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.FriendRequestDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.UserDao
-import com.nebula.repository.entity.ConversationEntity
-import com.nebula.repository.entity.ConversationMemberEntity
-import com.nebula.repository.entity.FriendRequestEntity
-import com.nebula.repository.entity.FriendshipEntity
-import com.nebula.repository.entity.isActive
+import com.nebula.common.util.toEpochMillis
+import com.nebula.repository.dao.*
+import com.nebula.repository.entity.*
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
-import jakarta.persistence.PersistenceException
+import jakarta.persistence.EntityManager
 import java.time.LocalDateTime
 
 /**
@@ -75,6 +54,61 @@ class FriendService(
          */
         fun buildPrivateConvId(smaller: Long, larger: Long): String {
             return "private:$smaller:$larger"
+        }
+    }
+
+    // ==================== 私有辅助方法 ====================
+
+    /**
+     * 确保好友关系+私聊会话+双方成员存在（D-51）。
+     *
+     * 三种场景共用此逻辑：
+     * 1. 自动通过（APPROVAL_AUTO_ACCEPT）
+     * 2. 双向竞赛（mutual accept）
+     * 3. 接受申请（acceptFriendRequest）
+     *
+     * @param em JPA EntityManager
+     * @param smaller 较小的用户 ID
+     * @param larger 较大的用户 ID
+     * @param convId 私聊会话 ID
+     * @param existingFriendship 已有的好友关系（可能为 null 或不活跃）
+     */
+    private suspend fun ensureFriendshipAndConversation(
+        em: EntityManager,
+        smaller: Long,
+        larger: Long,
+        convId: String,
+        existingFriendship: FriendshipEntity?
+    ) {
+        // 创建或恢复好友关系
+        if (existingFriendship == null) {
+            friendshipDao.insert(em, FriendshipEntity(userId = smaller, friendId = larger).apply {
+                deleted = 0
+                createdAt = LocalDateTime.now()
+            })
+        } else if (!existingFriendship.isActive) {
+            existingFriendship.deleted = 0
+        }
+
+        // 创建私聊会话（如果不存在）
+        var conv = conversationDao.findById(em, convId)
+        if (conv == null) {
+            conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "").apply {
+                id = convId
+                createdAt = LocalDateTime.now()
+                updatedAt = LocalDateTime.now()
+            }
+            conversationDao.insert(em, conv)
+        }
+
+        // 创建双方会话成员
+        listOf(smaller, larger).forEach { uid ->
+            val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
+            if (existingMember == null) {
+                conversationMemberDao.insert(em, ConversationMemberEntity(
+                    conversationId = convId, userId = uid
+                ).apply { joinedAt = LocalDateTime.now() })
+            }
         }
     }
 
@@ -136,53 +170,11 @@ class FriendService(
                 APPROVAL_AUTO_ACCEPT -> {
                     // 自动通过：直接建立好友关系 + 私聊会话
                     val convId = buildPrivateConvId(smaller, larger)
-
-                    // 创建/恢复好友关系
-                    if (existingFriendship == null) {
-                        val newFriendship = FriendshipEntity(
-                            userId = smaller,
-                            friendId = larger
-                        ).apply {
-                            deleted = 0
-                            createdAt = LocalDateTime.now()
-                        }
-                        friendshipDao.insert(em, newFriendship)
-                    } else if (!existingFriendship.isActive) {
-                        existingFriendship.deleted = 0
-                    }
-
-                    // 创建私聊会话（如果不存在）
-                    var conv = conversationDao.findById(em, convId)
-                    if (conv == null) {
-                        conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
-                        conv.id = convId
-                        conv.createdAt = LocalDateTime.now()
-                        conv.updatedAt = LocalDateTime.now()
-                        conversationDao.insert(em, conv)
-                    }
-
-                    // 创建双方会话成员
-                    listOf(smaller, larger).forEach { uid ->
-                        val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
-                        if (existingMember == null) {
-                            val member = ConversationMemberEntity(
-                                conversationId = convId,
-                                userId = uid
-                            )
-                            member.joinedAt = LocalDateTime.now()
-                            conversationMemberDao.insert(em, member)
-                        }
-                    }
-
-                    logger.info { "好友申请自动通过: fromUid=$fromUid, toUid=$toUid, convId=$convId, mode=AUTO_ACCEPT" }
+                    ensureFriendshipAndConversation(em, smaller, larger, convId, existingFriendship)
+                    logger.info { "好友申请自动通过: fromUid=$fromUid, toUid=$toUid, convId=$convId" }
                     return@execute FriendAddResult(
-                        requestId = 0L,
-                        isMutualAccept = false,
-                        isAutoAccepted = true,
-                        isAutoRejected = false,
-                        convId = convId,
-                        fromUid = fromUid,
-                        toUid = toUid
+                        requestId = 0L, isMutualAccept = false, isAutoAccepted = true, isAutoRejected = false,
+                        convId = convId, fromUid = fromUid, toUid = toUid
                     )
                 }
             }
@@ -193,54 +185,11 @@ class FriendService(
                 // 双向竞赛：自动创建好友关系 + 私聊会话
                 val convId = buildPrivateConvId(smaller, larger)
 
-                // 更新对方申请为 accepted
-                // reverseRequest 是事务内加载的托管实体，直接改属性，commit 时脏检查自动 flush
-                // 不需要 em.flush() 显式调用，也不需要 em.merge() 重新合并托管实体
+                // 对方申请是事务内托管实体，commit 时脏检查自动 flush
                 reverseRequest.status = 1
-                // 注：原代码用 em.flush() + update(em) 是反模式：
-                //   1) em.flush() 强制刷盘，与 commit 时的 flush 重复
-                //   2) em.merge() 对已托管实体 = 多一次 SELECT + 状态复制 + 可能返回新引用
-                //   3) 改用直接修改字段 + commit 脏检查，更安全高效
 
-                // 创建/恢复好友关系
-                // existingFriendship 可能是 null（双方竞赛首次建立），也可能是已软删的记录
-                if (existingFriendship == null) {
-                    val newFriendship = FriendshipEntity(
-                        userId = smaller,
-                        friendId = larger
-                    ).apply {
-                        deleted = 0
-                        createdAt = LocalDateTime.now()
-                    }
-                    friendshipDao.insert(em, newFriendship)
-                } else if (!existingFriendship.isActive) {
-                    // 软删的记录：直接改字段，commit 时脏检查自动 UPDATE
-                    existingFriendship.deleted = 0
-                }
-                // 已激活的 existingFriendship 不需要任何操作（已存在）
-
-                // 创建私聊会话（如果不存在）
-                var conv = conversationDao.findById(em, convId)
-                if (conv == null) {
-                    conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
-                    conv.id = convId
-                    conv.createdAt = LocalDateTime.now()
-                    conv.updatedAt = LocalDateTime.now()
-                    conversationDao.insert(em, conv)
-                }
-
-                // 创建双方会话成员
-                listOf(smaller, larger).forEach { uid ->
-                    val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
-                    if (existingMember == null) {
-                        val member = ConversationMemberEntity(
-                            conversationId = convId,
-                            userId = uid
-                        )
-                        member.joinedAt = LocalDateTime.now()
-                        conversationMemberDao.insert(em, member)
-                    }
-                }
+                // 建立好友关系 + 私聊会话 + 双方成员
+                ensureFriendshipAndConversation(em, smaller, larger, convId, existingFriendship)
 
                 return@execute FriendAddResult(
                     requestId = reverseRequest.id ?: 0L,
@@ -315,48 +264,11 @@ class FriendService(
             val larger = maxOf(request.fromUid, request.toUid)
             val convId = buildPrivateConvId(smaller, larger)
 
-            // 更新申请状态：直接改字段，commit 时脏检查自动 flush
+            // 更新申请状态：commit 时脏检查自动 flush
             request.status = 1
 
-            // 创建/恢复好友关系
             val existingFriendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
-            if (existingFriendship == null) {
-                val newFriendship = FriendshipEntity(
-                    userId = smaller,
-                    friendId = larger
-                ).apply {
-                    deleted = 0
-                    createdAt = LocalDateTime.now()
-                }
-                friendshipDao.insert(em, newFriendship)
-            } else if (!existingFriendship.isActive) {
-                // 软删的记录：直接改字段，commit 时脏检查自动 UPDATE
-                existingFriendship.deleted = 0
-            }
-            // 已激活的 existingFriendship 不需要任何操作
-
-            // 创建私聊会话
-            var conv = conversationDao.findById(em, convId)
-            if (conv == null) {
-                conv = ConversationEntity(type = CONV_TYPE_PRIVATE, name = "")
-                conv.id = convId
-                conv.createdAt = LocalDateTime.now()
-                conv.updatedAt = LocalDateTime.now()
-                conversationDao.insert(em, conv)
-            }
-
-            // 创建双方会话成员
-            listOf(smaller, larger).forEach { uid ->
-                val existingMember = conversationMemberDao.findByConversationIdAndUserId(em, convId, uid)
-                if (existingMember == null) {
-                    val member = ConversationMemberEntity(
-                        conversationId = convId,
-                        userId = uid
-                    )
-                    member.joinedAt = LocalDateTime.now()
-                    conversationMemberDao.insert(em, member)
-                }
-            }
+            ensureFriendshipAndConversation(em, smaller, larger, convId, existingFriendship)
 
             FriendAcceptResult(
                 fromUid = request.fromUid,
