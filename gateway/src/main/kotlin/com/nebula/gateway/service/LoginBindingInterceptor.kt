@@ -22,7 +22,7 @@ internal class LoginBindingInterceptor(
 
     override suspend fun afterResponse(
         response: Response,
-        observer: ChatService.ChatStreamObserver,
+        observer: ConnectionContext,
         request: Request
     ): Response {
         when (response.method) {

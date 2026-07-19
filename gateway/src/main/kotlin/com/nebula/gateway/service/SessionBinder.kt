@@ -60,7 +60,7 @@ internal class SessionBinder(
      * @param response 登录成功响应（code=BizCode.OK.code）
      * @param observer 当前连接的 StreamObserver
      */
-    suspend fun bindOnLoginSuccess(response: Response, observer: ChatService.ChatStreamObserver) {
+    suspend fun bindOnLoginSuccess(response: Response, observer: ConnectionContext) {
         // 反序列化 LoginResp
         val loginResp = LoginResp.parseFrom(response.result.toByteArray())
 
@@ -87,7 +87,7 @@ internal class SessionBinder(
      * @param observer 当前连接的 StreamObserver
      * @param request 客户端原始注册请求（含 device_type、device_id 等设备信息）
      */
-    suspend fun bindOnRegisterSuccess(response: Response, observer: ChatService.ChatStreamObserver, request: Request) {
+    suspend fun bindOnRegisterSuccess(response: Response, observer: ConnectionContext, request: Request) {
         // 反序列化 RegisterResp（获取 uid + token）
         val registerResp = RegisterResp.parseFrom(response.result.toByteArray())
         // 反序列化 RegisterReq（获取 device_type + device_id，用于 Session 创建）
@@ -126,7 +126,7 @@ internal class SessionBinder(
     private suspend fun bind(
         session: Session,
         uid: Long,
-        observer: ChatService.ChatStreamObserver
+        observer: ConnectionContext
     ) {
         // 注册 Session（同类型设备互踢，返回被驱逐的旧 token）
         val evictedToken = sessionRegistry.registerWithDeviceType(session)

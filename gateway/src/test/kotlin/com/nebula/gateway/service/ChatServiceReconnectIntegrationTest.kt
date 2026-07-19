@@ -183,7 +183,7 @@ class ChatServiceReconnectIntegrationTest {
         val method = SessionBinder::class.java.getDeclaredMethod(
             "bindOnLoginSuccess",
             Response::class.java,
-            ChatService.ChatStreamObserver::class.java,
+            ConnectionContext::class.java,
             Continuation::class.java
         ).apply { isAccessible = true }
         suspendCoroutine<Any?> { cont ->

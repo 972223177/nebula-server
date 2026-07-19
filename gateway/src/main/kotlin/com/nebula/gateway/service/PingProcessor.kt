@@ -30,7 +30,7 @@ internal class PingProcessor(
      * @param envelope PING 请求 Envelope
      * @param observer 当前连接的 StreamObserver（inner class，提供 connectionScope / sendEnvelope）
      */
-    fun handle(envelope: Envelope, observer: ChatService.ChatStreamObserver) {
+    fun handle(envelope: Envelope, observer: ConnectionContext) {
         val connId = "#${observer.connId}"
 
         // D-57: 刷新在线状态 TTL。connectionScope 跟随连接生命周期

@@ -161,10 +161,10 @@ class ChatService(
      */
     internal inner class ChatStreamObserver(
         private val responseObserver: StreamObserver<Envelope>
-    ) : DeliverableStreamObserver {
+    ) : DeliverableStreamObserver, ConnectionContext {
 
         /** 连接编号（递增，用于关联同一连接的多帧消息）。仅 ChatService 内部使用（handlePing 等）。 */
-        val connId = observerCounter.incrementAndGet()
+        override val connId = observerCounter.incrementAndGet()
 
         /** 协程互斥锁：gRPC MessageFramer 非线程安全，多个协程并发 onNext 会踩坏缓冲区。
          * 通过 [sendEnvelope] 间接使用，ChatStreamObserver 内部访问。 */
@@ -176,7 +176,7 @@ class ChatService(
          * 替换 ChatService 上的全局 scope，实现连接断开时自动取消所有在途请求和关联异步任务。
          * 使用 IO 调度器 + SupervisorJob：单子协程崩溃不取消兄弟协程，连接 cancel 时一刀切。
          */
-        val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        override val connectionScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
         /**
          * 线程安全的 Envelope 发送入口（D-67, D-85 suspend 重构）。
@@ -192,7 +192,7 @@ class ChatService(
          *
          * @param envelope 待发送的 Envelope
          */
-        suspend fun sendEnvelope(envelope: Envelope) {
+        override suspend fun sendEnvelope(envelope: Envelope) {
             sendMutex.withLock { responseObserver.onNext(envelope) }
         }
 
@@ -203,20 +203,20 @@ class ChatService(
         /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。
          * 使用 @Volatile 保证协程写入与 gRPC 线程读取之间的可见性。 */
         @Volatile
-        var userId: Long? = null
+        override var userId: Long? = null
 
         /** 会话 Token（CQ-05: 连接断开时用于清理 SessionRegistry）。由 handleLoginSuccess 设置。 */
         @Volatile
-        var token: String? = null
+        override var token: String? = null
 
         /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏。
          * 使用 @Volatile 保证 gRPC 线程写入与协程读取之间的可见性。 */
         @Volatile
-        var delayedOfflineJob: Job? = null
+        override var delayedOfflineJob: Job? = null
 
         /** H2 修复：设备类型（用于连接断开时清理 Redis 设备类型映射） */
         @Volatile
-        var deviceType: String? = null
+        override var deviceType: String? = null
 
         /**
          * 缓存再投递缓冲区 — 使用 ConcurrentLinkedQueue（无界、无锁、高性能 FIFO，
@@ -228,7 +228,7 @@ class ChatService(
 
         /** 是否已进入正常投递模式（D-67） */
         @Volatile
-        var deliveryActive = false
+        override var deliveryActive = false
 
         /** 每消息投递重试计数器（D-75），key 为 envelope 内容哈希，value 为重试次数 */
         private val retryCountMap = ConcurrentHashMap<String, Int>()
@@ -414,7 +414,7 @@ class ChatService(
          * 使用 Default 而非 IO，因为 onNext() 是非阻塞的 gRPC 调用。
          * 投递失败的消息根据重试计数决定重新入队或写入死信（D-75）。
          */
-        suspend fun activateDelivery() {
+        override suspend fun activateDelivery() {
             withContext(Dispatchers.Default) {
                 activateDeliveryInternal()
             }
@@ -543,7 +543,7 @@ class ChatService(
      */
     private suspend fun handleRequest(
         envelope: Envelope,
-        observer: ChatStreamObserver
+        observer: ConnectionContext
     ) {
         // 确保 eviction callback 已注册（首次调用时注册一次）
         ensureEvictionCallbackRegistered()
@@ -578,7 +578,7 @@ class ChatService(
      */
     private suspend fun sendResponseEnvelope(
         response: Response,
-        responseObserver: StreamObserver<Envelope>,
+        responseObserver: ConnectionContext,
         requestId: String
     ) {
         val responseEnvelope = Envelope.newBuilder()
@@ -586,7 +586,7 @@ class ChatService(
             .setRequestId(requestId)
             .setResponse(response)
             .build()
-        (responseObserver as ChatStreamObserver).sendEnvelope(responseEnvelope)
+        responseObserver.sendEnvelope(responseEnvelope)
     }
 
     // TODO(D-29): 应用层心跳超时检测 — 90s 无 PING/REQUEST 则断开连接并清理 Session。

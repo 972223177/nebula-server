@@ -23,5 +23,5 @@ import com.nebula.chat.Response
  * @return 传递给下一个拦截器的 Response
  */
 internal interface ResponseInterceptor {
-    suspend fun afterResponse(response: Response, observer: ChatService.ChatStreamObserver, request: Request): Response
+    suspend fun afterResponse(response: Response, observer: ConnectionContext, request: Request): Response
 }
