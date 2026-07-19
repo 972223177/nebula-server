@@ -82,8 +82,8 @@ class SessionRegistry(
     /**
      * 写入 Session 到 L1 本地缓存，并更新 userIdIndex。
      *
-     * ⚠️ 细粒度 L1 操作方法——仅限于测试种子数据和特殊场景。
-     * 正常写入应使用 [register] / [registerWithDeviceType]，它保证 L1+L2 一致性。
+     * ⚠️ 此方法目前仅测试直接调用。正常写入应使用 [register] / [registerWithDeviceType]，
+     * 它们保证 L1+L2 一致性。
      *
      * @param session 待写入的 Session
      */
@@ -99,8 +99,14 @@ class SessionRegistry(
     /**
      * 从 L1 本地缓存移除 Session，并更新 userIdIndex。
      *
-     * ⚠️ 细粒度 L1 操作方法——仅限于测试种子数据和特殊场景。
-     * 正常移除应使用 [unregister]，它保证 L1+L2+回调一致性。
+     * **与 [unregister] 的区别**：
+     * - [removeFromLocalCache] = 仅清 L1，保留 Redis L2。——用于**断连清理**，
+     *   客户端可用同一 token 重连，AuthInterceptor 从 Redis 恢复 Session。
+     * - [unregister] = L1 + L2 + 回调 + 设备类型映射全清。——用于**主动下线**
+     *   （登出、同设备互踢），token 彻底失效。
+     *
+     * ⚠️ 此方法的外部调用者（ChatService.cleanupConnection）是有意选它的。
+     * 新增使用前请确认你的语义是"断连重连"还是"主动下线"。
      *
      * @param token 待移除的 Session Token
      * @return 被移除的 Session，若不存在则返回 null
@@ -132,8 +138,8 @@ class SessionRegistry(
     /**
      * 保存 Session 到 Redis（L2）。
      *
-     * ⚠️ 细粒度 L2 操作方法——仅限于特殊场景（如测试）。
-     * 正常写入应使用 [register] / [registerWithDeviceType]，它保证 L1+L2 一致性。
+     * ⚠️ 此方法目前仅 [register] 内部调用。正常写入应使用 [register] / [registerWithDeviceType]，
+     * 它们保证 L1+L2 一致性。
      *
      * @param session 待保存的 Session
      */
@@ -160,8 +166,8 @@ class SessionRegistry(
     /**
      * 从 Redis（L2）移除 Session。
      *
-     * ⚠️ 细粒度 L2 操作方法——仅限于特殊场景（如测试）。
-     * 正常移除应使用 [unregister]，它保证 L1+L2+回调一致性。
+     * ⚠️ 此方法目前仅 [unregister] 内部调用。正常移除应使用 [unregister]，
+     * 它保证 L1+L2+回调一致性。
      *
      * @param token 待移除的 Session Token
      */
@@ -296,8 +302,11 @@ class SessionRegistry(
     /**
      * 注销 Session — 移除 L1 + L2 + 回调 + 设备类型清理（组合方法的唯一入口）。
      *
-     * 这是所有 Session 注销操作的标准路径，保证 L1/L2/deviceTypeIndex 始终一致。
-     * 新增任何需要注销 Session 的操作时，应先考虑委托给此方法。
+     * 这是所有「主动下线」操作的标准路径，保证 L1/L2/deviceTypeIndex 始终一致。
+     *
+     * **与 [removeFromLocalCache] 的区别**：
+     * - [unregister] = L1 + L2 + 回调 + 设备类型映射全清。——用于登出、同设备互踢。
+     * - [removeFromLocalCache] = 仅清 L1，保留 L2。——用于断连清理，支持重连。
      *
      * @param token 待注销的 Session Token
      */
