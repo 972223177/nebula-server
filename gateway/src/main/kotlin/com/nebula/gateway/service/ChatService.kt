@@ -30,20 +30,20 @@ private const val MAX_PENDING = 1000
 private const val DELIVERY_TIMEOUT_MS = 10_000L
 
 /**
- * gRPC 双向流聊天服务 — 实现 Envelope 协议的分发、登录响应拦截和 Session 绑定（D-05）。
+ * gRPC 双向流聊天服务 — 实现 Envelope 协议的分发、连接生命周期管理（D-05）。
  *
  * 职责：
  * - 实现 BindableService，注册 name=[SERVICE_NAME] 的 BIDI_STREAMING gRPC 服务
- * - 接收 Envelope 消息，根据 Direction 分发给 Dispatcher 或处理 PING 心跳
- * - 拦截 user/login 的 200 响应，从 LoginResp 中读取设备信息并注册 Session（D-05 绑定流程）
+ * - 接收 Envelope 消息，根据 Direction 分发给 Dispatcher 或 PingProcessor
  * - 维护 tokenToObserver 映射，支持同类型设备互踢时的 LOGOUT 推送（D-05 eviction callback）
- * - 在 onCompleted()/onError() 中清理 tokenToObserver，防止内存泄漏（Review 反馈#6）
- * - 集成 UserStreamRegistry，在登录成功时注册 StreamObserver，连接关闭时解除注册（D-01）
+ * - 在 onCompleted()/onError() 中清理 tokenToObserver/UserStreamRegistry，防止内存泄漏
+ * - 装配子组件：SessionBinder（登录绑定）、LoginBindingInterceptor（响应拦截）、
+ *   PingProcessor（心跳）、FriendStatusNotifier（在线广播）
  *
  * 设计决策引用：
  * - D-01: UserStreamRegistry 管理 userId→StreamObserver 映射，ChatService 在生命周期事件中注册/注销
  * - D-04: LoginResp 的 deviceType/deviceId 由 LoginHandler 从 LoginReq 复制，无需 ChatService 重新解析 params
- * - D-05: Session 绑定流程：handleRequest → registerWithDeviceType → eviction callback → LOGOUT 推送
+ * - D-05: Session 绑定流程：LoginBindingInterceptor → SessionBinder → registerWithDeviceType → eviction callback
  *
  * @param dispatcher 请求分发器
  * @param sessionRegistry Session 注册中心（含设备类型互踢逻辑）
@@ -53,6 +53,7 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
  * @param pushService 推送服务
  * @param privacyService 隐私设置服务（过滤隐藏用户）
  * @param deadLetterService 死信服务（D-75：缓存投递失败 10 次后写入死信表）
+ * @param serverScope 服务级后台协程作用域（D-85），跨连接存活，用于延迟离线/好友广播等后台任务
  */
 class ChatService(
     private val dispatcher: Dispatcher,
@@ -135,7 +136,7 @@ class ChatService(
      * 内部 StreamObserver — 处理双向流消息，管理连接生命周期。
      *
      * 职责（D-67）：
-     * - 接收 Envelope 消息，分发给 handleRequest/handlePing
+     * - 接收 Envelope 消息，分发给 Dispatcher.handleRequest / PingProcessor.handle
      * - 在重连期间缓存消息（pendingBuffer），待旧连接清理后投递
      * - 管理连接清理（tokenToObserver 移除、UserStreamRegistry 注销、延迟离线）
      *
@@ -182,21 +183,21 @@ class ChatService(
             logger.info { "[stream] #$connId ChatStreamObserver 创建 responseObserver=${responseObserver.javaClass.simpleName}@${System.identityHashCode(responseObserver)}" }
         }
 
-        /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 handleLoginSuccess 设置。
+        /** 用户 ID（REVIEW-MEDIUM-7: 显式声明可空字段，清理时检查非空）。由 SessionBinder.bind() 设置。
          * 使用 @Volatile 保证协程写入与 gRPC 线程读取之间的可见性。 */
         @Volatile
         override var userId: Long? = null
 
-        /** 会话 Token（CQ-05: 连接断开时用于清理 SessionRegistry）。由 handleLoginSuccess 设置。 */
+        /** 会话 Token（CQ-05: 连接断开时用于清理 SessionRegistry）。由 SessionBinder.bind() 设置。 */
         @Volatile
         override var token: String? = null
 
         /** 60s 延迟离线任务（D-57），重连时取消旧任务防止泄漏。
-         * 使用 @Volatile 保证 gRPC 线程写入与协程读取之间的可见性。 */
+         * 由 cleanupConnection() 在断连时启动。使用 @Volatile 保证 gRPC 线程写入与协程读取之间的可见性。 */
         @Volatile
         override var delayedOfflineJob: Job? = null
 
-        /** H2 修复：设备类型（用于连接断开时清理 Redis 设备类型映射） */
+        /** H2 修复：设备类型（用于连接断开时清理 Redis 设备类型映射）。由 SessionBinder.bind() 设置。 */
         @Volatile
         override var deviceType: String? = null
 
@@ -651,8 +652,7 @@ class ChatService(
          */
         private fun isExpectedDisconnect(cause: Throwable): Boolean {
             val status = (cause as? StatusException)?.status
-            if (status?.code == Status.Code.CANCELLED) return true
-            return cause is CancellationException
+            return status?.code == Status.Code.CANCELLED || cause is CancellationException
         }
     }
 
