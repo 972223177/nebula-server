@@ -9,7 +9,7 @@ import com.nebula.repository.entity.FriendRequestEntity
 import com.nebula.repository.entity.FriendshipEntity
 import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.mockk
 import jakarta.persistence.EntityManager
@@ -37,7 +37,7 @@ class FriendServiceTest {
     private lateinit var userDao: UserDao
     private lateinit var txRunner: JpaTxRunner
     private lateinit var onlineStatusRepository: OnlineStatusRepository
-    private lateinit var privacyRepository: PrivacyRepository
+    private lateinit var userPrivacyService: UserPrivacyService
     private lateinit var em: EntityManager
     private lateinit var friendService: FriendService
 
@@ -50,11 +50,11 @@ class FriendServiceTest {
         userDao = mockk()
         txRunner = mockk()
         onlineStatusRepository = mockk(relaxed = true)
-        privacyRepository = mockk(relaxed = true)
+        userPrivacyService = mockk(relaxed = true)
         em = mockk(relaxed = true)
         friendService = FriendService(
             friendRequestDao, friendshipDao, conversationDao,
-            conversationMemberDao, userDao, txRunner, onlineStatusRepository, privacyRepository
+            conversationMemberDao, userDao, txRunner, onlineStatusRepository, userPrivacyService
         )
         coEvery { txRunner.execute<Any>(any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")

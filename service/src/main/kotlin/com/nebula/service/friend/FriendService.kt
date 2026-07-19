@@ -1,13 +1,14 @@
 package com.nebula.service.friend
 
 import com.nebula.chat.friend.*
+import com.nebula.chat.user.FriendApprovalMode
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException
 import com.nebula.common.util.toEpochMillis
 import com.nebula.repository.dao.*
 import com.nebula.repository.entity.*
 import com.nebula.repository.redis.OnlineStatusRepository
-import com.nebula.repository.redis.PrivacyRepository
+import com.nebula.service.user.UserPrivacyService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jakarta.persistence.EntityManager
 import java.time.LocalDateTime
@@ -29,7 +30,7 @@ class FriendService(
     private val userDao: UserDao,
     private val txRunner: JpaTxRunner,
     private val onlineStatusRepository: OnlineStatusRepository,
-    private val privacyRepository: PrivacyRepository
+    private val userPrivacyService: UserPrivacyService
 ) {
 
     companion object {
@@ -38,14 +39,6 @@ class FriendService(
 
         /** M6: 批量关系查询上限，防止单事务过大数据集 */
         private const val MAX_BATCH_CHECK_SIZE = 500
-
-        /** 好友申请通过模式：等待同意（默认） */
-        @Suppress("unused")
-        private const val APPROVAL_WAIT = 0
-        /** 好友申请通过模式：自动通过 */
-        private const val APPROVAL_AUTO_ACCEPT = 1
-        /** 好友申请通过模式：自动拒绝 */
-        private const val APPROVAL_AUTO_REJECT = 2
 
         /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
@@ -132,8 +125,8 @@ class FriendService(
         val smaller = minOf(fromUid, toUid)
         val larger = maxOf(fromUid, toUid)
 
-        // 预先查询目标用户的好友申请通过模式（走 Redis→MySQL，独立于后续事务）
-        val approvalMode = privacyRepository.getFriendApprovalMode(toUid)
+        // 预先查询目标用户的好友申请通过模式（走 UserPrivacyService→Repository，独立于后续事务）
+        val approvalMode = userPrivacyService.getFriendApprovalMode(toUid)
 
         return txRunner.execute { em ->
             // 检查是否已是好友
@@ -142,9 +135,9 @@ class FriendService(
                 throw FriendException(BizCode.ALREADY_FRIEND)
             }
 
-            // 好友申请通过模式检查
+            // 好友申请通过模式检查（使用 Protobuf 枚举，与 UserPrivacyService 返回类型一致）
             when (approvalMode) {
-                APPROVAL_AUTO_REJECT -> {
+                FriendApprovalMode.AUTO_REJECT -> {
                     // 自动拒绝：直接创建 status=2 的申请记录，不推送通知
                     logger.info { "好友申请自动拒绝: fromUid=$fromUid, toUid=$toUid, mode=AUTO_REJECT" }
                     val requestEntity = FriendRequestEntity(
@@ -168,7 +161,7 @@ class FriendService(
                     )
                 }
 
-                APPROVAL_AUTO_ACCEPT -> {
+                FriendApprovalMode.AUTO_ACCEPT -> {
                     // 自动通过：直接建立好友关系 + 私聊会话
                     val convId = buildPrivateConvId(smaller, larger)
                     ensureFriendshipAndConversation(em, smaller, larger, convId, existingFriendship)
@@ -177,6 +170,10 @@ class FriendService(
                         requestId = 0L, isMutualAccept = false, isAutoAccepted = true, isAutoRejected = false,
                         convId = convId, fromUid = fromUid, toUid = toUid
                     )
+                }
+
+                FriendApprovalMode.WAIT_APPROVAL, FriendApprovalMode.UNRECOGNIZED -> {
+                    // 等待同意 / 未知模式 → 走下方原流程（双向竞赛 → 创建申请）
                 }
             }
 
@@ -363,7 +360,7 @@ class FriendService(
         } else emptyMap()
 
         val hiddenUids = if (friendUids.isNotEmpty()) {
-            privacyRepository.batchGetHideOnlineStatus(friendUids)
+            userPrivacyService.batchGetHideOnlineStatus(friendUids)
         } else emptySet()
 
         val builder = FriendListResp.newBuilder()
