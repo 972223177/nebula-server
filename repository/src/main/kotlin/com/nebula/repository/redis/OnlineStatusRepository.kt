@@ -1,5 +1,7 @@
 package com.nebula.repository.redis
 
+import com.nebula.common.redis.RedisKeys
+import com.nebula.common.redis.RedisTtl
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
@@ -37,9 +39,6 @@ class OnlineStatusRepository(
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 
     companion object {
-        private const val KEY_PREFIX = "online:user:"
-        private const val TTL_SECONDS = 60L  // D-14: 短 TTL
-
         private val json = Json { ignoreUnknownKeys = true }
     }
 
@@ -51,7 +50,7 @@ class OnlineStatusRepository(
     suspend fun setOnline(userId: Long) {
         val data = OnlineStatusData(status = 1, lastActiveAt = System.currentTimeMillis())
         val jsonStr = json.encodeToString(data)
-        redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, jsonStr)
+        redis.setex("${RedisKeys.onlineStatusKey(userId)}", RedisTtl.ONLINE_STATUS, jsonStr)
     }
 
     /**
@@ -62,7 +61,7 @@ class OnlineStatusRepository(
     suspend fun setHidden(userId: Long) {
         val data = OnlineStatusData(status = 2, lastActiveAt = System.currentTimeMillis())
         val jsonStr = json.encodeToString(data)
-        redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, jsonStr)
+        redis.setex("${RedisKeys.onlineStatusKey(userId)}", RedisTtl.ONLINE_STATUS, jsonStr)
     }
 
     /**
@@ -71,7 +70,7 @@ class OnlineStatusRepository(
      * @param userId 用户 ID
      */
     suspend fun setOffline(userId: Long) {
-        redis.del("$KEY_PREFIX$userId")
+        redis.del("${RedisKeys.onlineStatusKey(userId)}")
     }
 
     /**
@@ -81,7 +80,7 @@ class OnlineStatusRepository(
      * @return 在线状态数据，key 不存在或解析失败返回 null
      */
     suspend fun getStatus(userId: Long): OnlineStatusData? {
-        val jsonStr = redis.get("$KEY_PREFIX$userId") ?: return null
+        val jsonStr = redis.get("${RedisKeys.onlineStatusKey(userId)}") ?: return null
         return try {
             json.decodeFromString<OnlineStatusData>(jsonStr)
         } catch (e: Exception) {
@@ -106,7 +105,7 @@ class OnlineStatusRepository(
      * @param userId 用户 ID
      */
     suspend fun refreshTtl(userId: Long) {
-        redis.expire("$KEY_PREFIX$userId", TTL_SECONDS)
+        redis.expire("${RedisKeys.onlineStatusKey(userId)}", RedisTtl.ONLINE_STATUS)
     }
 
     /**
@@ -117,7 +116,7 @@ class OnlineStatusRepository(
      */
     suspend fun batchGetStatus(userIds: List<Long>): Map<Long, OnlineStatusData?> {
         if (userIds.isEmpty()) return emptyMap()
-        val keys: kotlin.Array<String> = userIds.map { "$KEY_PREFIX$it" }.toTypedArray()
+        val keys: kotlin.Array<String> = userIds.map { RedisKeys.onlineStatusKey(it) }.toTypedArray()
         // mget 返回 Flow<KeyValue>，collect 后转为 List
         val mgetResult = redis.mget(*keys).toList(mutableListOf())
 

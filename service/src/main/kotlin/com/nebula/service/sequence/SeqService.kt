@@ -1,5 +1,6 @@
 package com.nebula.service.sequence
 
+import com.nebula.common.redis.RedisKeys
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
@@ -26,12 +27,6 @@ class SeqService(
         RedisCoroutinesCommandsImpl(connection.reactive())
 
     companion object {
-        /** Redis Key 前缀：seq:conv: */
-        const val KEY_PREFIX = "seq:conv:"
-
-        /** Redis Key 后缀：:next_seq:uid: */
-        const val SUFFIX = ":next_seq:uid:"
-
         /** 最大序列号阈值，超过此值时重置为 1，留出 10000 的缓冲空间防止并发溢出 */
         const val MAX_SEQ_THRESHOLD = Long.MAX_VALUE - 10000
 
@@ -46,7 +41,7 @@ class SeqService(
      * @param uid 用户 ID
      * @return Redis Key 字符串
      */
-    private fun key(convId: String, uid: Long): String = "$KEY_PREFIX$convId$SUFFIX$uid"
+    private fun key(convId: String, uid: Long): String = RedisKeys.seqKey(convId, uid)
 
     /**
      * 获取会话下一条序列号并自增。

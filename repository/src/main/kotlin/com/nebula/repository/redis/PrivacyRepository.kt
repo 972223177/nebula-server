@@ -1,5 +1,7 @@
 package com.nebula.repository.redis
 
+import com.nebula.common.redis.RedisKeys
+import com.nebula.common.redis.RedisTtl
 import com.nebula.repository.dao.JpaTxRunner
 import com.nebula.repository.dao.UserDao
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -43,13 +45,6 @@ class PrivacyRepository(
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
 
     companion object {
-        /** Redis key 前缀 */
-        private const val KEY_PREFIX = "privacy:user:"
-        /** 缓存 TTL：7 天 */
-        private const val TTL_SECONDS = 7 * 24 * 3600L  // 7 天
-        /** Redis 操作超时时间（毫秒） */
-        private const val REDIS_TIMEOUT_MS = 500L
-
         /** 日志记录器 */
         private val logger = KotlinLogging.logger {}
 
@@ -83,8 +78,8 @@ class PrivacyRepository(
      */
     suspend fun getHideOnlineStatus(userId: Long): Boolean {
         return try {
-            withTimeout(REDIS_TIMEOUT_MS) {
-                val cached = redis.get("$KEY_PREFIX$userId")
+            withTimeout(RedisTtl.TIMEOUT_MS) {
+                val cached = redis.get("${RedisKeys.privacyKey(userId)}")
                 if (cached != null) {
                     val data = json.decodeFromString<PrivacyData>(cached)
                     return@withTimeout data.hideOnlineStatus
@@ -95,8 +90,8 @@ class PrivacyRepository(
             if (entity != null) {
                 val hide = entity.privacyStatus == PRIVACY_HIDDEN
                 // 写回 Redis
-                withTimeout(REDIS_TIMEOUT_MS) {
-                    redis.setex("$KEY_PREFIX$userId", TTL_SECONDS, json.encodeToString(PrivacyData(hide)))
+                withTimeout(RedisTtl.TIMEOUT_MS) {
+                    redis.setex("${RedisKeys.privacyKey(userId)}", RedisTtl.SEVEN_DAYS, json.encodeToString(PrivacyData(hide)))
                 }
                 return hide
             }
@@ -122,9 +117,9 @@ class PrivacyRepository(
      */
     suspend fun setHideOnlineStatus(userId: Long, hide: Boolean) {
         try {
-            withTimeout(REDIS_TIMEOUT_MS) {
+            withTimeout(RedisTtl.TIMEOUT_MS) {
                 val existing = readPrivacyData(userId)
-                redis.setex("$KEY_PREFIX$userId", TTL_SECONDS,
+                redis.setex("${RedisKeys.privacyKey(userId)}", RedisTtl.SEVEN_DAYS,
                     json.encodeToString(existing.copy(hideOnlineStatus = hide)))
             }
             // Redis 写成功后，异步刷 MySQL（best-effort 模式）
@@ -156,8 +151,8 @@ class PrivacyRepository(
      */
     suspend fun getFriendApprovalMode(userId: Long): Int {
         return try {
-            withTimeout(REDIS_TIMEOUT_MS) {
-                val cached = redis.get("$KEY_PREFIX$userId")
+            withTimeout(RedisTtl.TIMEOUT_MS) {
+                val cached = redis.get("${RedisKeys.privacyKey(userId)}")
                 if (cached != null) {
                     val data = json.decodeFromString<PrivacyData>(cached)
                     return@withTimeout data.friendApprovalMode
@@ -168,9 +163,9 @@ class PrivacyRepository(
             if (entity != null) {
                 val mode = entity.friendApproval
                 // 写回 Redis（保留现有 hideOnlineStatus，若有）
-                withTimeout(REDIS_TIMEOUT_MS) {
+                withTimeout(RedisTtl.TIMEOUT_MS) {
                     val existing = readPrivacyData(userId)
-                    redis.setex("$KEY_PREFIX$userId", TTL_SECONDS,
+                    redis.setex("${RedisKeys.privacyKey(userId)}", RedisTtl.SEVEN_DAYS,
                         json.encodeToString(existing.copy(friendApprovalMode = mode)))
                 }
                 return mode
@@ -196,9 +191,9 @@ class PrivacyRepository(
      */
     suspend fun setFriendApprovalMode(userId: Long, mode: Int) {
         try {
-            withTimeout(REDIS_TIMEOUT_MS) {
+            withTimeout(RedisTtl.TIMEOUT_MS) {
                 val existing = readPrivacyData(userId)
-                redis.setex("$KEY_PREFIX$userId", TTL_SECONDS,
+                redis.setex("${RedisKeys.privacyKey(userId)}", RedisTtl.SEVEN_DAYS,
                     json.encodeToString(existing.copy(friendApprovalMode = mode)))
             }
             // Redis 写成功后，异步刷 MySQL（best-effort 模式）
@@ -227,8 +222,8 @@ class PrivacyRepository(
      */
     private suspend fun readPrivacyData(userId: Long): PrivacyData {
         return try {
-            withTimeout(REDIS_TIMEOUT_MS) {
-                val cached = redis.get("$KEY_PREFIX$userId")
+            withTimeout(RedisTtl.TIMEOUT_MS) {
+                val cached = redis.get("${RedisKeys.privacyKey(userId)}")
                 if (cached != null) {
                     json.decodeFromString<PrivacyData>(cached)
                 } else PrivacyData()
@@ -251,8 +246,8 @@ class PrivacyRepository(
         if (userIds.isEmpty()) return emptySet()
 
         return try {
-            withTimeout(REDIS_TIMEOUT_MS) {
-                val keys: kotlin.Array<String> = userIds.map { "$KEY_PREFIX$it" }.toTypedArray()
+            withTimeout(RedisTtl.TIMEOUT_MS) {
+                val keys: kotlin.Array<String> = userIds.map { RedisKeys.privacyKey(it) }.toTypedArray()
                 // Lettuce 协程 mget 返回 Flow，collect 为 List 后按索引取用；避免未检查转换与运行时恒为 null
                 val mgetResult = redis.mget(*keys).toList()
 

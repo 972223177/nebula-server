@@ -1,5 +1,7 @@
 package com.nebula.repository.redis
 
+import com.nebula.common.redis.RedisKeys
+import com.nebula.common.redis.RedisTtl
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.lettuce.core.*
 import io.lettuce.core.api.StatefulRedisConnection
@@ -28,15 +30,13 @@ class MessageQueueRepository(
 
     companion object {
         /** Redis Stream 键名 */
-        private const val STREAM_KEY = "queue:messages"
+        private const val STREAM_KEY = RedisKeys.QUEUE_STREAM_KEY
         /** 消费者组名称 */
         private const val CONSUMER_GROUP = "flush-workers"
         /** 消费者名称 */
         private const val CONSUMER_NAME = "worker-1"
         /** 去重 SETNX key 前缀 */
-        private const val DEDUP_KEY_PREFIX = "dedup:msg:"
-        /** 去重 TTL：7 天 */
-        private const val DEDUP_TTL_SECONDS = 7 * 24 * 3600L
+        private const val DEDUP_TTL_SECONDS = RedisTtl.SEVEN_DAYS
     }
 
     /**
@@ -46,7 +46,7 @@ class MessageQueueRepository(
     suspend fun ensureConsumerGroup() {
         try {
             redis.xgroupCreate(
-                XReadArgs.StreamOffset.from(STREAM_KEY, "0-0"),
+                XReadArgs.StreamOffset.from(RedisKeys.QUEUE_STREAM_KEY, "0-0"),
                 CONSUMER_GROUP,
                 XGroupCreateArgs.Builder.mkstream(true)
             )
@@ -64,7 +64,7 @@ class MessageQueueRepository(
      */
     suspend fun enqueue(message: Map<String, String>): String? {
         return redis.xadd(
-            STREAM_KEY,
+            RedisKeys.QUEUE_STREAM_KEY,
             XAddArgs.Builder.maxlen(100000).approximateTrimming(),
             message
         )
@@ -87,7 +87,7 @@ class MessageQueueRepository(
         return redis.xreadgroup(
             Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
             args,
-            XReadArgs.StreamOffset.lastConsumed(STREAM_KEY)
+            XReadArgs.StreamOffset.lastConsumed(RedisKeys.QUEUE_STREAM_KEY)
         ).toList()
     }
 
@@ -119,7 +119,7 @@ class MessageQueueRepository(
             result += redis.xreadgroup(
                 Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
                 pendingArgs,
-                XReadArgs.StreamOffset.from(STREAM_KEY, "0") // "0" = 仅读取 PEL 中未确认消息
+                XReadArgs.StreamOffset.from(RedisKeys.QUEUE_STREAM_KEY, "0") // "0" = 仅读取 PEL 中未确认消息
             ).toList()
         } catch (e: Exception) {
             // PEL 读取异常时降级：仅丢失重试能力，不影响新消息消费主路径
@@ -133,7 +133,7 @@ class MessageQueueRepository(
         result += redis.xreadgroup(
             Consumer.from(CONSUMER_GROUP, CONSUMER_NAME),
             newArgs,
-            XReadArgs.StreamOffset.lastConsumed(STREAM_KEY) // ">" = 新消息
+            XReadArgs.StreamOffset.lastConsumed(RedisKeys.QUEUE_STREAM_KEY) // ">" = 新消息
         ).toList()
         return result
     }
@@ -144,7 +144,7 @@ class MessageQueueRepository(
      * @param messageId Redis Stream 消息 ID
      */
     suspend fun acknowledge(messageId: String) {
-        redis.xack(STREAM_KEY, CONSUMER_GROUP, messageId)
+        redis.xack(RedisKeys.QUEUE_STREAM_KEY, CONSUMER_GROUP, messageId)
     }
 
     /**
@@ -160,7 +160,7 @@ class MessageQueueRepository(
      * @return true 消息未重复（或无法判断），false 检测到重复
      */
     suspend fun checkAndSetDedup(clientMsgId: String, senderUid: Long): Boolean {
-        val key = "$DEDUP_KEY_PREFIX$clientMsgId"
+        val key = RedisKeys.dedupKey(clientMsgId)
         return try {
             val result = redis.set(
                 key,
@@ -180,7 +180,7 @@ class MessageQueueRepository(
      * 断线重连时，可通过此方法判断是否有离线消息待处理。
      */
     suspend fun getPendingCount(): PendingMessages? {
-        return redis.xpending(STREAM_KEY, CONSUMER_GROUP)
+        return redis.xpending(RedisKeys.QUEUE_STREAM_KEY, CONSUMER_GROUP)
     }
 
     /**
@@ -194,7 +194,7 @@ class MessageQueueRepository(
      */
     fun getPendingMessages(start: String = "-", end: String = "+", count: Long = 100): Flow<PendingMessage> {
         return redis.xpending(
-            STREAM_KEY, CONSUMER_GROUP,
+            RedisKeys.QUEUE_STREAM_KEY, CONSUMER_GROUP,
             Range.create(start, end),
             Limit.from(count)
         )
@@ -211,7 +211,7 @@ class MessageQueueRepository(
      */
     fun readMessagesById(startId: String, endId: String, count: Long = 100): Flow<StreamMessage<String, String>> {
         return redis.xrange(
-            STREAM_KEY,
+            RedisKeys.QUEUE_STREAM_KEY,
             Range.create(startId, endId),
             Limit.from(count)
         )

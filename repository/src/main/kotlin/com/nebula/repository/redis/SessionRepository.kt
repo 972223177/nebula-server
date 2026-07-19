@@ -7,6 +7,7 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 
+import com.nebula.common.redis.RedisKeys
 import com.nebula.common.session.SessionStore
 
 /**
@@ -23,11 +24,6 @@ class SessionRepository(
 ) : SessionStore {
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 
-    companion object {
-        private const val KEY_PREFIX = "session:token:"
-        private const val DEFAULT_TTL_SECONDS = 7 * 24 * 3600L  // 7 天
-    }
-
     /**
      * 保存 session token。
      *
@@ -36,7 +32,7 @@ class SessionRepository(
      * @param ttlSeconds TTL 秒数，默认 7 天
      */
     override suspend fun save(token: String, sessionJson: String, ttlSeconds: Long) {
-        redis.setex("$KEY_PREFIX$token", ttlSeconds, sessionJson)
+        redis.setex(RedisKeys.sessionTokenKey(token), ttlSeconds, sessionJson)
     }
 
     /**
@@ -46,7 +42,7 @@ class SessionRepository(
      * @return 用户数据 JSON，不存在返回 null
      */
     override suspend fun findByToken(token: String): String? {
-        return redis.get("$KEY_PREFIX$token")
+        return redis.get(RedisKeys.sessionTokenKey(token))
     }
 
     /**
@@ -56,7 +52,7 @@ class SessionRepository(
      * @param ttlSeconds 续期 TTL 秒数，默认 7 天
      */
     override suspend fun refreshTtl(token: String, ttlSeconds: Long) {
-        redis.expire("$KEY_PREFIX$token", ttlSeconds)
+        redis.expire(RedisKeys.sessionTokenKey(token), ttlSeconds)
     }
 
     /**
@@ -65,7 +61,7 @@ class SessionRepository(
      * @param token Session 令牌
      */
     override suspend fun delete(token: String) {
-        redis.del("$KEY_PREFIX$token")
+        redis.del(RedisKeys.sessionTokenKey(token))
     }
 
     // ==================== 通用 Redis key/value 操作 ====================

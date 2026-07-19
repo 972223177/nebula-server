@@ -2,6 +2,7 @@ package com.nebula.gateway.session
 
 import kotlinx.serialization.json.Json
 import com.nebula.common.circuit.SimpleCircuitBreaker
+import com.nebula.common.redis.RedisKeys
 import com.nebula.common.session.SessionStore
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.TimeoutCancellationException
@@ -350,7 +351,7 @@ class SessionRegistry(
         try {
             withTimeout(redisTimeoutMs.milliseconds) {
                 sessionStore.saveRaw(
-                    "session:${session.userId}:${session.deviceType}",
+                    RedisKeys.deviceTypeMappingKey(session.userId, session.deviceType),
                     session.token
                 )
             }
@@ -369,7 +370,7 @@ class SessionRegistry(
     private suspend fun deleteDeviceTypeMapping(session: Session) {
         try {
             withTimeout(redisTimeoutMs.milliseconds) {
-                sessionStore.deleteKey("session:${session.userId}:${session.deviceType}")
+                sessionStore.deleteKey(RedisKeys.deviceTypeMappingKey(session.userId, session.deviceType))
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Device type mapping delete timeout for userId=${session.userId}" }
@@ -395,12 +396,11 @@ class SessionRegistry(
     suspend fun cleanupDeviceTypeMapping(userId: Long, deviceType: String, expectedToken: String) {
         try {
             withTimeout(redisTimeoutMs.milliseconds) {
-                val key = "session:$userId:$deviceType"
                 // 复用 findDeviceTokenFromRedis 读取当前映射值，避免重复 findRaw 内联
                 val currentValue = findDeviceTokenFromRedis(userId, deviceType)
                 // CQ-12: 仅当 Redis 中的值仍为旧 token 时才删除，防止误删新连接的映射
                 if (currentValue == expectedToken) {
-                    sessionStore.deleteKey(key)
+                    sessionStore.deleteKey(RedisKeys.deviceTypeMappingKey(userId, deviceType))
                 }
             }
         } catch (e: TimeoutCancellationException) {
@@ -420,7 +420,7 @@ class SessionRegistry(
     private suspend fun findDeviceTokenFromRedis(userId: Long, deviceType: String): String? {
         return try {
             withTimeout(redisTimeoutMs.milliseconds) {
-                sessionStore.findRaw("session:$userId:$deviceType")
+                sessionStore.findRaw(RedisKeys.deviceTypeMappingKey(userId, deviceType))
             }
         } catch (e: TimeoutCancellationException) {
             logger.warn(e) { "Device type mapping query timeout for userId=$userId" }
@@ -448,7 +448,7 @@ class SessionRegistry(
      */
     suspend fun recoverDeviceTypeIndex(): Int {
         return try {
-            val keys = sessionStore.scanKeys("session:*")
+            val keys = sessionStore.scanKeys(RedisKeys.DEVICE_TYPE_SCAN_PATTERN)
             var recovered = 0
             for (key in keys) {
                 val parts = key.split(":")

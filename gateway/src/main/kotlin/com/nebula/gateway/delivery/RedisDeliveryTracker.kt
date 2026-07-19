@@ -1,5 +1,7 @@
 package com.nebula.gateway.delivery
 
+import com.nebula.common.redis.RedisKeys
+import com.nebula.common.redis.RedisTtl
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
@@ -26,12 +28,8 @@ class RedisDeliveryTracker(
 ) {
 
     companion object {
-        /** Redis Hash key 前缀 */
-        private const val KEY_PREFIX = "msg:"
-        /** Redis Hash key 后缀 */
-        private const val SUFFIX = ":delivery"
         /** TTL：7 天 */
-        private const val TTL_SECONDS = 7 * 24 * 3600L
+        private const val TTL_SECONDS = RedisTtl.SEVEN_DAYS
     }
 
     /**
@@ -103,7 +101,7 @@ class RedisDeliveryTracker(
     }
 
     /** 构造 Redis Hash key */
-    private fun key(msgId: Long): String = "$KEY_PREFIX${msgId}$SUFFIX"
+    private fun key(msgId: Long): String = RedisKeys.deliveryKey(msgId)
 
     /** 构造 Hash field */
     private fun field(uid: Long): String = "$uid:status"
