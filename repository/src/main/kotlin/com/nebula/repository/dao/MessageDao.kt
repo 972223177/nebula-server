@@ -20,7 +20,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
      * @param limit 返回行数限制
      * @return 消息列表（按 id DESC 排序）
      */
-    suspend fun findMessagesBackward(
+    fun findMessagesBackward(
         em: EntityManager,
         conversationId: String,
         cursor: Long,
@@ -49,7 +49,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
      * @param limit 返回行数限制
      * @return 消息列表（按 id ASC 排序）
      */
-    suspend fun findMessagesForward(
+    fun findMessagesForward(
         em: EntityManager,
         conversationId: String,
         cursor: Long,
@@ -78,7 +78,7 @@ class MessageDao : EntityDao<MessageEntity>(MessageEntity::class.java) {
      * @param conversationId 会话 ID
      * @return 该会话的消息总数
      */
-    suspend fun countByConversationId(
+    fun countByConversationId(
         em: EntityManager,
         conversationId: String
     ): Long = count(

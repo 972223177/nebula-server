@@ -9,6 +9,7 @@ import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.service.sequence.SeqService
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import jakarta.persistence.EntityManager
 import kotlinx.coroutines.test.runTest
@@ -65,8 +66,8 @@ class MessageServiceSendOrderTest {
         // 默认：会话成员有效 + 会话存在（群聊 type=2 跳过私聊好友检查）
         val conv = ConversationEntity(type = 2, name = "g").apply { id = convId }
         val member = ConversationMemberEntity(convId, senderUid)
-        coEvery { conversationMemberDao.findByConversationIdAndUserId(em, any(), any()) } returns member
-        coEvery { conversationDao.findById(em, any()) } returns conv
+        every { conversationMemberDao.findByConversationIdAndUserId(em, any(), any()) } returns member
+        every { conversationDao.findById(em, any()) } returns conv
         coEvery { seqService.nextSeq(any(), any()) } returns 1L
         coEvery { messageQueueRepository.enqueue(any()) } returns "stream-id"
     }

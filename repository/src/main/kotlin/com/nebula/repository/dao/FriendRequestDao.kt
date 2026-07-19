@@ -18,7 +18,7 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
      * @param status 申请状态
      * @return 匹配的申请列表
      */
-    suspend fun findByToUidAndStatus(
+    fun findByToUidAndStatus(
         em: EntityManager,
         toUid: Long,
         status: Int
@@ -37,7 +37,7 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
      * @param status 申请状态
      * @return 匹配的申请列表
      */
-    suspend fun findByFromUidAndStatus(
+    fun findByFromUidAndStatus(
         em: EntityManager,
         fromUid: Long,
         status: Int
@@ -59,7 +59,7 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
      * @param targetUids 目标用户 UID 列表
      * @return 双向 pending 申请列表
      */
-    suspend fun findAllPendingBidirectional(
+    fun findAllPendingBidirectional(
         em: EntityManager,
         uid: Long,
         targetUids: List<Long>
@@ -81,7 +81,7 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
     /**
      * H3 批量优化：查找双向任意状态的申请（用于被拒绝检测）。
      */
-    suspend fun findAllBidirectional(
+    fun findAllBidirectional(
         em: EntityManager,
         uid: Long,
         targetUids: List<Long>
@@ -107,7 +107,7 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
      * @param toUid 申请接收方 UID
      * @return 好友申请实体，不存在返回 null
      */
-    suspend fun findByFromUidAndToUid(
+    fun findByFromUidAndToUid(
         em: EntityManager,
         fromUid: Long,
         toUid: Long
@@ -127,7 +127,7 @@ class FriendRequestDao : EntityDao<FriendRequestEntity>(FriendRequestEntity::cla
      * @param status 申请状态
      * @return 好友申请实体，不存在返回 null
      */
-    suspend fun findByFromUidAndToUidAndStatus(
+    fun findByFromUidAndToUidAndStatus(
         em: EntityManager,
         fromUid: Long,
         toUid: Long,

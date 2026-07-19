@@ -18,7 +18,7 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
      * @param friendId 好友用户 ID（排序后的较大值）
      * @return 好友关系实体，不存在返回 null
      */
-    suspend fun findByUserIdAndFriendId(
+    fun findByUserIdAndFriendId(
         em: EntityManager,
         userId: Long,
         friendId: Long
@@ -39,7 +39,7 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
      * @param limit 返回行数限制
      * @return 好友列表，按 id DESC 排序
      */
-    suspend fun findFriendsByUserId(
+    fun findFriendsByUserId(
         em: EntityManager,
         userId: Long,
         cursor: Long,
@@ -70,7 +70,7 @@ class FriendshipDao : EntityDao<FriendshipEntity>(FriendshipEntity::class.java) 
      * @param targetUids 目标用户 UID 列表
      * @return 活跃的好友关系实体列表
      */
-    suspend fun findAllFriendsByUids(
+    fun findAllFriendsByUids(
         em: EntityManager,
         userId: Long,
         targetUids: List<Long>

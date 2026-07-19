@@ -18,7 +18,7 @@ class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
      * @param username 用户名
      * @return 用户实体，不存在时返回 null
      */
-    suspend fun findByUsername(em: EntityManager, username: String): UserEntity? =
+    fun findByUsername(em: EntityManager, username: String): UserEntity? =
         querySingle(
             em,
             "SELECT u FROM UserEntity u WHERE u.username = :username",
@@ -37,7 +37,7 @@ class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
      * @param limit 返回行数限制
      * @return 匹配的用户列表，按 createdAt 倒序
      */
-    suspend fun findByUsernameContaining(
+    fun findByUsernameContaining(
         em: EntityManager,
         keyword: String,
         cursor: LocalDateTime?,
@@ -68,7 +68,7 @@ class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
      * @param limit 返回行数限制
      * @return 匹配的用户列表，按 id 倒序
      */
-    suspend fun findByUsernameContainingById(
+    fun findByUsernameContainingById(
         em: EntityManager,
         keyword: String,
         cursorId: Long,

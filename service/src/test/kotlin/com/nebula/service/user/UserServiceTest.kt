@@ -103,7 +103,7 @@ class UserServiceTest {
             .setPassword(validPassword)
             .build()
         // 事务内校验已存在
-        coEvery { userDao.findByUsername(em, testUsername) } returns mockk()
+        every { userDao.findByUsername(em, testUsername) } returns mockk()
 
         val ex = assertFailsWith<UserException> {
             userService.register(req)
@@ -121,9 +121,9 @@ class UserServiceTest {
             .setNickname(nickname)
             .setAvatar(avatar)
             .build()
-        coEvery { userDao.findByUsername(em, testUsername) } returns null
+        every { userDao.findByUsername(em, testUsername) } returns null
         // userDao.insert(em, entity) — answers 提取第二个参数（entity）
-        coEvery { userDao.insert(em, any()) } answers { args[1] as UserEntity }
+        every { userDao.insert(em, any()) } answers { args[1] as UserEntity }
 
         val result = userService.register(req)
 
@@ -149,8 +149,8 @@ class UserServiceTest {
             .setPassword(validPassword)
             .setNickname("")
             .build()
-        coEvery { userDao.findByUsername(em, testUsername) } returns null
-        coEvery { userDao.insert(em, any()) } answers { args[1] as UserEntity }
+        every { userDao.findByUsername(em, testUsername) } returns null
+        every { userDao.insert(em, any()) } answers { args[1] as UserEntity }
 
         userService.register(req)
 
@@ -166,8 +166,8 @@ class UserServiceTest {
             .setPassword(validPassword)
             .setAvatar("")
             .build()
-        coEvery { userDao.findByUsername(em, testUsername) } returns null
-        coEvery { userDao.insert(em, any()) } answers { args[1] as UserEntity }
+        every { userDao.findByUsername(em, testUsername) } returns null
+        every { userDao.insert(em, any()) } answers { args[1] as UserEntity }
 
         userService.register(req)
 
@@ -182,8 +182,8 @@ class UserServiceTest {
             .setUsername(testUsername)
             .setPassword(validPassword)
             .build()
-        coEvery { userDao.findByUsername(em, testUsername) } returns null
-        coEvery { userDao.insert(em, any()) } throws
+        every { userDao.findByUsername(em, testUsername) } returns null
+        every { userDao.insert(em, any()) } throws
             PersistenceException("Duplicate entry 'testuser' for key 'uk_username'")
 
         val ex = assertFailsWith<UserException> {
@@ -201,7 +201,7 @@ class UserServiceTest {
         val req = LoginReq.newBuilder()
             .setPassword(validPassword)
             .build()
-        coEvery { userDao.findByUsername(em, any()) } returns null
+        every { userDao.findByUsername(em, any()) } returns null
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -215,7 +215,7 @@ class UserServiceTest {
             .setUsername(testUsername)
             .build()
         val user = UserEntity(username = testUsername, passwordHash = "hash", nickname = testUsername).apply { id = 1L }
-        coEvery { userDao.findByUsername(em, testUsername) } returns user
+        every { userDao.findByUsername(em, testUsername) } returns user
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -229,7 +229,7 @@ class UserServiceTest {
             .setUsername(testUsername)
             .setPassword(validPassword)
             .build()
-        coEvery { userDao.findByUsername(em, testUsername) } returns null
+        every { userDao.findByUsername(em, testUsername) } returns null
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -248,7 +248,7 @@ class UserServiceTest {
             passwordHash = "storedHash",
             nickname = testUsername
         ).apply { id = mockUserId }
-        coEvery { userDao.findByUsername(em, testUsername) } returns userEntity
+        every { userDao.findByUsername(em, testUsername) } returns userEntity
 
         val ex = assertFailsWith<UserException> {
             userService.loginByPassword(req)
@@ -267,7 +267,7 @@ class UserServiceTest {
             passwordHash = "storedHash",
             nickname = testUsername
         ).apply { id = mockUserId }
-        coEvery { userDao.findByUsername(em, testUsername) } returns userEntity
+        every { userDao.findByUsername(em, testUsername) } returns userEntity
         every { userService.verifyPassword(validPassword, "storedHash") } returns true
 
         val result = userService.loginByPassword(req)
@@ -360,7 +360,7 @@ class UserServiceTest {
 
     @Test
     fun getProfileShouldThrowUserNotFoundWhenUserDoesNotExist() = runTest {
-        coEvery { userDao.findById(em, mockUserId) } returns null
+        every { userDao.findById(em, mockUserId) } returns null
 
         val ex = assertFailsWith<UserException> {
             userService.getProfile(mockUserId)
@@ -381,7 +381,7 @@ class UserServiceTest {
             createdAt = now
             updatedAt = now
         }
-        coEvery { userDao.findById(em, mockUserId) } returns userEntity
+        every { userDao.findById(em, mockUserId) } returns userEntity
 
         val resp = userService.getProfile(mockUserId)
 
@@ -430,7 +430,7 @@ class UserServiceTest {
             nickname = "用户3"
         ).apply { id = uid3 }
 
-        coEvery { userDao.findAllById(em, listOf(uid1, uid2, uid3)) } returns listOf(user1, user3)
+        every { userDao.findAllById(em, listOf(uid1, uid2, uid3)) } returns listOf(user1, user3)
 
         val resp = userService.batchGetUsers(req)
 
@@ -455,7 +455,7 @@ class UserServiceTest {
             UserEntity(username = "user3", passwordHash = "h3", nickname = "用户3").apply { id = uid3 }
         )
 
-        coEvery { userDao.findAllById(em, listOf(uid1, uid2, uid3)) } returns users
+        every { userDao.findAllById(em, listOf(uid1, uid2, uid3)) } returns users
 
         val resp = userService.batchGetUsers(req)
 

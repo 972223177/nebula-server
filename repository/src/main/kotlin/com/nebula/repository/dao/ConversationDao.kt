@@ -23,7 +23,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
      * @param limit 返回行数限制
      * @return 用户参与的会话实体列表（按更新时间降序）
      */
-    suspend fun findConversationsByUserId(
+    fun findConversationsByUserId(
         em: EntityManager,
         userId: Long,
         cursor: LocalDateTime?,
@@ -58,7 +58,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
      * @param delta 成员计数变化量（+1 表示新增成员，-1 表示移除成员）
      * @return 受影响的行数（0 表示会话不存在）
      */
-    suspend fun incrementMemberCount(
+    fun incrementMemberCount(
         em: EntityManager,
         conversationId: String,
         delta: Int
@@ -88,7 +88,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
      * @param limit 返回行数限制
      * @return 匹配的会话实体列表
      */
-    suspend fun findAllByStatus(
+    fun findAllByStatus(
         em: EntityManager,
         status: Int,
         offset: Int,
@@ -113,7 +113,7 @@ class ConversationDao : EntityDao<ConversationEntity>(ConversationEntity::class.
      * @param limit 返回行数限制
      * @return 群组会话列表（按 updatedAt DESC 排序）
      */
-    suspend fun findGroupConversationsByUserId(
+    fun findGroupConversationsByUserId(
         em: EntityManager,
         userId: Long,
         cursor: LocalDateTime?,

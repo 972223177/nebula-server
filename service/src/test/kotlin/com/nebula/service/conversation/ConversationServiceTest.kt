@@ -6,6 +6,7 @@ import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.UserEntity
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import jakarta.persistence.EntityManager
 import kotlinx.coroutines.test.runTest
@@ -53,18 +54,18 @@ class ConversationServiceTest {
     fun listConversationsShouldFilterSelfOnlyConversation() = runTest {
         val normalConv = ConversationEntity(type = 1, name = "").apply { id = "private:1:2" }
         val selfConv = ConversationEntity(type = 1, name = "").apply { id = "private:5:5" }
-        coEvery { conversationDao.findConversationsByUserId(em, userId, any(), any()) } returns
+        every { conversationDao.findConversationsByUserId(em, userId, any(), any()) } returns
             listOf(normalConv, selfConv)
 
         // 用户在两个会话的成员映射（仅用于 lastReadMessageId，可为空）；DAO 返回 List，service 内再 associateBy
-        coEvery { conversationMemberDao.findByConversationIdsAndUserId(em, any(), any()) } returns emptyList<ConversationMemberEntity>()
+        every { conversationMemberDao.findByConversationIdsAndUserId(em, any(), any()) } returns emptyList<ConversationMemberEntity>()
         // 两个会话的全部成员：normalConv 含 1、2；selfConv 仅含自己
-        coEvery { conversationMemberDao.findAllByConversationIds(em, any()) } returns listOf(
+        every { conversationMemberDao.findAllByConversationIds(em, any()) } returns listOf(
             ConversationMemberEntity("private:1:2", 1),
             ConversationMemberEntity("private:1:2", 2),
             ConversationMemberEntity("private:5:5", 5)
         )
-        coEvery { userDao.findAllById(em, listOf(2L)) } returns listOf(
+        every { userDao.findAllById(em, listOf(2L)) } returns listOf(
             UserEntity(username = "u2", passwordHash = "h", nickname = "用户2").apply { id = 2L }
         )
 

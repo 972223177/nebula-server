@@ -9,6 +9,7 @@ import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import jakarta.persistence.EntityManager
 import kotlinx.coroutines.test.runTest
@@ -70,7 +71,7 @@ class PrivacyRepositoryTest {
     @Test
     fun getHideOnlineStatusShouldFallbackToMysqlWhenRedisMiss() = runTest {
         coEvery { redis.get("privacy:user:$userId") } returns null
-        coEvery { userDao.findById(em, userId) } returns UserEntity(
+        every { userDao.findById(em, userId) } returns UserEntity(
             username = "test", passwordHash = "", nickname = "test"
         ).apply {
             this.id = userId
@@ -85,7 +86,7 @@ class PrivacyRepositoryTest {
     @Test
     fun getHideOnlineStatusShouldReturnFalseWhenRedisMissAndMysqlNotFound() = runTest {
         coEvery { redis.get("privacy:user:$userId") } returns null
-        coEvery { userDao.findById(em, userId) } returns null
+        every { userDao.findById(em, userId) } returns null
 
         val result = repository.getHideOnlineStatus(userId)
 
@@ -105,13 +106,13 @@ class PrivacyRepositoryTest {
 
     @Test
     fun setHideOnlineStatusShouldWriteRedisAndMysql() = runTest {
-        coEvery { userDao.findById(em, userId) } returns UserEntity(
+        every { userDao.findById(em, userId) } returns UserEntity(
             username = "test", passwordHash = "", nickname = "test"
         ).apply {
             this.id = userId
             privacyStatus = 0
         }
-        coEvery { userDao.update(em, any()) } answers { firstArg() }
+        every { userDao.update(em, any()) } answers { firstArg() }
 
         repository.setHideOnlineStatus(userId, true)
 

@@ -17,7 +17,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param conversationId 会话 ID
      * @return 成员记录列表
      */
-    suspend fun findByConversationId(
+    fun findByConversationId(
         em: EntityManager,
         conversationId: String
     ): List<ConversationMemberEntity> = queryList(
@@ -45,7 +45,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param userId 用户 ID
      * @return 活跃的成员实体，软删或不存在返回 null
      */
-    suspend fun findByConversationIdAndUserId(
+    fun findByConversationIdAndUserId(
         em: EntityManager,
         conversationId: String,
         userId: Long
@@ -59,7 +59,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
     /**
      * 查会话成员（含软删），用于 createPrivateConversation / invite 等恢复场景。
      */
-    suspend fun findByConversationIdAndUserIdIncludingDeleted(
+    fun findByConversationIdAndUserIdIncludingDeleted(
         em: EntityManager,
         conversationId: String,
         userId: Long
@@ -77,7 +77,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param userId 用户 ID
      * @return 成员记录列表
      */
-    suspend fun findByUserId(
+    fun findByUserId(
         em: EntityManager,
         userId: Long
     ): List<ConversationMemberEntity> = queryList(
@@ -94,7 +94,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param senderId 消息发送者用户 ID（不递增其未读计数）
      * @return 受影响的行数
      */
-    suspend fun incrementUnreadCount(
+    fun incrementUnreadCount(
         em: EntityManager,
         conversationId: String,
         senderId: Long
@@ -118,7 +118,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param lastReadMsgId 已读的最后一条消息 ID
      * @return 受影响的行数
      */
-    suspend fun updateReadReceipt(
+    fun updateReadReceipt(
         em: EntityManager,
         conversationId: String,
         userId: Long,
@@ -143,7 +143,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param conversationId 会话 ID
      * @return 活跃成员数
      */
-    suspend fun countActiveByConversationId(
+    fun countActiveByConversationId(
         em: EntityManager,
         conversationId: String
     ): Long = count(
@@ -160,7 +160,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param userId 用户 ID
      * @return 受影响的行数
      */
-    suspend fun softDeleteByConversationIdAndUserId(
+    fun softDeleteByConversationIdAndUserId(
         em: EntityManager,
         conversationId: String,
         userId: Long
@@ -185,7 +185,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      */
     /**
      * 批量查会话成员（仅活跃，用于 conversation/list 等）。*/
-    suspend fun findByConversationIdAndUserIds(
+    fun findByConversationIdAndUserIds(
         em: EntityManager,
         conversationId: String,
         userIds: List<Long>
@@ -202,7 +202,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
     /**
      * 批量查会话成员（含软删，用于 invite 恢复已退出成员场景）。
      */
-    suspend fun findByConversationIdAndUserIdsIncludingDeleted(
+    fun findByConversationIdAndUserIdsIncludingDeleted(
         em: EntityManager,
         conversationId: String,
         userIds: List<Long>
@@ -224,7 +224,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param userId 用户 ID
      * @return 匹配的成员记录列表
      */
-    suspend fun findByConversationIdsAndUserId(
+    fun findByConversationIdsAndUserId(
         em: EntityManager,
         conversationIds: List<String>,
         userId: Long
@@ -245,7 +245,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param conversationIds 会话 ID 列表
      * @return 所有成员实体列表
      */
-    suspend fun findAllByConversationIds(
+    fun findAllByConversationIds(
         em: EntityManager,
         conversationIds: List<String>
     ): List<ConversationMemberEntity> {
@@ -264,7 +264,7 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
      * @param conversationId 会话 ID
      * @return 受影响的行数
      */
-    suspend fun softDeleteAllByConversationId(
+    fun softDeleteAllByConversationId(
         em: EntityManager,
         conversationId: String
     ): Int = executeUpdate(

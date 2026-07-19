@@ -38,13 +38,13 @@ import jakarta.persistence.EntityManager
  *
  * ```kotlin
  * class UserDao : EntityDao<UserEntity>(UserEntity::class.java) {
- *     suspend fun findByUsername(em: EntityManager, username: String): UserEntity? =
+ *     fun findByUsername(em: EntityManager, username: String): UserEntity? =
  *         querySingle(em, "SELECT u FROM UserEntity u WHERE u.username = :username",
  *             "username" to username)
  * }
  *
  * // Service 层（在 JpaTxRunner 内部，IO 上下文已就绪）
- * suspend fun getByUsername(username: String): UserEntity? = txRunner.execute { em ->
+ * fun getByUsername(username: String): UserEntity? = txRunner.execute { em ->
  *     userDao.findByUsername(em, username)  // 直接调用，无嵌套 withContext
  * }
  * ```
@@ -63,7 +63,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param id 主键值
      * @return 实体，不存在时返回 null
      */
-    suspend fun findById(em: EntityManager, id: Any): T? {
+    fun findById(em: EntityManager, id: Any): T? {
         return em.find(entityClass, id)
     }
 
@@ -76,7 +76,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param ids 主键值列表
      * @return 实体列表（按入参 ids 顺序；缺失 ID 静默忽略）
      */
-    suspend fun findAllById(em: EntityManager, ids: Collection<*>): List<T> {
+    fun findAllById(em: EntityManager, ids: Collection<*>): List<T> {
         if (ids.isEmpty()) {
             return emptyList()
         }
@@ -97,7 +97,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param entity 待持久化实体
      * @return 持久化后的实体（同引用）
      */
-    suspend fun insert(em: EntityManager, entity: T): T {
+    fun insert(em: EntityManager, entity: T): T {
         em.persist(entity)
         return entity
     }
@@ -111,7 +111,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param entities 待持久化实体列表
      * @return 持久化后的实体列表（同引用）
      */
-    suspend fun insertAll(em: EntityManager, entities: Collection<T>): List<T> {
+    fun insertAll(em: EntityManager, entities: Collection<T>): List<T> {
         entities.forEach { em.persist(it) }
         return entities.toList()
     }
@@ -125,7 +125,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param entity 待更新实体
      * @return 合并后的实体（可能是新托管实例）
      */
-    suspend fun update(em: EntityManager, entity: T): T {
+    fun update(em: EntityManager, entity: T): T {
         return em.merge(entity)
     }
 
@@ -137,7 +137,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param em 当前事务的 [EntityManager]
      * @param id 主键值
      */
-    suspend fun deleteById(em: EntityManager, id: Any) {
+    fun deleteById(em: EntityManager, id: Any) {
         val entity = em.find(entityClass, id) ?: return
         em.remove(entity)
     }
@@ -150,7 +150,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param em 当前事务的 [EntityManager]
      * @param entity 待删除实体
      */
-    suspend fun delete(em: EntityManager, entity: T) {
+    fun delete(em: EntityManager, entity: T) {
         em.remove(entity)
     }
 
@@ -164,7 +164,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param params 命名参数，键为 JPQL 中的 `:paramName`，值为绑定值
      * @return 查询结果，不存在时返回 null
      */
-    suspend fun querySingle(
+    fun querySingle(
         em: EntityManager,
         jpql: String,
         vararg params: Pair<String, Any?>
@@ -184,7 +184,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param params 命名参数
      * @return 查询结果列表
      */
-    suspend fun queryList(
+    fun queryList(
         em: EntityManager,
         jpql: String,
         vararg params: Pair<String, Any?>
@@ -204,7 +204,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param params 命名参数
      * @return 受影响的行数
      */
-    suspend fun executeUpdate(
+    fun executeUpdate(
         em: EntityManager,
         jpql: String,
         vararg params: Pair<String, Any?>
@@ -224,7 +224,7 @@ abstract class EntityDao<T : Any>(protected val entityClass: Class<T>) {
      * @param params 命名参数
      * @return 计数结果
      */
-    suspend fun count(
+    fun count(
         em: EntityManager,
         jpql: String,
         vararg params: Pair<String, Any?>

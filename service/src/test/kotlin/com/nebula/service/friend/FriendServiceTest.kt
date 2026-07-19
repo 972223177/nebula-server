@@ -11,6 +11,7 @@ import com.nebula.repository.entity.UserEntity
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import jakarta.persistence.EntityManager
 import kotlinx.coroutines.test.runTest
@@ -67,7 +68,7 @@ class FriendServiceTest {
         val req = FriendAcceptReq.newBuilder().setRequestId(99L).build()
         // 历史脏数据: 发起方与接收方相同
         val selfRequest = FriendRequestEntity(fromUid = 5, toUid = 5, status = 0)
-        coEvery { friendRequestDao.findById(em, 99L) } returns selfRequest
+        every { friendRequestDao.findById(em, 99L) } returns selfRequest
 
         val ex = assertFailsWith<FriendException> {
             friendService.acceptFriendRequest(req, 5L)
@@ -79,8 +80,8 @@ class FriendServiceTest {
     fun listFriendsShouldFilterSelfFriendship() = runTest {
         val selfFs = FriendshipEntity(userId = 5, friendId = 5).apply { deleted = 0 }
         val normalFs = FriendshipEntity(userId = 5, friendId = 8).apply { deleted = 0 }
-        coEvery { friendshipDao.findFriendsByUserId(em, 5L, any(), any()) } returns listOf(selfFs, normalFs)
-        coEvery { userDao.findAllById(em, listOf(8L)) } returns listOf(
+        every { friendshipDao.findFriendsByUserId(em, 5L, any(), any()) } returns listOf(selfFs, normalFs)
+        every { userDao.findAllById(em, listOf(8L)) } returns listOf(
             UserEntity(username = "u8", passwordHash = "h", nickname = "用户8").apply { id = 8L }
         )
 

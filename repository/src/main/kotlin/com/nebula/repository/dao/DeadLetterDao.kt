@@ -21,7 +21,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
      * @param limit 返回行数限制
      * @return 匹配的死信记录列表
      */
-    suspend fun findByStatusAndFailCountLessThan(
+    fun findByStatusAndFailCountLessThan(
         em: EntityManager,
         status: String,
         maxRetries: Int,
@@ -52,7 +52,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
      * @param limit 返回行数限制
      * @return 匹配的死信记录列表
      */
-    suspend fun findByStatusOrderByCreatedAtAsc(
+    fun findByStatusOrderByCreatedAtAsc(
         em: EntityManager,
         status: String,
         offset: Int,
@@ -77,7 +77,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
      * @param status 死信状态
      * @return 该状态的死信记录总数
      */
-    suspend fun countByStatus(
+    fun countByStatus(
         em: EntityManager,
         status: String
     ): Long = count(
@@ -99,7 +99,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
      * @param limit 返回行数限制
      * @return 匹配的死信记录列表
      */
-    suspend fun findByStatusAndFailCountGreaterThanEqual(
+    fun findByStatusAndFailCountGreaterThanEqual(
         em: EntityManager,
         status: String,
         minFailCount: Int,
@@ -132,7 +132,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
      * @param limit 返回行数限制
      * @return 死信记录列表
      */
-    suspend fun findAllOrderByCreatedAtAsc(
+    fun findAllOrderByCreatedAtAsc(
         em: EntityManager,
         offset: Int,
         limit: Int
@@ -154,7 +154,7 @@ class DeadLetterDao : EntityDao<DeadLetterEntity>(DeadLetterEntity::class.java) 
      * @param em 当前事务的 [EntityManager]
      * @return 死信记录总数
      */
-    suspend fun countAll(em: EntityManager): Long = count(
+    fun countAll(em: EntityManager): Long = count(
         em,
         "SELECT COUNT(d) FROM DeadLetterEntity d"
     )
