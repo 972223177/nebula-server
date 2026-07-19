@@ -175,16 +175,19 @@ class ChatServiceReconnectIntegrationTest {
      * - 若 invoke 返回 Unit（或其他非 COROUTINE_SUSPENDED 值），函数同步执行完毕，
      *   须手动 resume Continuation 以避免测试永久挂起
      */
-    private suspend fun callHandleLoginSuccess(observer: Any, response: Response, requestId: String = "test-request-id") {
-        val method = ChatService::class.java.getDeclaredMethod(
-            "handleLoginSuccess",
+    private suspend fun callHandleLoginSuccess(observer: Any, response: Response) {
+        // Phase 1 瘦身：登录绑定逻辑已下沉到 SessionBinder.bindOnLoginSuccess（原 ChatService.handleLoginSuccess 删除）
+        // Phase 2：bindOnLoginSuccess 不再需要 requestId（响应发送上移至 ChatService）
+        val sessionBinderField = ChatService::class.java.getDeclaredField("sessionBinder").apply { isAccessible = true }
+        val sessionBinder = sessionBinderField.get(chatService)
+        val method = SessionBinder::class.java.getDeclaredMethod(
+            "bindOnLoginSuccess",
             Response::class.java,
-            StreamObserver::class.java,
-            String::class.java,
+            ChatService.ChatStreamObserver::class.java,
             Continuation::class.java
         ).apply { isAccessible = true }
         suspendCoroutine<Any?> { cont ->
-            val result = method.invoke(chatService, response, observer, requestId, cont)
+            val result = method.invoke(sessionBinder, response, observer, cont)
             // 函数未挂起（同步完成），手动恢复 Continuation
             if (result != kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) {
                 cont.resume(result)
