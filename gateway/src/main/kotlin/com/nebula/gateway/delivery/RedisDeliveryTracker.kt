@@ -79,10 +79,9 @@ class RedisDeliveryTracker(
     }
 
     /**
-     * R-10 + M3: 批量设置同一消息多个接收者的投递状态。
+     * R-10: 批量设置同一消息多个接收者的投递状态。
      *
-     * 使用 async pipeline 替代两次独立命令，HMSET + EXPIRE 合并为一次网络往返，
-     * 减少 crash 窗口（hmset 后 expire 前崩溃导致无 TTL 的 Hash 永久残留）。
+     * 使用 coroutines API 替代 async pipeline，与类内其他方法保持一致。
      * 适用于群消息广播后批量标记 sent 状态。
      *
      * @param msgId 消息 ID
@@ -93,11 +92,8 @@ class RedisDeliveryTracker(
         if (uids.isEmpty()) return
         val k = key(msgId)
         val fields = uids.associate { field(it) to status.toString() }
-        // M3: async pipeline，hmset + expire 无间隔发送
-        connection.async().apply {
-            hmset(k, fields)
-            expire(k, TTL_SECONDS)
-        }
+        redis.hset(k, fields)
+        redis.expire(k, TTL_SECONDS)
     }
 
     /** 构造 Redis Hash key */
