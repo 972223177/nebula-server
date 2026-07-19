@@ -57,7 +57,7 @@ class FriendService(
      * 确保好友关系+私聊会话+双方成员存在（D-51）。
      *
      * 三种场景共用此逻辑：
-     * 1. 自动通过（APPROVAL_AUTO_ACCEPT）
+     * 1. 自动通过（FriendApprovalMode.AUTO_ACCEPT）
      * 2. 双向竞赛（mutual accept）
      * 3. 接受申请（acceptFriendRequest）
      *
