@@ -61,10 +61,9 @@ internal class SessionBinder(
      * @param observer 当前连接的 StreamObserver
      */
     suspend fun bindOnLoginSuccess(response: Response, observer: ConnectionContext) {
-        // 反序列化 LoginResp
         val loginResp = LoginResp.parseFrom(response.result.toByteArray())
+        logger.info { "登录成功，绑定 Session: userId=${loginResp.userId}, deviceType=${loginResp.deviceType.name}" }
 
-        // 从 LoginResp 中直接获取设备信息（Review 修复#3：无需重新解析 Request.params）
         val session = Session(
             userId = loginResp.userId,
             token = loginResp.token,
@@ -95,6 +94,8 @@ internal class SessionBinder(
 
         // CQ-13: 构建 Session，device_type 来自注册请求（兼容老客户端默认 MOBILE）
         val deviceTypeName = if (registerReq.deviceTypeValue != 0) registerReq.deviceType.name else "MOBILE"
+        logger.info { "注册成功，绑定 Session: uid=${registerResp.uid}, deviceType=$deviceTypeName" }
+
         val session = Session(
             userId = registerResp.uid,
             token = registerResp.token,
@@ -130,6 +131,9 @@ internal class SessionBinder(
     ) {
         // 注册 Session（同类型设备互踢，返回被驱逐的旧 token）
         val evictedToken = sessionRegistry.registerWithDeviceType(session)
+        if (evictedToken != null) {
+            logger.info { "同类型设备互踢: userId=${session.userId}, deviceType=${session.deviceType}, evictedToken=${evictedToken.take(8)}..." }
+        }
 
         // 更新 tokenToObserver：清理旧 token 映射，设置新映射
         if (evictedToken != null) {
