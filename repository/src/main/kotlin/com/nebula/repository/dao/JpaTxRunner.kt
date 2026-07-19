@@ -105,7 +105,7 @@ class JpaTxRunner(
         try {
             // D-04: 设置事务超时，必须在 begin() 前调用
             // EntityTransaction 接口无 setTimeout，需通过 Hibernate Transaction 设置
-            (tx as org.hibernate.Transaction).setTimeout(txTimeoutSeconds)
+            (tx as org.hibernate.Transaction).timeout = txTimeoutSeconds
             tx.begin()
             val result = block(em)
             tx.commit()

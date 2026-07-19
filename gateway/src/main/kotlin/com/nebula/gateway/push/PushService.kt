@@ -185,14 +185,14 @@ class PushService(
         val targets = members.filter { it.userId !in excludeUids }
 
         val envelope = buildPushEnvelope(eventType, payloadBytes)
-        for (member in targets) {
-            val observers = userStreamRegistry.getStreams(member.userId)
+        for ((userId) in targets) {
+            val observers = userStreamRegistry.getStreams(userId)
             for (observer in observers) {
                 try {
                     deliverEnvelope(observer, envelope)
                 } catch (e: Exception) {
-                    logger.error(e) { "Failed to push $eventType to userId=${member.userId}" }
-                    userStreamRegistry.removeStream(member.userId, observer)
+                    logger.error(e) { "Failed to push $eventType to userId=$userId" }
+                    userStreamRegistry.removeStream(userId, observer)
                 }
             }
         }

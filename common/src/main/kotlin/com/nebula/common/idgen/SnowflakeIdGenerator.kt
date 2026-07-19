@@ -4,6 +4,7 @@ import com.nebula.common.exception.ClockBackwardsException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 雪花算法（Snowflake）ID 生成器，用于在分布式环境下生成全局唯一的 64 位长整型 ID。
@@ -111,7 +112,7 @@ class SnowflakeIdGenerator(
     private suspend fun waitNextMillis(lastTimestamp: Long): Long {
         var timestamp = clock.millis()
         while (timestamp <= lastTimestamp) {
-            delay(1) // 挂起协程 ~1ms，不阻塞线程
+            delay(1.milliseconds) // 挂起协程 ~1ms，不阻塞线程
             timestamp = clock.millis()
         }
         return timestamp

@@ -3,6 +3,7 @@ package com.nebula.gateway.admin
 import com.nebula.service.admin.DeadLetterService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 死信补偿定时任务（D-76）。
@@ -50,7 +51,7 @@ class DeadLetterCompensator(
                 } catch (e: Exception) {
                     logger.error(e) { "死信补偿执行异常" }
                 }
-                delay(COMPENSATE_INTERVAL_MS)
+                delay(COMPENSATE_INTERVAL_MS.milliseconds)
             }
         }
     }

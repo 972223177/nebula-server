@@ -74,9 +74,9 @@ class ChatServer(private val config: ApplicationConfig) {
                 override fun isReady(): Boolean = call.isReady
                 override fun setMessageCompression(enabled: Boolean) = call.setMessageCompression(enabled)
                 override fun setCompression(compressor: String) = call.setCompression(compressor)
-                override fun getAttributes(): io.grpc.Attributes = call.attributes
+                override fun getAttributes(): Attributes = call.attributes
                 override fun getAuthority(): String? = call.authority
-                override fun getSecurityLevel(): io.grpc.SecurityLevel = call.securityLevel
+                override fun getSecurityLevel(): SecurityLevel = call.securityLevel
             }
             val listener = next.startCall(wrappedCall, headers)
 

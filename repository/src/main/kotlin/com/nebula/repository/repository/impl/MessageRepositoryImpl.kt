@@ -10,6 +10,7 @@ import jakarta.persistence.EntityManagerFactory
 import jakarta.persistence.PersistenceException
 import kotlinx.coroutines.*
 import org.hibernate.exception.ConstraintViolationException
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 消息写入路径实现（DB-03, D-11）。
@@ -196,7 +197,7 @@ class MessageRepositoryImpl(
     fun startFlushTimer() {
         scope.launch {
             while (!stopped) {
-                delay(500)
+                delay(500.milliseconds)
                 flushBatch()
             }
         }

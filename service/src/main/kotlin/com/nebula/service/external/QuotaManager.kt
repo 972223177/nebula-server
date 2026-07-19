@@ -11,6 +11,7 @@ import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.math.max
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 配额计数类别。
@@ -162,7 +163,7 @@ class QuotaManager(
             // 启动周期刷盘协程（异常退出最多丢失一个刷盘间隔内的用量）
             scope.launch {
                 while (true) {
-                    delay(config.flushIntervalSeconds * 1000L)
+                    delay((config.flushIntervalSeconds * 1000L).milliseconds)
                     persistFile()
                 }
             }
