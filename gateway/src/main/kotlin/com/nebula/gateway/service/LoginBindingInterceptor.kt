@@ -27,14 +27,14 @@ internal class LoginBindingInterceptor(
     ): Response {
         when (response.method) {
             "user/login" -> {
-                // D-05 拦截：登录成功，绑定 Session
                 if (response.code == BizCode.OK.code) {
+                    logger.info { "[stream] #${observer.connId} 拦截登录成功响应，开始 Session 绑定" }
                     sessionBinder.bindOnLoginSuccess(response, observer)
                 }
             }
             "user/register" -> {
-                // CQ-13 拦截：注册成功，直接完成 Session 绑定（注册即登录）
                 if (response.code == BizCode.OK.code) {
+                    logger.info { "[stream] #${observer.connId} 拦截注册成功响应，开始 Session 绑定（注册即登录）" }
                     sessionBinder.bindOnRegisterSuccess(response, observer, request)
                 }
             }
