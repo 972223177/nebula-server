@@ -20,11 +20,9 @@ data class SensitiveWordConfig(
 ) {
     companion object {
         /**
-         * 可选远程源默认值 — 留空，默认仅用内嵌词库。
+         * 可选远程源默认值 — 留空，仅用内嵌词库。
          *
-         * 注意：Gitee 等平台的 raw 文件对服务端 HTTP 客户端整体封锁（返回 Access denied），
-         * 故不预设任何远程默认值。如需远程覆盖，请在 config 中显式配置一个服务端可达的
-         * 一行一词 raw 文本地址，或通过环境变量 SENSITIVE_WORD_SOURCE_URL 注入。
+         * 曾配 Gitee raw，现已被封锁。如需远程覆盖，需先解冻并在 Module 中换绑 fetcher 实现。
          */
         const val DEFAULT_SOURCE_URL: String = ""
     }
