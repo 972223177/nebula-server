@@ -82,6 +82,9 @@ class SessionRegistry(
     /**
      * 写入 Session 到 L1 本地缓存，并更新 userIdIndex。
      *
+     * ⚠️ 细粒度 L1 操作方法——仅限于测试种子数据和特殊场景。
+     * 正常写入应使用 [register] / [registerWithDeviceType]，它保证 L1+L2 一致性。
+     *
      * @param session 待写入的 Session
      */
     fun addToLocalCache(session: Session) {
@@ -95,6 +98,9 @@ class SessionRegistry(
 
     /**
      * 从 L1 本地缓存移除 Session，并更新 userIdIndex。
+     *
+     * ⚠️ 细粒度 L1 操作方法——仅限于测试种子数据和特殊场景。
+     * 正常移除应使用 [unregister]，它保证 L1+L2+回调一致性。
      *
      * @param token 待移除的 Session Token
      * @return 被移除的 Session，若不存在则返回 null
@@ -126,8 +132,8 @@ class SessionRegistry(
     /**
      * 保存 Session 到 Redis（L2）。
      *
-     * 将 Session 序列化为 JSON 字符串后，通过 SessionStore.save() 写入。
-     * 使用 500ms 超时保护，超时仅日志记录不阻塞注册流程。
+     * ⚠️ 细粒度 L2 操作方法——仅限于特殊场景（如测试）。
+     * 正常写入应使用 [register] / [registerWithDeviceType]，它保证 L1+L2 一致性。
      *
      * @param session 待保存的 Session
      */
@@ -153,6 +159,9 @@ class SessionRegistry(
 
     /**
      * 从 Redis（L2）移除 Session。
+     *
+     * ⚠️ 细粒度 L2 操作方法——仅限于特殊场景（如测试）。
+     * 正常移除应使用 [unregister]，它保证 L1+L2+回调一致性。
      *
      * @param token 待移除的 Session Token
      */
@@ -269,7 +278,11 @@ class SessionRegistry(
     }
 
     /**
-     * 注册新 Session — 写入 L1 本地缓存 + L2 Redis。
+     * 注册新 Session — 写入 L1 + L2（组合方法的唯一入口）。
+     *
+     * 这是所有 Session 注册操作的标准路径，保证 L1 和 L2 始终一致。
+     * 新增任何需要写入 Session 的操作时，应先考虑委托给此方法，
+     * 而非分别调用 [addToLocalCache] + [saveToRedis]。
      *
      * @param session 待注册的 Session
      */
@@ -281,7 +294,10 @@ class SessionRegistry(
     }
 
     /**
-     * 注销 Session — 移除 L1 本地缓存 + L2 Redis + 触发所有驱逐回调。
+     * 注销 Session — 移除 L1 + L2 + 回调 + 设备类型清理（组合方法的唯一入口）。
+     *
+     * 这是所有 Session 注销操作的标准路径，保证 L1/L2/deviceTypeIndex 始终一致。
+     * 新增任何需要注销 Session 的操作时，应先考虑委托给此方法。
      *
      * @param token 待注销的 Session Token
      */
