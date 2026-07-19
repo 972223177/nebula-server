@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  * - pushMessageToMembers：向指定成员列表推送 ChatMessage Envelope（M29 复用批量查询结果）
  * - pushConversationEvent：向会话成员推送会话事件（群创建、成员变更等）
  * - pushReadReceipt：向发送者推送已读回执
- * - pushDeliveryAck：预留 — 向发送者推送交付回执（配套 DeliveryRecvHandler 待实现，暂未调用）
+ * - pushDeliveryAck：向发送者推送交付回执（由 DeliveryAckHandler 触发）
  * - pushEventToUser：向指定用户推送通用事件
  * - pushToAll：向所有在线客户端广播事件
  *
