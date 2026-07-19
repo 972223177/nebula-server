@@ -631,7 +631,7 @@ class ChatService(
 
     companion object {
         /** gRPC 完整服务名（proto package + service name） */
-        const val SERVICE_NAME = "nebula.chat.ChatService"
+        const val SERVICE_NAME = com.nebula.common.GrpcServiceNames.CHAT_SERVICE
 
         private val logger = KotlinLogging.logger {}
 
