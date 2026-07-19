@@ -38,7 +38,7 @@ class GetPrivacyHandlerTest {
 
     @Test
     fun getPrivacyShouldReturnHiddenStatus() = runTest {
-        coEvery { userPrivacyService.getPrivacySettings(any(), any<GetPrivacyReq>()) } returns
+        coEvery { userPrivacyService.getPrivacySettings(any<Long>()) } returns
                 GetPrivacyResp.newBuilder().setHideOnlineStatus(true).build()
 
         val req = GetPrivacyReq.getDefaultInstance()
@@ -51,7 +51,7 @@ class GetPrivacyHandlerTest {
 
     @Test
     fun getPrivacyShouldReturnVisibleStatus() = runTest {
-        coEvery { userPrivacyService.getPrivacySettings(any(), any<GetPrivacyReq>()) } returns
+        coEvery { userPrivacyService.getPrivacySettings(any<Long>()) } returns
                 GetPrivacyResp.newBuilder().setHideOnlineStatus(false).build()
 
         val req = GetPrivacyReq.getDefaultInstance()

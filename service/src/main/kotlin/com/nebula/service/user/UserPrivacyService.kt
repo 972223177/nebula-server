@@ -56,10 +56,9 @@ class UserPrivacyService(
      * 查询隐私设置（在线状态可见性 + 好友申请通过模式）。
      *
      * @param userId 当前用户 ID
-     * @param req 查询请求
      * @return 隐私设置响应
      */
-    suspend fun getPrivacySettings(userId: Long, req: GetPrivacyReq): GetPrivacyResp {
+    suspend fun getPrivacySettings(userId: Long): GetPrivacyResp {
         val hide = privacyRepository.getHideOnlineStatus(userId)
         val approvalMode = privacyRepository.getFriendApprovalMode(userId)
         return GetPrivacyResp.newBuilder()
@@ -71,9 +70,9 @@ class UserPrivacyService(
     /**
      * 查询在线状态可见性（已废弃，推荐使用 getPrivacySettings）。
      */
-    @Deprecated("Use getPrivacySettings instead", ReplaceWith("getPrivacySettings(userId, req)"))
+    @Deprecated("Use getPrivacySettings instead", ReplaceWith("getPrivacySettings(userId)"))
     suspend fun getHideOnlineStatus(userId: Long, req: GetPrivacyReq): GetPrivacyResp {
-        return getPrivacySettings(userId, req)
+        return getPrivacySettings(userId)
     }
 
     /**
