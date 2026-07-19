@@ -1,10 +1,10 @@
 package com.nebula.gateway.handler.message
 
-import com.nebula.chat.Response
 import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.chat.message.ReadReportReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
@@ -43,6 +43,7 @@ class ReadReportHandlerTest {
     private lateinit var messageService: MessageService
     private lateinit var conversationService: ConversationService
     private lateinit var pushService: PushService
+    private lateinit var deliveryTrackingService: DeliveryTrackingService
     private lateinit var connection: StatefulRedisConnection<String, String>
     private lateinit var redis: RedisCoroutinesCommands<String, String>
     private lateinit var handler: ReadReportHandler
@@ -54,6 +55,7 @@ class ReadReportHandlerTest {
         messageService = mockk()
         conversationService = mockk()
         pushService = mockk(relaxed = true)
+        deliveryTrackingService = mockk(relaxed = true)
         connection = mockk(relaxed = true)
         redis = mockk(relaxed = true)
 
@@ -61,6 +63,7 @@ class ReadReportHandlerTest {
             messageService,
             conversationService,
             pushService,
+            deliveryTrackingService,
             connection,
             redis
         )

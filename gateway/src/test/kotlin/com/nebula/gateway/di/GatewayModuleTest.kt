@@ -1,8 +1,8 @@
 package com.nebula.gateway.di
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
-import com.nebula.common.session.SessionStore
 import com.nebula.common.sensitiveword.SensitiveWordService
+import com.nebula.common.session.SessionStore
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.dispatcher.HandlerRegistry
@@ -10,57 +10,23 @@ import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.conversation.*
 import com.nebula.gateway.handler.delivery.DeliveryAckHandler
-import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
-import com.nebula.gateway.handler.conversation.ConversationLockManager
-import com.nebula.gateway.handler.conversation.CreateGroupHandler
-import com.nebula.gateway.handler.conversation.CreatePrivateConversationHandler
-import com.nebula.gateway.handler.conversation.DeleteConversationHandler
-import com.nebula.gateway.handler.conversation.EditGroupHandler
-import com.nebula.gateway.handler.conversation.GroupListHandler
-import com.nebula.gateway.handler.conversation.GroupMembersHandler
-import com.nebula.gateway.handler.conversation.InviteMemberHandler
-import com.nebula.gateway.handler.conversation.KickMemberHandler
-import com.nebula.gateway.handler.conversation.LeaveGroupHandler
-import com.nebula.gateway.handler.conversation.ListConversationsHandler
-import com.nebula.gateway.handler.friend.FriendAcceptHandler
-import com.nebula.gateway.handler.friend.FriendAddHandler
-import com.nebula.gateway.handler.friend.FriendBatchCheckRelationHandler
-import com.nebula.gateway.handler.friend.FriendCheckRelationHandler
-import com.nebula.gateway.handler.friend.FriendDeleteHandler
-import com.nebula.gateway.handler.friend.FriendHandlerCollector
-import com.nebula.gateway.handler.friend.FriendListHandler
-import com.nebula.gateway.handler.friend.FriendRejectHandler
-import com.nebula.gateway.handler.friend.FriendRequestsHandler
+import com.nebula.gateway.handler.external.ExternalHandlerCollector
+import com.nebula.gateway.handler.external.QueryWeatherHandler
+import com.nebula.gateway.handler.external.WebSearchHandler
+import com.nebula.gateway.handler.friend.*
 import com.nebula.gateway.handler.message.MessageSeqHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.handler.sensitiveword.SensitiveWordDownloadHandler
 import com.nebula.gateway.handler.sensitiveword.SensitiveWordHandlerCollector
 import com.nebula.gateway.handler.sensitiveword.SensitiveWordReloadHandler
-import com.nebula.gateway.handler.external.ExternalHandlerCollector
-import com.nebula.gateway.handler.external.QueryWeatherHandler
-import com.nebula.gateway.handler.external.WebSearchHandler
 import com.nebula.gateway.handler.system.SystemHandlerCollector
-import com.nebula.gateway.handler.user.BatchGetStatusHandler
-import com.nebula.gateway.handler.user.BatchGetUserHandler
-import com.nebula.gateway.handler.user.GetPrivacyHandler
-import com.nebula.gateway.handler.user.GetProfileHandler
-import com.nebula.gateway.handler.user.LoginHandler
-import com.nebula.gateway.handler.user.RegisterHandler
-import com.nebula.gateway.handler.user.SearchUserHandler
-import com.nebula.gateway.handler.user.SetPrivacyHandler
-import com.nebula.gateway.handler.user.UserHandlerCollector
+import com.nebula.gateway.handler.user.*
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.DeadLetterDao
-import com.nebula.repository.dao.FriendRequestDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.MessageDao
-import com.nebula.repository.dao.UserDao
+import com.nebula.repository.dao.*
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
@@ -87,7 +53,6 @@ import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import org.koin.test.get
 import kotlin.test.assertNotNull
 
 /**
@@ -180,7 +145,7 @@ class GatewayModuleTest {
         single { PushService(get(), get(), get()) }
         single { SendMessageHandler(sensitiveWordService, messageService, get(), get(), get(), get(named("serverScope"))) }
         single { PullMessagesHandler(messageService) }
-        single { ReadReportHandler(messageService, get(), get(), get()) }
+        single { ReadReportHandler(messageService, get(), get(), get(), get()) }
         single { DeliveryAckHandler(get(), get(), get()) }
 
         // Phase 10: Message Reliability

@@ -5,6 +5,7 @@ import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.chat.message.ReadReportReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.conversation.ConversationConstants
 import com.nebula.gateway.handler.requireSession
@@ -19,16 +20,18 @@ import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.currentCoroutineContext
 
 /**
- * 已读报告 Handler — method = "message/read"（D-23 ~ D-28）。
+ * 已读报告 Handler — method = "message/read"（D-23 ~ D-28, D-71）。
  *
  * 职责：
  * - 委托 MessageService 处理已读报告业务逻辑（成员验证、更新已读进度）
  * - 删除 Redis 未读计数键（gateway 层 Redis 操作）
+ * - 更新投递跟踪状态为 read（D-71 sent/delivered → read）
  * - 私聊场景推送已读回执给原发送者（gateway 层推送）
  *
  * @param messageService 消息业务服务
  * @param conversationService 会话业务服务（会话查询 + 成员查询）
  * @param pushService 推送服务
+ * @param deliveryTrackingService 投递三态跟踪服务（D-71）
  * @param connection Lettuce Redis 连接
  * @param redis Lettuce Redis 协程命令接口，默认由 connection.reactive() 构建（D-15-03：可注入用于测试）
  */
@@ -37,6 +40,7 @@ class ReadReportHandler(
     private val messageService: MessageService,
     private val conversationService: ConversationService,
     private val pushService: PushService,
+    private val deliveryTrackingService: DeliveryTrackingService,
     private val connection: StatefulRedisConnection<String, String>,
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 ) : Handler<ReadReportReq, Response> {
@@ -53,6 +57,9 @@ class ReadReportHandler(
 
         // 委托 MessageService 处理业务逻辑
         messageService.readReport(req, session.userId)
+
+        // D-71: 更新投递跟踪状态为 read（sent/delivered → read）
+        deliveryTrackingService.markRead(req.lastReadMsgId, session.userId)
 
         // D-28: 删除 Redis 未读计数键（gateway 层 Redis 操作）
         try {
