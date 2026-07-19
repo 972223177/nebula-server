@@ -74,6 +74,7 @@ class PushService(
      * @param msgId 消息 ID
      * @param convId 会话 ID
      */
+    @Deprecated("脚手架 — 等 10-04 DeliveryRecvHandler 实现后取消此标记", level = DeprecationLevel.WARNING)
     fun pushDeliveryAck(senderUid: Long, msgId: Long, convId: String) {
         val payload = DeliveryAckPayload.newBuilder()
             .setMsgId(msgId).setConversationId(convId).build()

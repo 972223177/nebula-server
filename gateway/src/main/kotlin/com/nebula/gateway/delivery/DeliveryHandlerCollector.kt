@@ -13,6 +13,7 @@ import com.nebula.gateway.handler.HandlerCollector
  * - 实现 [HandlerCollector] 接口，通过 Koin [getAll] 自动发现
  * - 注册为 `single<HandlerCollector> { DeliveryHandlerCollector() }`
  */
+@Deprecated("脚手架 — 10-04 实现 DeliveryRecvHandler 后取消此标记", level = DeprecationLevel.WARNING)
 class DeliveryHandlerCollector : HandlerCollector {
 
     /**
