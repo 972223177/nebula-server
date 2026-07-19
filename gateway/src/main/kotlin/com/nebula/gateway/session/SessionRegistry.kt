@@ -82,7 +82,8 @@ class SessionRegistry(
     /**
      * 写入 Session 到 L1 本地缓存，并更新 userIdIndex。
      *
-     * ⚠️ 此方法目前仅测试直接调用。正常写入应使用 [register] / [registerWithDeviceType]，
+     * [register] / [validate] 内部调用此方法写入 L1。
+     * 外部调用方（含测试）应优先使用 [register] / [registerWithDeviceType]，
      * 它们保证 L1+L2 一致性。
      *
      * @param session 待写入的 Session
