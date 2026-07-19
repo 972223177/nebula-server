@@ -20,11 +20,15 @@ import kotlinx.coroutines.withContext
  * 消息推送服务（D-11, D-12, D-15）。
  *
  * 职责：
- * - pushMessage：向会话成员推送 ChatMessage Envelope（D-09 排除发送者）
- * - pushReadReceipt：向发送者推送 ReadReceiptPayload Envelope
+ * - pushMessageToMembers：向指定成员列表推送 ChatMessage Envelope（M29 复用批量查询结果）
+ * - pushConversationEvent：向会话成员推送会话事件（群创建、成员变更等）
+ * - pushReadReceipt：向发送者推送已读回执
+ * - pushDeliveryAck：向发送者推送交付回执
+ * - pushEventToUser：向指定用户推送通用事件
+ * - pushToAll：向所有在线客户端广播事件
  *
  * 推送策略：
- * - 通过 UserStreamRegistry 查找在线设备，对每个设备通过 deliver() 串行化投递（D-02 多设备, G-03 修复）
+ * - 通过 [UserStreamRegistry] 查找在线设备，通过 [DeliverableStreamObserver.deliver] 串行化投递（D-02 多设备, G-03）
  * - 单个 observer 推送异常时 try-catch 保护，不影响其他 observer（D-05 容错）
  * - 不自行判断推送权限，由调用方（SendMessageHandler/ReadReportHandler）保证仅推送给验证过的成员
  *
@@ -89,7 +93,11 @@ class PushService(
     }
 
     /**
-     * 通过 Mutex 串行化投递 Envelope（G-03/C-01 修复）。
+     * 安全投递 Envelope — 通过 safe-cast 委托给 [DeliverableStreamObserver.deliver]（内含 Mutex 串行化）。
+     *
+     * 原始 observer 为 gRPC 生成的 StreamObserver，ChatStreamObserver 实现了 DeliverableStreamObserver，
+     * 其 deliver() 内部通过 sendMutex.withLock 保证 onNext 串行化（G-03）。
+     * 若 observer 不是 DeliverableStreamObserver（极端异常），直接裸调 onNext。
      */
     private fun deliverEnvelope(observer: StreamObserver<Envelope>, envelope: Envelope) {
         (observer as? DeliverableStreamObserver)?.deliver(envelope) ?: observer.onNext(envelope)
@@ -123,9 +131,11 @@ class PushService(
     /**
      * 向指定成员列表推送 ChatMessage（M29: 复用批量查询结果，避免二次 DB 查询）。
      *
-     * 与 [pushMessage] 的区别：本方法接受预查询的成员 userId 列表，而非通过 conversationService 再次查询。
+     * 调用方（如 SendMessageHandler 批量发送场景）已提前查询成员列表，
+     * 本方法接收预查询的 targetUids，不再经 conversationService 重复查询。
+     * 推送成功后调用 [DeliveryTrackingService.batchMarkSent] 记录投递状态。
      *
-     * @param targetUids 目标用户 ID 列表（已过滤 excludeUid）
+     * @param targetUids 目标用户 ID 列表（已过滤发送者自身）
      * @param chatMessage 待推送的 ChatMessage
      */
     suspend fun pushMessageToMembers(targetUids: List<Long>, chatMessage: ChatMessage) {
@@ -187,6 +197,16 @@ class PushService(
         }
     }
 
+    /**
+     * 向指定用户的所有在线设备推送事件（D-01）。
+     *
+     * 通过 [UserStreamRegistry.getStreams] 获取目标用户的所有在线设备，
+     * 逐流投递，单流异常时 try-catch 保护。
+     *
+     * @param targetUid 目标用户 ID
+     * @param eventType 推送事件类型
+     * @param payloadBytes 序列化后的 Payload 字节
+     */
     fun pushEventToUser(
         targetUid: Long,
         eventType: PushEventType,
