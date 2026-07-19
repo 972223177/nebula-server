@@ -26,8 +26,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.BindableService
 import io.grpc.MethodDescriptor
 import io.grpc.ServerServiceDefinition
+import io.grpc.Status
+import io.grpc.StatusException
 import io.grpc.stub.ServerCalls
 import io.grpc.stub.StreamObserver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -316,7 +319,12 @@ class ChatService(
         }
 
         override fun onError(t: Throwable) {
-            logger.error(t) { "[stream] #$connId onError userId=$userId token=${token?.take(8)}..." }
+            if (isExpectedDisconnect(t)) {
+                // 客户端取消/断开属连接生命周期的正常部分，仅打印异常名与 message，不打印 stacktrace
+                logger.info { "[stream] #$connId onError 连接被客户端取消/断开（${t::class.simpleName}: ${t.message}）userId=$userId token=${token?.take(8)}..." }
+            } else {
+                logger.error(t) { "[stream] #$connId onError userId=$userId token=${token?.take(8)}..." }
+            }
             try {
                 cleanupPending()
                 cleanupConnection()
@@ -328,7 +336,11 @@ class ChatService(
                 try {
                     responseObserver.onError(t)
                 } catch (e: Exception) {
-                    logger.warn(e) { "[stream] #$connId responseObserver.onError 失败（连接可能已关闭）" }
+                    if (isExpectedDisconnect(e)) {
+                        logger.info { "[stream] #$connId responseObserver.onError 跳过（连接已关闭，${e::class.simpleName}: ${e.message}）" }
+                    } else {
+                        logger.warn(e) { "[stream] #$connId responseObserver.onError 失败（连接可能已关闭）" }
+                    }
                 }
             }
         }
@@ -883,6 +895,23 @@ class ChatService(
 
         /** pendingBuffer 中单条消息的最大投递重试次数，超过后写入死信表（D-75） */
         const val MAX_PENDING_RETRIES = 10
+
+        /**
+         * 判断是否为"可接受的连接中断异常"——由客户端主动取消或连接正常断开引发，
+         * 属连接生命周期的正常部分，不应打印完整 stacktrace（仅打印异常名与 message 即可）。
+         *
+         * 覆盖两类：
+         * - gRPC 取消：[StatusException] / [io.grpc.StatusRuntimeException]，且 [Status.getCode] 为 [Status.Code.CANCELLED]
+         * - 协程取消：[CancellationException]（连接协程被取消时沿调用链传播）
+         *
+         * @param cause 待判定的异常
+         * @return true 表示属可接受的连接中断，可降级日志
+         */
+        private fun isExpectedDisconnect(cause: Throwable): Boolean {
+            val status = (cause as? StatusException)?.status
+            if (status?.code == Status.Code.CANCELLED) return true
+            return cause is CancellationException
+        }
     }
 
     /**
