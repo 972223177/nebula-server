@@ -1,8 +1,10 @@
 package com.nebula.gateway.handler.chat
 
+import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.delivery.DeliveryAckHandler
 import com.nebula.gateway.handler.message.MessageSeqHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
@@ -15,7 +17,8 @@ class ChatHandlerCollector(
     private val sendMessageHandler: SendMessageHandler,
     private val pullMessagesHandler: PullMessagesHandler,
     private val readReportHandler: ReadReportHandler,
-    private val messageSeqHandler: MessageSeqHandler
+    private val messageSeqHandler: MessageSeqHandler,
+    private val deliveryAckHandler: DeliveryAckHandler
 ) : HandlerCollector {
 
     override fun registerAll(registry: HandlerRegistry) {
@@ -23,5 +26,6 @@ class ChatHandlerCollector(
         registry.register(pullMessagesHandler)
         registry.register(readReportHandler)
         registry.register(messageSeqHandler)
+        registry.register(deliveryAckHandler)
     }
 }

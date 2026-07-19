@@ -6,22 +6,21 @@ import com.nebula.gateway.handler.HandlerCollector
 /**
  * Delivery（消息投递）相关 Handler 收集器。
  *
- * 当前暂为占位实现，registerAll() 为空。
- * 10-04 将在此注册 DeliveryRecvHandler（处理客户端 DeliveryAck 上报请求）。
+ * 当前为预留扩展点，registerAll() 为空。
+ * 后续 Phase 可在此注册新的交付相关 Handler。
  *
  * 实现说明：
  * - 实现 [HandlerCollector] 接口，通过 Koin [getAll] 自动发现
  * - 注册为 `single<HandlerCollector> { DeliveryHandlerCollector() }`
  */
-@Deprecated("脚手架 — 10-04 实现 DeliveryRecvHandler 后取消此标记", level = DeprecationLevel.WARNING)
 class DeliveryHandlerCollector : HandlerCollector {
 
     /**
-     * 暂不注册任何 Handler，保留给 10-04 扩展。
+     * 当前无专属于 delivery 空间的 Handler（DeliveryAckHandler 注册在 chatHandlerCollector 中）。
      *
      * @param registry HandlerRegistry 实例
      */
     override fun registerAll(registry: HandlerRegistry) {
-        // 空实现，10-04 将在此注册 DeliveryRecvHandler
+        // 预留扩展点
     }
 }

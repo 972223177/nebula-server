@@ -3,6 +3,7 @@ package com.nebula.gateway.di
 import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.HandlerCollector
+import com.nebula.gateway.handler.delivery.DeliveryAckHandler
 import com.nebula.gateway.handler.message.MessageSeqHandler
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
@@ -25,7 +26,8 @@ val chatHandlerModule = module {
     single { PullMessagesHandler(get()) }
     single { ReadReportHandler(get(), get(), get(), get()) }
     single { MessageSeqHandler(get()) }
+    single { DeliveryAckHandler(get(), get(), get()) }
 
     // HandlerCollector 注册
-    single<HandlerCollector>(named("chat")) { ChatHandlerCollector(get(), get(), get(), get()) }
+    single<HandlerCollector>(named("chat")) { ChatHandlerCollector(get(), get(), get(), get(), get()) }
 }

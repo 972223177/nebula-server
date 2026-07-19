@@ -10,6 +10,7 @@ import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.chat.ChatHandlerCollector
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
+import com.nebula.gateway.handler.delivery.DeliveryAckHandler
 import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.conversation.CreateGroupHandler
@@ -180,6 +181,7 @@ class GatewayModuleTest {
         single { SendMessageHandler(sensitiveWordService, messageService, get(), get(), get(), get(named("serverScope"))) }
         single { PullMessagesHandler(messageService) }
         single { ReadReportHandler(messageService, get(), get(), get()) }
+        single { DeliveryAckHandler(get(), get(), get()) }
 
         // Phase 10: Message Reliability
         single { com.nebula.service.sequence.SeqService(get()) }
@@ -275,7 +277,8 @@ class GatewayModuleTest {
             GlobalContext.get().get<SendMessageHandler>(),
             GlobalContext.get().get<PullMessagesHandler>(),
             GlobalContext.get().get<ReadReportHandler>(),
-            GlobalContext.get().get<com.nebula.gateway.handler.message.MessageSeqHandler>()
+            GlobalContext.get().get<com.nebula.gateway.handler.message.MessageSeqHandler>(),
+            GlobalContext.get().get<DeliveryAckHandler>()
         )
         chatCollector.registerAll(registry)
 
@@ -344,7 +347,7 @@ class GatewayModuleTest {
     // ===================== 领域专项验证测试 =====================
 
     /**
-     * 验证 Chat 领域 Handler Collector 注册全部 4 个 method 名称。
+     * 验证 Chat 领域 Handler Collector 注册全部 5 个 method 名称。
      */
     @Test
     fun chatHandlersRegisteredCorrectly() = runTest {
@@ -356,13 +359,15 @@ class GatewayModuleTest {
             GlobalContext.get().get<SendMessageHandler>(),
             GlobalContext.get().get<PullMessagesHandler>(),
             GlobalContext.get().get<ReadReportHandler>(),
-            GlobalContext.get().get<MessageSeqHandler>()
+            GlobalContext.get().get<MessageSeqHandler>(),
+            GlobalContext.get().get<DeliveryAckHandler>()
         )
         collector.registerAll(registry)
         assertNotNull(registry.get("chat/send"))
         assertNotNull(registry.get("message/pull"))
         assertNotNull(registry.get("message/read"))
         assertNotNull(registry.get("message/seq"))
+        assertNotNull(registry.get("message/delivery_ack"))
     }
 
     /**
