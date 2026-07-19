@@ -85,10 +85,16 @@ class MessageService(
 
         // Step 1: 参数校验
         if (req.content.isBlank()) {
+            logger.warn { "sendMessage 拒绝：消息内容为空 senderUid=$senderUid convId=$conversationId" }
             throw ChatException(BizCode.INVALID_PARAM, "消息内容不能为空")
         }
         if (req.clientMessageId.isBlank()) {
+            logger.warn { "sendMessage 拒绝：clientMessageId 为空 senderUid=$senderUid convId=$conversationId" }
             throw ChatException(BizCode.INVALID_PARAM, "client_message_id 不能为空")
+        }
+
+        logger.debug {
+            "sendMessage 开始 senderUid=$senderUid convId=$conversationId clientMsgId=${req.clientMessageId} contentLen=${req.content.length}"
         }
 
         // Step 2-3: 前置只读校验成员身份 + 私聊好友关系（enqueue 前护栏，避免非法消息入 Stream）
@@ -100,15 +106,20 @@ class MessageService(
         txRunner.execute { em ->
             val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, senderUid)
             if (member == null || !member.isActive) {
+                logger.warn { "sendMessage 拒绝：用户不是会话成员 senderUid=$senderUid convId=$conversationId" }
                 throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
             }
 
             val conv = conversationDao.findById(em, conversationId)
-                ?: throw ChatException(BizCode.CONV_NOT_FOUND)
+                ?: run {
+                    logger.warn { "sendMessage 拒绝：会话不存在 senderUid=$senderUid convId=$conversationId" }
+                    throw ChatException(BizCode.CONV_NOT_FOUND)
+                }
 
             if (conv.type == CONV_TYPE_PRIVATE) {
                 val friendCheck = checkFriendshipForPrivateConv(em, conversationId, senderUid)
                 if (!friendCheck) {
+                    logger.warn { "sendMessage 拒绝：私聊无好友关系 senderUid=$senderUid convId=$conversationId" }
                     throw ChatException(BizCode.NOT_FRIEND, "私聊消息需要好友关系")
                 }
             }
@@ -164,6 +175,8 @@ class MessageService(
         // 重新加载 conversation 用于返回（因为上面 conv 已在事务内修改/关闭）
         val conversation = txRunner.execute { em -> conversationDao.findById(em, conversationId)!! }
 
+        logger.info { "sendMessage 成功 msgId=$msgId senderUid=$senderUid convId=$conversationId seq=$seq" }
+
         return SendMessageResult(
             msgId = msgId,
             serverTs = now,
@@ -187,10 +200,13 @@ class MessageService(
         val limit = req.limit.coerceIn(1, 100)
         val cursor = if (req.cursor == 0L) Long.MAX_VALUE else req.cursor
 
+        logger.debug { "pullMessages userId=$userId convId=$conversationId cursor=$cursor limit=$limit" }
+
         val messages = txRunner.execute { em ->
             // 验证成员身份
             val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
             if (member == null || !member.isActive) {
+                logger.warn { "pullMessages 拒绝：用户不是会话成员 userId=$userId convId=$conversationId" }
                 throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
             }
 
@@ -199,6 +215,8 @@ class MessageService(
 
         val hasMore = messages.size > limit
         val result = if (hasMore) messages.dropLast(1) else messages
+
+        logger.debug { "pullMessages 完成 userId=$userId convId=$conversationId returned=${result.size} hasMore=$hasMore" }
 
         val builder = PullMessagesResp.newBuilder()
         result.forEach { entity ->
@@ -218,10 +236,13 @@ class MessageService(
         val conversationId = req.conversationId
         val lastReadMsgId = req.lastReadMsgId
 
+        logger.debug { "readReport userId=$userId convId=$conversationId lastReadMsgId=$lastReadMsgId" }
+
         // 验证成员身份 + 更新已读回执
         txRunner.execute { em ->
             val member = conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
             if (member == null || !member.isActive) {
+                logger.warn { "readReport 拒绝：用户不是会话成员 userId=$userId convId=$conversationId" }
                 throw ChatException(BizCode.NOT_MEMBER, "用户不是会话成员")
             }
 
@@ -255,7 +276,12 @@ class MessageService(
      * @return true 表示新消息，false 表示重复
      */
     suspend fun checkAndSetDedup(clientMessageId: String, senderUid: Long): Boolean {
-        return messageQueueRepository.checkAndSetDedup(clientMessageId, senderUid)
+        val isNew = messageQueueRepository.checkAndSetDedup(clientMessageId, senderUid)
+        if (!isNew) {
+            // 重复消息是客户端重试的网络抖动场景，业务上正常；但频次异常高（如刷屏/重放）需关注
+            logger.warn { "检测到重复消息（clientMsgId 已存在）senderUid=$senderUid clientMsgId=$clientMessageId" }
+        }
+        return isNew
     }
 
     /**
@@ -277,7 +303,7 @@ class MessageService(
      * @param senderUid 发送者 UID
      * @return true=是好友，false=非好友
      */
-    private suspend fun checkFriendshipForPrivateConv(
+    private fun checkFriendshipForPrivateConv(
         em: jakarta.persistence.EntityManager,
         conversationId: String,
         senderUid: Long

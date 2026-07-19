@@ -1,7 +1,5 @@
 package com.nebula.gateway.delivery
 
-import io.github.oshai.kotlinlogging.KotlinLogging
-
 /**
  * 消息投递三态跟踪服务（D-70, D-71, D-72）。
  *
@@ -23,8 +21,6 @@ class DeliveryTrackingService(
     private val tracker: RedisDeliveryTracker
 ) {
     companion object {
-        private val logger = KotlinLogging.logger {}
-
         /** 投递状态常量：服务端已投递 */
         private const val STATUS_SENT = 0
         /** 投递状态常量：客户端已确认送达 */

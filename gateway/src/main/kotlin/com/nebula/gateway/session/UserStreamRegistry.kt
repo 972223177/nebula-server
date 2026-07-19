@@ -1,7 +1,6 @@
 package com.nebula.gateway.session
 
 import com.nebula.chat.Envelope
-import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.stub.StreamObserver
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -88,9 +87,5 @@ class UserStreamRegistry {
      */
     fun getAllStreams(): List<StreamObserver<Envelope>> {
         return userStreams.values.flatMap { it.toList() }
-    }
-
-    companion object {
-        private val logger = KotlinLogging.logger {}
     }
 }

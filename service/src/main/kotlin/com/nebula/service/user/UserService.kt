@@ -103,8 +103,13 @@ class UserService(
                 userDao.insert(em, user)
             }
             // 在事务成功提交后校验，requireNotNull 在事务内已完成（id 早于事务生成）
-            requireNotNull(user.id) { "用户ID不能为null" }
+            val newUid = requireNotNull(user.id) { "用户ID不能为null" }
+            logger.info { "用户注册成功 uid=$newUid username=$username" }
+            newUid
         } catch (e: UserException) {
+            if (e.bizCode == BizCode.USERNAME_EXISTS) {
+                logger.warn { "用户注册失败：用户名已存在 username=$username" }
+            }
             throw e
         } catch (e: PersistenceException) {
             // 检测唯一约束冲突（多种实现，Hibernate 抛 ConstraintViolationException 被 JPA 包装为 PersistenceException）
@@ -136,12 +141,17 @@ class UserService(
         val password = req.password ?: throw UserException(BizCode.INVALID_PARAM, "密码不能为空")
 
         val user = txRunner.execute { em -> userDao.findByUsername(em, username) }
-            ?: throw UserException(BizCode.USER_NOT_FOUND)
+            ?: run {
+                logger.warn { "登录失败：用户不存在 username=$username" }
+                throw UserException(BizCode.USER_NOT_FOUND)
+            }
 
         if (!verifyPassword(password, user.passwordHash)) {
+            logger.warn { "登录失败：密码错误 uid=${user.id} username=$username" }
             throw UserException(BizCode.AUTH_FAILED)
         }
 
+        logger.info { "用户登录成功 uid=${user.id} username=$username" }
         return requireNotNull(user.id) { "用户ID不能为null" }
     }
 

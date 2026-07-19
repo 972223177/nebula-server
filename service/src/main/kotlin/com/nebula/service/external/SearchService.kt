@@ -85,10 +85,29 @@ class SearchService(
         val q = query.trim()
         if (q.isEmpty()) return SearchResponse.newBuilder().setFormatted("（搜索词为空）").build()
         if (config.serper.apiKey.isBlank()) {
+            log.warn { "Serper 搜索被拒绝：未配置 API Key（type=${type.apiValue}）" }
             throw ExternalServiceExceptions.serviceUnavailable("未配置 SERPER_API_KEY，搜索功能不可用")
         }
         val n = maxResults.coerceIn(1, 10)
-        val result = callSerper(q, type.apiValue, n)
+        log.debug { "Serper 搜索请求 type=${type.apiValue} queryLen=${q.length} num=$n" }
+        val result = try {
+            callSerper(q, type.apiValue, n)
+        } catch (e: BizException) {
+            if (e.bizCode == BizCode.RATE_LIMITED) {
+                log.warn { "Serper 上游限流（429），type=${type.apiValue} queryLen=${q.length}" }
+            } else {
+                log.error(e) { "Serper 搜索业务异常 type=${type.apiValue} queryLen=${q.length} code=${e.bizCode.code}" }
+            }
+            throw e
+        } catch (e: Exception) {
+            log.error(e) { "Serper 搜索未预期异常 type=${type.apiValue} queryLen=${q.length}" }
+            throw e
+        }
+        if (result.items.isEmpty()) {
+            log.info { "Serper 搜索无结果 type=${type.apiValue} queryLen=${q.length}" }
+        } else {
+            log.debug { "Serper 搜索成功 type=${type.apiValue} returned=${result.items.size}" }
+        }
         val builder = SearchResponse.newBuilder().setFormatted(result.formatted)
         result.items.forEach { item ->
             builder.addItems(
