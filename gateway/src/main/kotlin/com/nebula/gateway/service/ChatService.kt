@@ -33,7 +33,7 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
  * gRPC 双向流聊天服务 — 实现 Envelope 协议的分发、登录响应拦截和 Session 绑定（D-05）。
  *
  * 职责：
- * - 实现 BindableService，注册 name="nebula.chat.ChatService" 的 BIDI_STREAMING gRPC 服务
+ * - 实现 BindableService，注册 name=[SERVICE_NAME] 的 BIDI_STREAMING gRPC 服务
  * - 接收 Envelope 消息，根据 Direction 分发给 Dispatcher 或处理 PING 心跳
  * - 拦截 user/login 的 200 响应，从 LoginResp 中读取设备信息并注册 Session（D-05 绑定流程）
  * - 维护 tokenToObserver 映射，支持同类型设备互踢时的 LOGOUT 推送（D-05 eviction callback）
@@ -116,12 +116,12 @@ class ChatService(
             }
         val chatMethod = MethodDescriptor.newBuilder(envelopeMarshaller, envelopeMarshaller)
             .setFullMethodName(
-                MethodDescriptor.generateFullMethodName("nebula.chat.ChatService", "chat")
+                MethodDescriptor.generateFullMethodName(SERVICE_NAME, "chat")
             )
             .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
             .build()
 
-        return ServerServiceDefinition.builder("nebula.chat.ChatService")
+        return ServerServiceDefinition.builder(SERVICE_NAME)
             .addMethod(
                 chatMethod,
                 ServerCalls.asyncBidiStreamingCall { responseObserver ->
@@ -630,6 +630,9 @@ class ChatService(
     }
 
     companion object {
+        /** gRPC 完整服务名（proto package + service name） */
+        const val SERVICE_NAME = "nebula.chat.ChatService"
+
         private val logger = KotlinLogging.logger {}
 
         /** pendingBuffer 中单条消息的最大投递重试次数，超过后写入死信表（D-75） */
