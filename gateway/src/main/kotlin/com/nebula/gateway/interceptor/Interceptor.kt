@@ -2,6 +2,7 @@ package com.nebula.gateway.interceptor
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
+import com.nebula.gateway.dispatcher.InterceptorChain
 
 /**
  * 拦截器接口 — suspend 版本的责任链模式（GoF Chain of Responsibility）。
@@ -26,10 +27,19 @@ interface Interceptor {
     suspend fun intercept(request: Request, chain: Chain): Response
 
     /**
-     * 责任链节接口。
+     * 责任链节接口 — 代表单链表中的一个节点。
      *
-     * Dispatcher 通过 `interceptors.foldRight(handlerChain)` 构建链表结构。
-     * 非尾结点使用 [InterceptorChain] 实现，尾结点为匿名内部类直接调用 Handler。
+     * 由 [com.nebula.gateway.dispatcher.Dispatcher] 通过
+     * `interceptors.foldRight(handlerChain)` 构建为单链表：
+     *
+     *   pipeline ──→ Auth ──→ Log ──→ RateLimit ──→ Exception ──→ handlerChain
+     *
+     * - **非尾结点**：由 [com.nebula.gateway.dispatcher.InterceptorChain] 实现，
+     *   持有 `(interceptor, next)`，`proceed` 委托给拦截器的 `intercept`。
+     * - **尾结点**（handlerChain）：Dispatcher 中匿名 Chain 实现，`proceed` 最终调用 Handler。
+     *
+     * 调用 proceed 相当于"沿着 next 指针向链表内层前进"。
+     * 拦截器在 proceed 前执行前置操作（鉴权、限流），返回后执行后置操作（日志）。
      */
     interface Chain {
 

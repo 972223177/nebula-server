@@ -10,6 +10,7 @@ import com.google.protobuf.ByteString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 请求分发器 — Pipeline 编排入口（D-14, D-15）。
@@ -92,20 +93,34 @@ class Dispatcher(
         }
 
         // Step 4: 折叠拦截器链；若 interceptors 为空则直接调用 handlerChain
-        val pipeline: Interceptor.Chain = if (interceptors.isEmpty()) {
+        //
+        // foldRight 从右往左累积，构建一个单链表（而非 List）。推演如下：
+        //   interceptors = [Auth, Log, RateLimit, Exception]
+        //   start: acc = handlerChain（尾结点，直接调 Handler）
+        //   ① Exception  → InterceptorChain(Exception, handlerChain)
+        //   ② RateLimit  → InterceptorChain(RateLimit, ①)
+        //   ③ Log        → InterceptorChain(Log, ②)
+        //   ④ Auth       → InterceptorChain(Auth, ③)  ← pipeline（链表头）
+        //
+        // 内存结构（单链表）：
+        //   pipeline ──→ Auth ──→ Log ──→ RateLimit ──→ Exception ──→ handlerChain
+        //
+        // 调用时从表头开始，proceed → intercept → chain.proceed → ... → Handler。
+        // 如果换用 fold（左折叠），执行顺序会被反转为 Exception 最先执行——鉴权失效。
+        val pipeline = if (interceptors.isEmpty()) {
             handlerChain
         } else {
-            interceptors.foldRight<Interceptor, Interceptor.Chain>(handlerChain) { interceptor, chain ->
+            interceptors.foldRight(handlerChain) { interceptor: Interceptor, chain: Interceptor.Chain ->
                 InterceptorChain(interceptor, chain)
             }
         }
 
         // G-04: 超时保护，防止慢 Handler 无限占用协程和 DB 连接
         return try {
-            withTimeout(dispatchTimeoutMs) {
+            withTimeout(dispatchTimeoutMs.milliseconds) {
                 pipeline.proceed(envelopeRequest)
             }
-        } catch (e: TimeoutCancellationException) {
+        } catch (_: TimeoutCancellationException) {
             logger.warn { "请求处理超时 method=$method timeout=${dispatchTimeoutMs}ms" }
             Response.newBuilder()
                 .setCode(BizCode.INTERNAL_ERROR.code)
