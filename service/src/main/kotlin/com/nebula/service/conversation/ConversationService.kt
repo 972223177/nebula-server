@@ -260,7 +260,8 @@ class ConversationService(
         val now = LocalDateTime.now()
 
         return txRunner.execute { em ->
-            val conv = conversationDao.findById(em, convId)
+            // 守卫：确认会话存在，仅校验不取字段
+            conversationDao.findById(em, convId)
                 ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
             // 验证操作者是群主
@@ -317,7 +318,8 @@ class ConversationService(
         val convId = req.conversationId
 
         txRunner.execute { em ->
-            val conv = conversationDao.findById(em, convId)
+            // 守卫：确认会话存在，仅校验不取字段
+            conversationDao.findById(em, convId)
                 ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
             val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, userId)
@@ -384,7 +386,8 @@ class ConversationService(
         val targetUid = req.uid
 
         return txRunner.execute { em ->
-            val conv = conversationDao.findById(em, convId)
+            // 守卫：确认会话存在，仅校验不取字段
+            conversationDao.findById(em, convId)
                 ?: throw ConversationException(BizCode.CONV_NOT_FOUND)
 
             // 验证操作者是群主
