@@ -30,7 +30,7 @@ import kotlinx.coroutines.withContext
  * 推送策略：
  * - 通过 [UserStreamRegistry] 查找在线设备，通过 [DeliverableStreamObserver.deliver] 串行化投递（D-02 多设备, G-03）
  * - 单个 observer 推送异常时 try-catch 保护，不影响其他 observer（D-05 容错）
- * - 不自行判断推送权限，由调用方（SendMessageHandler/ReadReportHandler）保证仅推送给验证过的成员
+ * - 不自行判断推送权限，由调用方（SendMessageHandler/ReadReportHandler/DeliveryAckHandler）保证仅推送给验证过的成员
  *
  * @param userStreamRegistry 用户 StreamObserver 注册中心
  * @param conversationService 会话成员查询服务
@@ -64,11 +64,11 @@ class PushService(
     }
 
     /**
-     * 预留方法 — 向发送者推送交付回执（DeliveryAck）（D-71）。
+     * 向发送者推送交付回执（DeliveryAck）（D-71）。
      *
-     * ⚠️ 当前无人调用。配套的 DeliveryRecvHandler（处理客户端 DeliveryAck 上报请求）
-     * 尚未实现（见 [com.nebula.gateway.delivery.DeliveryHandlerCollector]）。
-     * 待 10-04 phase 完成 Handler 后，ReadReportHandler/入站回执处理器将调用此方法。
+     * 由 [com.nebula.gateway.handler.delivery.DeliveryAckHandler] 触发——
+     * 接收者客户端收到消息后上报 DeliveryAck，服务端处理后将 DELIVERY_ACK 推送给原发送者。
+     * 非 suspend 函数 — 操作仅涉及内存（UserStreamRegistry.getStreams 返回快照列表），无 I/O。
      *
      * @param senderUid 发送者 userId
      * @param msgId 消息 ID
@@ -107,7 +107,7 @@ class PushService(
     /**
      * L2: 构建 PUSH 方向 Envelope 的工厂方法。
      *
-     * 消除 5 个推送方法中重复的 Envelope 构建代码。
+     * 消除各推送方法中重复的 Envelope 构建代码。
      *
      * @param eventType 推送事件类型
      * @param payloadBytes 序列化后的 payload
