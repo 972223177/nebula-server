@@ -7,11 +7,11 @@ import com.nebula.gateway.handler.SessionKey
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Semaphore
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 限流拦截器 — TokenBucket QPS 限流 + Semaphore 并发限流 双层防护（D-08, C-05）。
@@ -59,10 +59,10 @@ class RateLimitInterceptor(
     private val cleanupJob: Job = scope.launch {
         while (isActive) {
             try {
-                delay(CLEANUP_INTERVAL_MS)
+                delay(CLEANUP_INTERVAL_MS.milliseconds)
                 // 清理空闲信号量
                 val beforeSem = userSemaphores.size
-                userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
+                userSemaphores.entries.removeIf { it.value.availablePermits == permitsPerUser }
                 // C-05 + H1: 清理空闲令牌桶（非 suspend，无 runBlocking）
                 val beforeBucket = userTokenBuckets.size
                 userTokenBuckets.entries.removeIf {
@@ -123,11 +123,24 @@ class RateLimitInterceptor(
                 .build()
         }
 
-        // 获取或创建该用户的信号量（并发数限流）
-        val semaphore = userSemaphores.computeIfAbsent(limitKey) { Semaphore(permitsPerUser) }
+        // 获取或创建该用户的信号量（并发数限流），使用协程安全 Semaphore 替代 JVM 阻塞版
+        val semaphore = userSemaphores.computeIfAbsent(limitKey) { Semaphore(permits = permitsPerUser) }
 
-        // 尝试获取信号量，超时未获取到则限流
-        val acquired = semaphore.tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS)
+        // 挂起式获取信号量，带超时保护，不阻塞线程
+        // acquireTimeoutMs > 0 时用 suspend acquire + withTimeout；
+        // =0 时用非挂起 tryAcquire 避免 withTimeout(0) 误超时。
+        val acquired = if (acquireTimeoutMs > 0) {
+            try {
+                withTimeout(acquireTimeoutMs.milliseconds) {
+                    semaphore.acquire()
+                    true
+                }
+            } catch (_: TimeoutCancellationException) {
+                false
+            }
+        } else {
+            semaphore.tryAcquire()
+        }
         if (!acquired) {
             log.warn { "Rate limit exceeded for key=$limitKey, method=${request.method}" }
             return Response.newBuilder()
