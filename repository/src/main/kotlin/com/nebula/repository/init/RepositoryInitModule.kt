@@ -1,8 +1,8 @@
 package com.nebula.repository.init
 
 import com.nebula.common.init.ModuleInitializer
-import org.koin.core.qualifier.named
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**

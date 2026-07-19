@@ -5,16 +5,12 @@ import com.nebula.repository.testutil.DatabaseTestBase
 import jakarta.persistence.EntityManager
 import jakarta.persistence.EntityManagerFactory
 import org.hibernate.cfg.Configuration
+import org.hibernate.exception.ConstraintViolationException
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import org.hibernate.exception.ConstraintViolationException
 import java.time.LocalDateTime
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.fail
+import kotlin.test.*
 
 /**
  * 用户实体的 JPA 集成测试。

@@ -2,19 +2,12 @@ package com.nebula.gateway.interceptor
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
+import com.nebula.common.BizCode
 import com.nebula.gateway.handler.SessionKey
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import com.nebula.common.BizCode
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -72,7 +65,7 @@ class RateLimitInterceptor(
                 userSemaphores.entries.removeIf { it.value.availablePermits() == permitsPerUser }
                 // C-05 + H1: 清理空闲令牌桶（非 suspend，无 runBlocking）
                 val beforeBucket = userTokenBuckets.size
-                userTokenBuckets.entries.removeIf { 
+                userTokenBuckets.entries.removeIf {
                     it.value.isIdleForCleanup(CLEANUP_INTERVAL_MS)
                 }
                 val afterSem = userSemaphores.size

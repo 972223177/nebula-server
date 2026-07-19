@@ -8,9 +8,9 @@ import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
+import com.nebula.service.friend.FriendService
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
-import com.nebula.service.friend.FriendService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext

@@ -7,7 +7,7 @@ import com.nebula.common.exception.BizException
 import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
 import com.nebula.service.user.UserService
-import java.util.UUID
+import java.util.*
 
 /**
  * 用户注册 Handler — method = "user/register"（D-01, D-02, AUTH-01, CQ-13）。

@@ -4,7 +4,6 @@ import com.nebula.chat.PushEventType
 import com.nebula.chat.friend.StatusChangedPayload
 import com.nebula.gateway.push.PushService
 import com.nebula.service.friend.FriendService
-import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.CoroutineScope

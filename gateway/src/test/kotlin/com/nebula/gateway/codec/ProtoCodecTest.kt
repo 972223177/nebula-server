@@ -1,7 +1,7 @@
 package com.nebula.gateway.codec
 
-import com.nebula.chat.Request
 import com.google.protobuf.ByteString
+import com.nebula.chat.Request
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals

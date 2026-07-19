@@ -1,8 +1,8 @@
 package com.nebula.gateway.handler.friend
 
+import com.nebula.gateway.di.register
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.di.register
 
 /**
  * 好友关系 Handler 收集器 — 注册 Friend 模块的所有 Handler（Phase 8）。

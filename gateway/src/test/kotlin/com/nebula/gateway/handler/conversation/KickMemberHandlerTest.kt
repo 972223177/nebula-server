@@ -1,7 +1,6 @@
 package com.nebula.gateway.handler.conversation
 
 import com.nebula.chat.PushEventType
-import com.nebula.chat.Response
 import com.nebula.chat.conversation.KickMemberReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException

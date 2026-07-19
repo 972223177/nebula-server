@@ -2,9 +2,9 @@ package com.nebula.repository.testutil
 
 import org.junit.jupiter.api.Test
 import javax.sql.DataSource
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import kotlin.test.assertEquals
 
 /**
  * Flyway 数据库迁移验证测试。

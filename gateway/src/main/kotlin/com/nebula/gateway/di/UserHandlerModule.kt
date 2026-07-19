@@ -1,15 +1,7 @@
 package com.nebula.gateway.di
 
 import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.handler.user.BatchGetStatusHandler
-import com.nebula.gateway.handler.user.BatchGetUserHandler
-import com.nebula.gateway.handler.user.GetPrivacyHandler
-import com.nebula.gateway.handler.user.GetProfileHandler
-import com.nebula.gateway.handler.user.LoginHandler
-import com.nebula.gateway.handler.user.RegisterHandler
-import com.nebula.gateway.handler.user.SearchUserHandler
-import com.nebula.gateway.handler.user.SetPrivacyHandler
-import com.nebula.gateway.handler.user.UserHandlerCollector
+import com.nebula.gateway.handler.user.*
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 

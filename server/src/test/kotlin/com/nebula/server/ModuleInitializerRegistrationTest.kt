@@ -1,11 +1,11 @@
 package com.nebula.server
 
+import com.nebula.common.config.ApplicationConfig
+import com.nebula.common.datasource.DataSourceProvider
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.common.init.ModuleInitializer
 import com.nebula.common.init.commonInitModule
 import com.nebula.common.init.topologicalSort
-import com.nebula.common.config.ApplicationConfig
-import com.nebula.common.datasource.DataSourceProvider
 import com.nebula.repository.init.repositoryInitModule
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach

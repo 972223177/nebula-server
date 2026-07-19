@@ -1,10 +1,6 @@
 package com.nebula.repository.redis
 
-import io.lettuce.core.Consumer
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.StreamMessage
-import io.lettuce.core.XAddArgs
-import io.lettuce.core.XReadArgs
+import io.lettuce.core.*
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
@@ -18,7 +14,6 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 

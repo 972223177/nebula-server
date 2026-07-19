@@ -6,10 +6,9 @@ import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
+import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
-import kotlinx.coroutines.flow.toList
 
 /**
  * 用户在线状态数据（JSON 存储）。
@@ -50,7 +49,7 @@ class OnlineStatusRepository(
     suspend fun setOnline(userId: Long) {
         val data = OnlineStatusData(status = 1, lastActiveAt = System.currentTimeMillis())
         val jsonStr = json.encodeToString(data)
-        redis.setex("${RedisKeys.onlineStatusKey(userId)}", RedisTtl.ONLINE_STATUS, jsonStr)
+        redis.setex(RedisKeys.onlineStatusKey(userId), RedisTtl.ONLINE_STATUS, jsonStr)
     }
 
     /**
@@ -61,7 +60,7 @@ class OnlineStatusRepository(
     suspend fun setHidden(userId: Long) {
         val data = OnlineStatusData(status = 2, lastActiveAt = System.currentTimeMillis())
         val jsonStr = json.encodeToString(data)
-        redis.setex("${RedisKeys.onlineStatusKey(userId)}", RedisTtl.ONLINE_STATUS, jsonStr)
+        redis.setex(RedisKeys.onlineStatusKey(userId), RedisTtl.ONLINE_STATUS, jsonStr)
     }
 
     /**
@@ -70,7 +69,7 @@ class OnlineStatusRepository(
      * @param userId 用户 ID
      */
     suspend fun setOffline(userId: Long) {
-        redis.del("${RedisKeys.onlineStatusKey(userId)}")
+        redis.del(RedisKeys.onlineStatusKey(userId))
     }
 
     /**
@@ -80,10 +79,10 @@ class OnlineStatusRepository(
      * @return 在线状态数据，key 不存在或解析失败返回 null
      */
     suspend fun getStatus(userId: Long): OnlineStatusData? {
-        val jsonStr = redis.get("${RedisKeys.onlineStatusKey(userId)}") ?: return null
+        val jsonStr = redis.get(RedisKeys.onlineStatusKey(userId)) ?: return null
         return try {
             json.decodeFromString<OnlineStatusData>(jsonStr)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // 兼容旧格式（纯文本 "online" 等），降级为 null
             null
         }
@@ -105,7 +104,7 @@ class OnlineStatusRepository(
      * @param userId 用户 ID
      */
     suspend fun refreshTtl(userId: Long) {
-        redis.expire("${RedisKeys.onlineStatusKey(userId)}", RedisTtl.ONLINE_STATUS)
+        redis.expire(RedisKeys.onlineStatusKey(userId), RedisTtl.ONLINE_STATUS)
     }
 
     /**
@@ -116,7 +115,7 @@ class OnlineStatusRepository(
      */
     suspend fun batchGetStatus(userIds: List<Long>): Map<Long, OnlineStatusData?> {
         if (userIds.isEmpty()) return emptyMap()
-        val keys: kotlin.Array<String> = userIds.map { RedisKeys.onlineStatusKey(it) }.toTypedArray()
+        val keys: Array<String> = userIds.map { RedisKeys.onlineStatusKey(it) }.toTypedArray()
         // mget 返回 Flow<KeyValue>，collect 后转为 List
         val mgetResult = redis.mget(*keys).toList(mutableListOf())
 
@@ -127,7 +126,7 @@ class OnlineStatusRepository(
             val data = if (kv.hasValue()) {
                 try {
                     json.decodeFromString<OnlineStatusData>(kv.value)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             } else null

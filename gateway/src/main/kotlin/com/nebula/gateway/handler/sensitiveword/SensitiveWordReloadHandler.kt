@@ -1,9 +1,9 @@
 package com.nebula.gateway.handler.sensitiveword
 
+import com.nebula.chat.PushEventType
 import com.nebula.chat.sensitiveword.SensitiveWordReloadReq
 import com.nebula.chat.sensitiveword.SensitiveWordReloadResp
 import com.nebula.chat.sensitiveword.SensitiveWordUpdatedPayload
-import com.nebula.chat.PushEventType
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
 import com.nebula.common.sensitiveword.SensitiveWordService

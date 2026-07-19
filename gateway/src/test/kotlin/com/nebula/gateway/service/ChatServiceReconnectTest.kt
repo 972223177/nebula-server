@@ -5,20 +5,20 @@ import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.service.user.OnlineStatusService
-import com.nebula.service.friend.FriendService
-import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.admin.DeadLetterService
+import com.nebula.service.friend.FriendService
+import com.nebula.service.user.OnlineStatusService
+import com.nebula.service.user.UserPrivacyService
 import io.grpc.stub.StreamObserver
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import org.junit.jupiter.api.BeforeEach
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import org.junit.jupiter.api.Test
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 
 /**
  * 重连 eviction callback 单元测试。

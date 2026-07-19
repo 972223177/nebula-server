@@ -1,7 +1,5 @@
 package com.nebula.common.idgen
 
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

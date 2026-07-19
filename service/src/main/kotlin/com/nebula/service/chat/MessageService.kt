@@ -1,7 +1,6 @@
 package com.nebula.service.chat
 
 import com.nebula.chat.chat.SendMessageReq
-import com.nebula.chat.chat.SendMessageResp
 import com.nebula.chat.conversation.ConversationBrief
 import com.nebula.chat.message.ChatMessage
 import com.nebula.chat.message.PullMessagesReq
@@ -10,18 +9,12 @@ import com.nebula.chat.message.ReadReportReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ChatException
 import com.nebula.common.idgen.SnowflakeIdGenerator
-import com.nebula.common.util.toEpochMillis
-import com.nebula.service.conversation.toConversationBrief
-import com.nebula.service.sequence.SeqService
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.MessageDao
-import com.nebula.repository.entity.ConversationEntity
+import com.nebula.repository.dao.*
 import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.MessageQueueRepository
+import com.nebula.service.conversation.toConversationBrief
+import com.nebula.service.sequence.SeqService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.LocalDateTime
 

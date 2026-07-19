@@ -1,5 +1,3 @@
-import com.google.protobuf.gradle.*
-
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.protobuf)

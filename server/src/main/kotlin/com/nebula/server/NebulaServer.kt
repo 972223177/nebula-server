@@ -1,11 +1,11 @@
 package com.nebula.server
 
 import com.nebula.common.config.ApplicationConfig
+import com.nebula.common.external.ExternalServiceConfig
 import com.nebula.gateway.bootstrap.ServerBootstrap
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.service.ChatService
-import com.nebula.common.external.ExternalServiceConfig
 import com.nebula.server.config.ConfigLoader
 import com.nebula.server.server.ChatServer
 import io.github.oshai.kotlinlogging.KotlinLogging

@@ -5,13 +5,8 @@ import com.nebula.common.init.ModuleInitializer
 import com.nebula.service.admin.DeadLetterService
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationService
+import com.nebula.service.external.*
 import com.nebula.service.friend.FriendService
-import com.nebula.service.external.ExternalServiceCache
-import com.nebula.service.external.ExternalServiceOrchestrator
-import com.nebula.service.external.PerUserQuotaStore
-import com.nebula.service.external.QuotaManager
-import com.nebula.service.external.SearchService
-import com.nebula.service.external.WeatherService
 import com.nebula.service.sequence.SeqService
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService

@@ -2,7 +2,6 @@ package com.nebula.gateway.interceptor
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
-import com.nebula.gateway.dispatcher.InterceptorChain
 
 /**
  * 拦截器接口 — suspend 版本的责任链模式（GoF Chain of Responsibility）。

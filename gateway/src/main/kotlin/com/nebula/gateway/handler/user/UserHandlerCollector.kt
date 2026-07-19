@@ -1,8 +1,8 @@
 package com.nebula.gateway.handler.user
 
+import com.nebula.gateway.di.register
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.di.register
 
 /**
  * 用户业务 Handler 收集器 — 注册用户模块的所有 Handler（Phase 5）。

@@ -1,33 +1,20 @@
 package com.nebula.server
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
-import com.nebula.gateway.di.messageReliabilityModule
-import com.nebula.service.init.serviceKoinModule
-import com.nebula.gateway.di.frameworkModule
-import com.nebula.gateway.di.userHandlerModule
-import com.nebula.gateway.di.chatHandlerModule
-import com.nebula.gateway.di.conversationHandlerModule
-import com.nebula.gateway.di.friendHandlerModule
+import com.nebula.common.sensitiveword.SensitiveWordService
+import com.nebula.gateway.di.*
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
-
 import com.nebula.gateway.handler.conversation.ConversationLockManager
 import com.nebula.gateway.handler.message.PullMessagesHandler
 import com.nebula.gateway.handler.message.ReadReportHandler
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.DeadLetterDao
-import com.nebula.repository.dao.FriendRequestDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.MessageDao
-import com.nebula.repository.dao.UserDao
+import com.nebula.repository.dao.*
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
-import com.nebula.common.sensitiveword.SensitiveWordService
+import com.nebula.service.init.serviceKoinModule
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope

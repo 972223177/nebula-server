@@ -1,11 +1,7 @@
 package com.nebula.service.conversation
 
 import com.nebula.chat.conversation.ConvListResp
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.UserDao
+import com.nebula.repository.dao.*
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.UserEntity

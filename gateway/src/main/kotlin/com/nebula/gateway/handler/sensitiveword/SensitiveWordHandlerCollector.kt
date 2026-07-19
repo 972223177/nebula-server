@@ -1,8 +1,8 @@
 package com.nebula.gateway.handler.sensitiveword
 
+import com.nebula.gateway.di.register
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.di.register
 
 /**
  * 敏感词 Handler 收集器 — 注册下载与重载两个 Handler（D-116）。

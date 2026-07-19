@@ -1,7 +1,7 @@
 package com.nebula.gateway.codec
 
-import com.nebula.gateway.dispatcher.HandlerEntry
 import com.google.protobuf.ByteString
+import com.nebula.gateway.dispatcher.HandlerEntry
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import kotlin.reflect.KClass

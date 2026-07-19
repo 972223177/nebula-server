@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * EditGroupHandler 编辑群信息 Handler 单元测试（D-15）。

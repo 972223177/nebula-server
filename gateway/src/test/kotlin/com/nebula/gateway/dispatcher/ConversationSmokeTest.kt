@@ -1,23 +1,11 @@
 package com.nebula.gateway.dispatcher
 
 import com.nebula.chat.Response
-import com.nebula.chat.conversation.CreateGroupReq
-import com.nebula.chat.conversation.CreateGroupResp
-import com.nebula.chat.conversation.EditGroupReq
-import com.nebula.chat.conversation.GroupMembersReq
-import com.nebula.chat.conversation.GroupMembersResp
-import com.nebula.chat.conversation.InviteMemberReq
-import com.nebula.chat.conversation.KickMemberReq
-import com.nebula.chat.conversation.LeaveGroupReq
+import com.nebula.chat.conversation.*
 import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
 import com.nebula.common.sensitiveword.SensitiveWordService
-import com.nebula.gateway.handler.conversation.CreateGroupHandler
-import com.nebula.gateway.handler.conversation.EditGroupHandler
-import com.nebula.gateway.handler.conversation.GroupMembersHandler
-import com.nebula.gateway.handler.conversation.InviteMemberHandler
-import com.nebula.gateway.handler.conversation.KickMemberHandler
-import com.nebula.gateway.handler.conversation.LeaveGroupHandler
+import com.nebula.gateway.handler.conversation.*
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry

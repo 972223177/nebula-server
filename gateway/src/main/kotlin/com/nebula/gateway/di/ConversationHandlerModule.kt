@@ -1,18 +1,7 @@
 package com.nebula.gateway.di
 
-import com.nebula.gateway.handler.conversation.ConversationLockManager
-import com.nebula.gateway.handler.conversation.CreateGroupHandler
-import com.nebula.gateway.handler.conversation.CreatePrivateConversationHandler
-import com.nebula.gateway.handler.conversation.DeleteConversationHandler
-import com.nebula.gateway.handler.conversation.GroupListHandler
-import com.nebula.gateway.handler.conversation.EditGroupHandler
-import com.nebula.gateway.handler.conversation.GroupMembersHandler
-import com.nebula.gateway.handler.conversation.InviteMemberHandler
-import com.nebula.gateway.handler.conversation.KickMemberHandler
-import com.nebula.gateway.handler.conversation.LeaveGroupHandler
-import com.nebula.gateway.handler.conversation.ListConversationsHandler
-import com.nebula.gateway.handler.conversation.ConversationHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
+import com.nebula.gateway.handler.conversation.*
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 

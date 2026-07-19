@@ -6,14 +6,7 @@ import com.nebula.common.init.ModuleInitializer
 import com.nebula.common.session.SessionStore
 import com.nebula.repository.config.JpaConfig
 import com.nebula.repository.config.RedisConfig
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.DeadLetterDao
-import com.nebula.repository.dao.FriendRequestDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.MessageDao
-import com.nebula.repository.dao.UserDao
+import com.nebula.repository.dao.*
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository

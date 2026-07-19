@@ -1,7 +1,7 @@
 package com.nebula.gateway.handler.external
 
-import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.di.register
+import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
 
 /**

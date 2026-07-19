@@ -2,11 +2,9 @@ package com.nebula.gateway.dispatcher
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
-import com.nebula.common.BizCode
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.PingHandler
-import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.interceptor.AuthInterceptor
 import com.nebula.gateway.interceptor.ExceptionInterceptor

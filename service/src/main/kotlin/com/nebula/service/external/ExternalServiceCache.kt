@@ -8,8 +8,7 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.Base64
-import java.util.LinkedHashMap
+import java.util.*
 
 /**
  * 外部服务结果缓存（D-XX）：L1 本地 LRU + L2 Redis 二级。

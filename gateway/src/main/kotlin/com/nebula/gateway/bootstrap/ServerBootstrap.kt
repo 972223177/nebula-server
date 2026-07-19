@@ -2,8 +2,8 @@ package com.nebula.gateway.bootstrap
 
 import com.nebula.common.init.ModuleInitializer
 import com.nebula.common.init.topologicalSort
-import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.di.gatewayModules
+import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.service.init.ServiceInitModule
 import com.nebula.service.sequence.SeqService
@@ -12,10 +12,10 @@ import io.lettuce.core.api.StatefulRedisConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
-import javax.sql.DataSource
 import org.koin.core.Koin
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
+import javax.sql.DataSource
 
 /**
  * 服务启动引导器 — 封装所有跨层启动逻辑，供 server 层通过 gateway API 统一调用（D-28）。

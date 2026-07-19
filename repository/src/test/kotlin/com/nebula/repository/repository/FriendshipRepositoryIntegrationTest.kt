@@ -7,17 +7,13 @@ import com.nebula.repository.testutil.DatabaseTestBase
 import org.hibernate.Session
 import org.hibernate.SessionFactory
 import org.hibernate.cfg.Configuration
+import org.hibernate.exception.ConstraintViolationException
 import org.hibernate.query.Query
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.hibernate.exception.ConstraintViolationException
-import kotlin.test.assertContentEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import kotlin.test.*
 
 /**
  * 好友关系与好友请求的 JPA 集成测试。

@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.requireNotNull
 
 /**
  * 用于拓扑排序测试的 [ModuleInitializer] 桩实现。

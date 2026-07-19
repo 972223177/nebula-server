@@ -8,10 +8,10 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
 import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
+import com.nebula.gateway.handler.requireSession
 import com.nebula.gateway.push.PushService
 import com.nebula.service.conversation.ConversationService
 import kotlinx.coroutines.currentCoroutineContext
-import com.nebula.gateway.handler.requireSession
 
 /**
  * 编辑群信息 Handler — method = "conversation/edit_group_info"（D-15）。

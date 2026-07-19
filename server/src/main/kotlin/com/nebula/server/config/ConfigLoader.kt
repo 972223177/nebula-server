@@ -1,12 +1,6 @@
 package com.nebula.server.config
 
-import com.nebula.common.config.ApplicationConfig
-import com.nebula.common.config.DatabaseConfig
-import com.nebula.common.config.SensitiveWordConfig
-import com.nebula.common.config.RedisConfig
-import com.nebula.common.config.ServerConfig
-import com.nebula.common.config.SnowflakeConfig
-import com.nebula.common.config.SslConfig
+import com.nebula.common.config.*
 import com.nebula.common.external.*
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory

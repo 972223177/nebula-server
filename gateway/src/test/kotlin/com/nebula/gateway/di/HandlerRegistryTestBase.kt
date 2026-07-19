@@ -2,21 +2,14 @@ package com.nebula.gateway.di
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.testutil.TestTags
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.DeadLetterDao
-import com.nebula.repository.dao.FriendRequestDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.MessageDao
-import com.nebula.repository.dao.UserDao
+import com.nebula.repository.dao.*
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
 import com.nebula.repository.redis.SessionRepository
 import io.lettuce.core.api.StatefulRedisConnection
-import jakarta.persistence.EntityManagerFactory
 import io.mockk.mockk
+import jakarta.persistence.EntityManagerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

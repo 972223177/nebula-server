@@ -3,7 +3,6 @@ package com.nebula.gateway.handler.conversation
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 会话级互斥锁管理器（D-19）。

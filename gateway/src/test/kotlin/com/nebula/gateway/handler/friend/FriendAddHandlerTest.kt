@@ -3,7 +3,6 @@ package com.nebula.gateway.handler.friend
 import com.google.protobuf.ByteString
 import com.nebula.chat.PushEventType
 import com.nebula.chat.friend.FriendAddReq
-import com.nebula.chat.friend.FriendAddResp
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
 import com.nebula.common.exception.FriendException

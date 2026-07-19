@@ -1,7 +1,7 @@
 package com.nebula.common.init
 
-import org.koin.core.qualifier.named
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**

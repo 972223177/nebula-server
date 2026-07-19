@@ -1,15 +1,7 @@
 package com.nebula.gateway.di
 
-import com.nebula.gateway.handler.friend.FriendAcceptHandler
-import com.nebula.gateway.handler.friend.FriendAddHandler
-import com.nebula.gateway.handler.friend.FriendBatchCheckRelationHandler
-import com.nebula.gateway.handler.friend.FriendCheckRelationHandler
-import com.nebula.gateway.handler.friend.FriendDeleteHandler
-import com.nebula.gateway.handler.friend.FriendListHandler
-import com.nebula.gateway.handler.friend.FriendRejectHandler
-import com.nebula.gateway.handler.friend.FriendRequestsHandler
-import com.nebula.gateway.handler.friend.FriendHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
+import com.nebula.gateway.handler.friend.*
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 

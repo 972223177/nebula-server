@@ -40,6 +40,7 @@ class FriendService(
         private const val MAX_BATCH_CHECK_SIZE = 500
 
         /** 好友申请通过模式：等待同意（默认） */
+        @Suppress("unused")
         private const val APPROVAL_WAIT = 0
         /** 好友申请通过模式：自动通过 */
         private const val APPROVAL_AUTO_ACCEPT = 1

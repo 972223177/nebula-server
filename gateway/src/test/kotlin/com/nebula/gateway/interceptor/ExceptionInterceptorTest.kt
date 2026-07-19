@@ -1,7 +1,6 @@
 package com.nebula.gateway.interceptor
 
 import com.nebula.chat.Request
-import com.nebula.chat.Response
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
 import io.mockk.coEvery

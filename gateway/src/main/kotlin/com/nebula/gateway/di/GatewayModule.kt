@@ -1,8 +1,6 @@
 package com.nebula.gateway.di
 
 import com.nebula.service.init.serviceKoinModule
-import com.nebula.gateway.di.externalHandlerModule
-import com.nebula.gateway.di.sensitiveWordHandlerModule
 
 /**
  * Gateway DI 模块聚合入口。

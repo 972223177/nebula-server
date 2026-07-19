@@ -4,7 +4,6 @@ import com.nebula.chat.Direction
 import com.nebula.chat.Envelope
 import com.nebula.service.user.OnlineStatusService
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

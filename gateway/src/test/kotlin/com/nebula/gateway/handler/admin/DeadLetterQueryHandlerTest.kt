@@ -1,7 +1,6 @@
 package com.nebula.gateway.handler.admin
 
 import com.nebula.chat.admin.DeadLetterQueryReq
-import com.nebula.chat.admin.DeadLetterQueryResp
 import com.nebula.service.admin.DeadLetterDTO
 import com.nebula.service.admin.DeadLetterService
 import com.nebula.service.admin.ListPage
@@ -12,7 +11,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull

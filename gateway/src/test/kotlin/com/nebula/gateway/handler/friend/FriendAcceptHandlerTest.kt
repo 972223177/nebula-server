@@ -2,7 +2,6 @@ package com.nebula.gateway.handler.friend
 
 import com.google.protobuf.ByteString
 import com.nebula.chat.PushEventType
-import com.nebula.chat.Response
 import com.nebula.chat.friend.FriendAcceptReq
 import com.nebula.common.BizCode
 import com.nebula.common.exception.FriendException

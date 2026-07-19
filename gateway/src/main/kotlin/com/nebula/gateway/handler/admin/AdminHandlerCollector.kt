@@ -1,8 +1,8 @@
 package com.nebula.gateway.handler.admin
 
+import com.nebula.gateway.di.register
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.di.register
 
 /**
  * Admin 管理 Handler 收集器 — 注册所有 Admin 模块的 Handler（Phase 10）。

@@ -1,6 +1,5 @@
 package com.nebula.gateway.handler.user
 
-import com.nebula.chat.Response
 import com.nebula.chat.user.SetPrivacyReq
 import com.nebula.common.BizCode
 import com.nebula.gateway.handler.SessionKey
@@ -12,12 +11,8 @@ import com.nebula.service.user.UserPrivacyService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

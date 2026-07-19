@@ -5,6 +5,7 @@ import com.nebula.common.init.ModuleInitializer
 import com.nebula.gateway.bootstrap.ServerBootstrap
 import com.nebula.service.external.QuotaManager
 import com.nebula.service.init.serviceKoinModule
+import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.mockk
 import org.junit.jupiter.api.AfterEach
@@ -17,7 +18,6 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
 
 /**
  * ModuleInitializer 装配时序端到端测试（回归防止 D-XX 时序 bug）。

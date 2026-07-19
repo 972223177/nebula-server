@@ -1,34 +1,20 @@
 package com.nebula.service.conversation
 
-import com.nebula.chat.conversation.ConvListResp
-import com.nebula.chat.conversation.ConversationBrief
-import com.nebula.chat.conversation.CreateGroupReq
-import com.nebula.chat.conversation.CreateGroupResp
-import com.nebula.chat.conversation.EditGroupReq
-import com.nebula.chat.conversation.GroupListReq
-import com.nebula.chat.conversation.GroupListResp
-import com.nebula.chat.conversation.GroupMembersReq
-import com.nebula.chat.conversation.GroupMembersResp
-import com.nebula.chat.conversation.InviteMemberReq
-import com.nebula.chat.conversation.KickMemberReq
-import com.nebula.chat.conversation.LeaveGroupReq
+import com.nebula.chat.conversation.*
 import com.nebula.chat.group.GroupMember
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.common.util.toEpochMillis
-import com.nebula.repository.dao.ConversationDao
-import com.nebula.repository.dao.ConversationMemberDao
-import com.nebula.repository.dao.FriendshipDao
-import com.nebula.repository.dao.JpaTxRunner
-import com.nebula.repository.dao.UserDao
+import com.nebula.repository.dao.*
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.entity.isActive
+import com.nebula.service.conversation.ConversationService.Companion.RECOVERY_PAGE_SIZE
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.util.UUID
+import java.util.*
 
 /**
  * 会话业务服务（D-02, D-05, D-10, D-19）。

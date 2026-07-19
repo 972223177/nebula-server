@@ -1,7 +1,6 @@
 package com.nebula.gateway.handler.user
 
 import com.nebula.chat.user.LoginReq
-import com.nebula.chat.user.LoginResp
 import com.nebula.common.BizCode
 import com.nebula.common.exception.UserException
 import com.nebula.gateway.session.Session
@@ -12,8 +11,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 

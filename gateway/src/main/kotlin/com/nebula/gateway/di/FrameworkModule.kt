@@ -2,17 +2,13 @@ package com.nebula.gateway.di
 
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.Dispatcher
+import com.nebula.gateway.dispatcher.HandlerEntry
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.Handler
-import com.nebula.gateway.dispatcher.HandlerEntry
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
 import com.nebula.gateway.handler.system.SystemHandlerCollector
-import com.nebula.gateway.interceptor.AuthInterceptor
-import com.nebula.gateway.interceptor.ExceptionInterceptor
-import com.nebula.gateway.interceptor.Interceptor
-import com.nebula.gateway.interceptor.LogInterceptor
-import com.nebula.gateway.interceptor.RateLimitInterceptor
+import com.nebula.gateway.interceptor.*
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
 import io.github.oshai.kotlinlogging.KotlinLogging

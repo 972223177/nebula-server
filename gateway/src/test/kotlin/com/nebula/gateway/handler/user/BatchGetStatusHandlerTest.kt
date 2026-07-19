@@ -1,7 +1,6 @@
 package com.nebula.gateway.handler.user
 
 import com.nebula.chat.user.BatchIdRequest
-import com.nebula.chat.user.BatchGetStatusResp
 import com.nebula.service.user.OnlineStatusInfo
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService

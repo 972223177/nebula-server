@@ -4,10 +4,10 @@ import com.nebula.chat.external.SearchResponse
 import com.nebula.chat.external.SearchResultItem
 import com.nebula.chat.external.WeatherResponse
 import com.nebula.common.BizCode
+import com.nebula.common.exception.BizException
 import com.nebula.common.external.ExternalServiceCacheConfig
 import com.nebula.common.external.ExternalServiceExceptions
 import com.nebula.common.external.ExternalServiceQuotaConfig
-import com.nebula.common.exception.BizException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.LocalDate
 
