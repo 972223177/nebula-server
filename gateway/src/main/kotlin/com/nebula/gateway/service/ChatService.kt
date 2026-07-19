@@ -241,11 +241,16 @@ class ChatService(
                     // Phase 1 瘦身：PING 处理委托 PingProcessor
                     pingProcessor.handle(envelope, this@ChatStreamObserver)
                 }
-                // 服务端生成的 RESPONSE / PONG / PUSH 直接转发给 gRPC 客户端，避免 ChatStreamObserver.onNext 递归
-                // PUSH: PushService 通过 UserStreamRegistry 推送消息（聊天消息/已读回执/投递确认），
-                // 由于 UserStreamRegistry 存储的是 ChatStreamObserver 实例，需在此转发到 gRPC 客户端
-                Direction.RESPONSE, Direction.PONG, Direction.PUSH -> {
+                Direction.PUSH -> {
+                    // PUSH 来自服务端内部推送的转发（PushService → deliver → onNext 兜底路径，如 eviction callback
+                    // 中 as?ChatStreamObserver 失败后的 observer.onNext(disconnectEnvelope)）。
+                    // 此处直接 sendEnvelope 转发到 gRPC 客户端。
                     connectionScope.launch { sendEnvelope(envelope) }
+                }
+
+                // RESPONSE / PONG 属服务端→客户端方向，客户端不应发送。若收到则记录警告并丢弃。
+                Direction.RESPONSE, Direction.PONG -> {
+                    logger.warn { "[stream] #$connId 客户端发送了服务端方向的 Envelope，已丢弃: direction=${envelope.direction}, method=${envelope.request.method}" }
                 }
                 else -> logger.warn { "[stream] Unexpected direction: ${envelope.direction}" }
             }
