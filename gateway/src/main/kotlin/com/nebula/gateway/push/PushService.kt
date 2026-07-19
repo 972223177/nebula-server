@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  * - pushMessageToMembers：向指定成员列表推送 ChatMessage Envelope（M29 复用批量查询结果）
  * - pushConversationEvent：向会话成员推送会话事件（群创建、成员变更等）
  * - pushReadReceipt：向发送者推送已读回执
- * - pushDeliveryAck：向发送者推送交付回执
+ * - pushDeliveryAck：预留 — 向发送者推送交付回执（配套 DeliveryRecvHandler 待实现，暂未调用）
  * - pushEventToUser：向指定用户推送通用事件
  * - pushToAll：向所有在线客户端广播事件
  *
@@ -64,10 +64,11 @@ class PushService(
     }
 
     /**
-     * 向发送者推送交付回执（DeliveryAck）（D-71）。
+     * 预留方法 — 向发送者推送交付回执（DeliveryAck）（D-71）。
      *
-     * 收到接收者客户端回执后调用，告知发送者消息已送达接收方设备。
-     * 非 suspend 函数 — 操作仅涉及内存（UserStreamRegistry.getStreams 返回快照列表），无 I/O。
+     * ⚠️ 当前无人调用。配套的 DeliveryRecvHandler（处理客户端 DeliveryAck 上报请求）
+     * 尚未实现（见 [com.nebula.gateway.delivery.DeliveryHandlerCollector]）。
+     * 待 10-04 phase 完成 Handler 后，ReadReportHandler/入站回执处理器将调用此方法。
      *
      * @param senderUid 发送者 userId
      * @param msgId 消息 ID
