@@ -29,6 +29,16 @@ interface SessionStore {
     suspend fun findRaw(key: String): String?
 
     /**
+     * 扫描匹配模式的 key 列表（用于重启后恢复设备类型映射索引，D-05/AUTH-05）。
+     *
+     * 使用 SCAN 增量迭代，避免 KEYS 命令阻塞 Redis（线上 key 数量可能较多）。
+     *
+     * @param pattern Redis key 匹配模式（如 "session:*"）
+     * @return 匹配的完整 key 列表
+     */
+    suspend fun scanKeys(pattern: String): List<String>
+
+    /**
      * 滑动续期 Session TTL。
      *
      * 每次请求认证通过后应调用此方法，刷新 Session 过期时间，

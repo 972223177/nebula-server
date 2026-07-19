@@ -245,7 +245,7 @@ class SessionRegistry(
     /**
      * 刷新 Session TTL — 每次请求认证通过后调用，防止活跃用户被强制下线。
      *
-     * 委托给 L2 Redis 的 [sessionStore.refreshTtl]，失败时仅日志记录不阻塞主流程。
+     * 委托给 L2 Redis 的 [SessionStore.refreshTtl]，失败时仅日志记录不阻塞主流程。
      *
      * @param token Session Token
      */
@@ -396,7 +396,8 @@ class SessionRegistry(
         try {
             withTimeout(redisTimeoutMs.milliseconds) {
                 val key = "session:$userId:$deviceType"
-                val currentValue = sessionStore.findRaw(key)
+                // 复用 findDeviceTokenFromRedis 读取当前映射值，避免重复 findRaw 内联
+                val currentValue = findDeviceTokenFromRedis(userId, deviceType)
                 // CQ-12: 仅当 Redis 中的值仍为旧 token 时才删除，防止误删新连接的映射
                 if (currentValue == expectedToken) {
                     sessionStore.deleteKey(key)
@@ -427,6 +428,47 @@ class SessionRegistry(
         } catch (e: Exception) {
             logger.error(e) { "Device type mapping query failed for userId=$userId" }
             null
+        }
+    }
+
+    /**
+     * 重启后从 Redis 恢复设备类型映射索引（D-05, AUTH-05）。
+     *
+     * 服务重启后内存 [deviceTypeIndex] 为空。若 Redis 中仍存在设备类型映射
+     * （key 格式 `session:{userId}:{deviceType}` → token，由 [saveDeviceTypeMapping] 写入），
+     * 则重建本地索引，确保同类型设备互踢在重启后仍可工作。
+     *
+     * 通过 [com.nebula.common.session.SessionStore.scanKeys] 增量扫描 `session:*` 键，
+     * 过滤出设备类型映射键（共 3 段、第 1 段为 "session"、第 2 段可解析为数字 userId；
+     * 排除 `session:token:{token}` 这类 token 键），逐条读取 token 并写回 [deviceTypeIndex]。
+     *
+     * 注意：Redis 不可用或扫描失败时记录错误并返回 0，不阻塞启动（互踢将短暂失效直至重新登录）。
+     *
+     * @return 成功恢复的映射条目数
+     */
+    suspend fun recoverDeviceTypeIndex(): Int {
+        return try {
+            val keys = sessionStore.scanKeys("session:*")
+            var recovered = 0
+            for (key in keys) {
+                val parts = key.split(":")
+                // 设备类型键: session:{userId}:{deviceType}（3 段，第 2 段为数字 userId）
+                // token 键:   session:token:{token}（第 2 段为 "token"），需排除
+                if (parts.size == 3 && parts[0] == "session") {
+                    val userId = parts[1].toLongOrNull() ?: continue
+                    val deviceType = parts[2]
+                    val token = findDeviceTokenFromRedis(userId, deviceType) ?: continue
+                    deviceTypeIndex[deviceTypeKey(userId, deviceType)] = token
+                    recovered++
+                }
+            }
+            if (recovered > 0) {
+                logger.info { "设备类型映射索引恢复完成，共恢复 $recovered 条" }
+            }
+            recovered
+        } catch (e: Exception) {
+            logger.error(e) { "设备类型映射索引恢复失败，互踢将在重启后短暂失效直至重新登录" }
+            0
         }
     }
 

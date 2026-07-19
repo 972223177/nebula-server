@@ -1,6 +1,8 @@
 package com.nebula.repository.redis
 
 import io.lettuce.core.ExperimentalLettuceCoroutinesApi
+import io.lettuce.core.ScanArgs
+import io.lettuce.core.ScanCursor
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
@@ -97,6 +99,35 @@ class SessionRepository(
      */
     override suspend fun deleteKey(key: String) {
         redis.del(key)
+    }
+
+    /**
+     * 扫描匹配模式的 key 列表（D-05, AUTH-05）。
+     *
+     * 使用 SCAN 增量迭代，避免 KEYS 命令阻塞 Redis（线上 key 数量可能较多）。
+     * 用于服务重启后恢复设备类型映射索引。
+     *
+     * @param pattern Redis key 匹配模式（如 "session:*"）
+     * @return 匹配的完整 key 列表
+     */
+    override suspend fun scanKeys(pattern: String): List<String> {
+        val result = mutableListOf<String>()
+        var cursor: ScanCursor? = null
+        do {
+            val args = ScanArgs.Builder.matches(pattern)
+            val scanResult = if (cursor == null) {
+                redis.scan(args)
+            } else {
+                redis.scan(cursor, args)
+            }
+            if (scanResult != null) {
+                scanResult.keys?.let { result.addAll(it) }
+                cursor = if (scanResult.isFinished) null else ScanCursor.of(scanResult.cursor)
+            } else {
+                cursor = null
+            }
+        } while (cursor != null)
+        return result
     }
 
     // ==================== 批量操作 ====================

@@ -4,6 +4,7 @@ import com.nebula.common.init.ModuleInitializer
 import com.nebula.common.init.topologicalSort
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.di.gatewayModules
+import com.nebula.gateway.session.SessionRegistry
 import com.nebula.service.init.ServiceInitModule
 import com.nebula.service.sequence.SeqService
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -108,6 +109,25 @@ object ServerBootstrap {
                     conversationService.getConversationMembers(convId).map { it.userId }
                 }
             )
+        }
+    }
+
+    /**
+     * 重启后从 Redis 恢复设备类型映射索引（D-05, AUTH-05）。
+     *
+     * 服务重启后内存 deviceTypeIndex 为空，需从 Redis 中仍存在的
+     * session:{userId}:{deviceType} 映射重建，确保同类型设备互踢在重启后仍工作。
+     * 委托 [SessionRegistry.recoverDeviceTypeIndex] 执行。
+     *
+     * 应在接受连接前（构造 ChatService 之前）调用，使互踢在重启瞬间即生效。
+     *
+     * @param koin Koin 容器实例
+     */
+    fun recoverDeviceTypeIndex(koin: Koin) {
+        runBlocking {
+            val sessionRegistry = koin.get<SessionRegistry>()
+            val recovered = sessionRegistry.recoverDeviceTypeIndex()
+            logger.info { "设备类型映射索引恢复完成，共 $recovered 条" }
         }
     }
 

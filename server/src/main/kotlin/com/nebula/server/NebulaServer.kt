@@ -29,6 +29,7 @@ import org.koin.dsl.module
  * 3. 启动 Koin 容器，注册 ApplicationConfig + ServerBootstrap 提供的所有模块
  * 4. ServerBootstrap 执行模块初始化（ModuleInitializer 发现/排序/执行/回滚）
  * 5. ServerBootstrap 执行序列号恢复（D-81/H21）
+ * 5.5 ServerBootstrap 执行设备类型映射索引恢复（D-05/AUTH-05，重启后互踢仍生效）
  * 6. ServerBootstrap 执行死信桥接注册（M11）
  * 7. 通过 HandlerCollector 模式统一注册所有 Handler 到 Registry
  * 8. ServerBootstrap 构造 ChatService
@@ -74,6 +75,9 @@ fun main() {
 
     // Step 5: 从 MySQL 恢复 Redis 序列号（D-81/H21）
     ServerBootstrap.recoverSequences(koin)
+
+    // Step 5.5: 重启后恢复设备类型映射索引（D-05, AUTH-05），确保同类型互踢在重启后仍生效
+    ServerBootstrap.recoverDeviceTypeIndex(koin)
 
     // Step 6: 注入死信创建回调（M11）
     ServerBootstrap.setupDeadLetterBridge(koin)
