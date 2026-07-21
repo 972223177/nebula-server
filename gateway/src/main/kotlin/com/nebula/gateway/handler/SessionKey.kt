@@ -29,6 +29,6 @@ data class SessionKey(val session: Session) : CoroutineContext.Element {
  * @return 当前协程上下文的 Session
  * @throws BizException(BizCode.UNAUTHORIZED) 若 Session 未注入
  */
-suspend fun CoroutineContext.requireSession(): Session {
+fun CoroutineContext.requireSession(): Session {
     return this[SessionKey]?.session ?: throw BizException(BizCode.UNAUTHORIZED)
 }

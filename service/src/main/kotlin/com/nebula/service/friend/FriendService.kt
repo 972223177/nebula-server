@@ -67,7 +67,7 @@ class FriendService(
      * @param convId 私聊会话 ID
      * @param existingFriendship 已有的好友关系（可能为 null 或不活跃）
      */
-    private suspend fun ensureFriendshipAndConversation(
+    private fun ensureFriendshipAndConversation(
         em: EntityManager,
         smaller: Long,
         larger: Long,

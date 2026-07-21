@@ -45,6 +45,7 @@ class ConversationLockManager {
      *
      * 等价于 locks.size，用于运维排查"会话锁数量是否异常增长"。
      */
+    @Suppress("unused")
     val activeLockCount: Int
         get() = locks.size
 

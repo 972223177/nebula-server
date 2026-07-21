@@ -5,6 +5,7 @@ import com.nebula.chat.external.WeatherResponse
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.service.external.ExternalServiceOrchestrator
+import kotlinx.coroutines.currentCoroutineContext
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -30,7 +31,7 @@ class QueryWeatherHandler(
      * @return 格式化天气文本封装的 WeatherResponse
      */
     override suspend fun handle(req: WeatherRequest): WeatherResponse {
-        val userId = coroutineContext.requireSession().userId
+        val userId = currentCoroutineContext().requireSession().userId
         return orchestrator.queryWeather(userId, req.city)
     }
 }

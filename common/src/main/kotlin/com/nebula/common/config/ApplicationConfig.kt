@@ -3,7 +3,7 @@ package com.nebula.common.config
 import com.nebula.common.external.ExternalServiceConfig
 
 /**
- * 应用顶层配置聚合类，承载所有子模块配置，外部由 [ConfigFactory] 从 YAML/HOCON 文件反序列化注入。
+ * 应用顶层配置聚合类，承载所有子模块配置，外部由 [com.typesafe.config.ConfigFactory] 从 YAML/HOCON 文件反序列化注入。
  *
  * 将不同关注点的配置拆分为独立 data class，便于按模块演进与单元测试隔离。
  */

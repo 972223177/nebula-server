@@ -129,10 +129,10 @@ class QuotaManager(
     }
 
     /** 获取配额重置剩余秒数（仅 QUOTA_EXCEEDED 场景使用） */
-    suspend fun remainingSecondsUntilReset(category: QuotaCategory): Long = quotaRemainingSeconds(category)
+    fun remainingSecondsUntilReset(category: QuotaCategory): Long = quotaRemainingSeconds(category)
 
     /** 手动刷盘（供 shutdown hook 调用，仅文件降级态有效；Redis 主路径为幂等空操作） */
-    suspend fun flush() {
+    fun flush() {
         if (usingFileFallback) persistFile()
     }
 

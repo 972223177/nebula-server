@@ -5,6 +5,7 @@ import com.nebula.chat.external.SearchResponse
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
 import com.nebula.service.external.ExternalServiceOrchestrator
+import kotlinx.coroutines.currentCoroutineContext
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -30,7 +31,7 @@ class WebSearchHandler(
      * @return 格式化搜索结果封装的 SearchResponse
      */
     override suspend fun handle(req: SearchRequest): SearchResponse {
-        val userId = coroutineContext.requireSession().userId
+        val userId = currentCoroutineContext().requireSession().userId
         return orchestrator.webSearch(userId, req.query, req.maxResults, req.searchType)
     }
 }

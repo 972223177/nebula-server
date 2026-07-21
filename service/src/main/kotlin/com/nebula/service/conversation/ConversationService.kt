@@ -580,6 +580,7 @@ class ConversationService(
      * @param userId 用户 ID
      * @return 是活跃成员返回 true，会话不存在 / 不是成员 / 软删 / 异常均返回 false
      */
+    @Suppress("unused")
     suspend fun requireMemberActive(conversationId: String, userId: Long): Boolean {
         return try {
             txRunner.execute { em ->

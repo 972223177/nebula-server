@@ -1,5 +1,6 @@
 package com.nebula.common.log
 
+import org.slf4j.Marker
 import org.slf4j.MarkerFactory
 
 /**
@@ -15,5 +16,5 @@ import org.slf4j.MarkerFactory
  */
 object AuditMarkers {
     /** 登录审计 Marker，用于区分登录事件日志 */
-    val LOGIN = MarkerFactory.getMarker("AUDIT_LOGIN")
+    val LOGIN: Marker? = MarkerFactory.getMarker("AUDIT_LOGIN")
 }
