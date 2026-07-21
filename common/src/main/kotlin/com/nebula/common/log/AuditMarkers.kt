@@ -15,6 +15,9 @@ import org.slf4j.MarkerFactory
  * ```
  */
 object AuditMarkers {
-    /** 登录审计 Marker，用于区分登录事件日志 */
-    val LOGIN: Marker? = MarkerFactory.getMarker("AUDIT_LOGIN")
+    /** 登录审计 Marker，用于区分登录事件日志。
+     *  显式声明非空 Marker（!! 强转）：SLF4J MarkerFactory.getMarker() 不会返回 null
+     *  （name 为空时抛 IllegalArgumentException），保持非空避免下游 AuditMarkersTest 等
+     *  直接调用 .name 时需要 ?. 处理；KLogger.info(Marker?) 仍可接收非空 Marker。 */
+    val LOGIN: Marker = MarkerFactory.getMarker("AUDIT_LOGIN")!!
 }
