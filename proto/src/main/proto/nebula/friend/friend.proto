@@ -81,6 +81,13 @@ message FriendRequestsResp {
   repeated FriendRequestItem requests = 1; // 好友申请列表
 }
 
+// 好友申请状态（对应 FriendRequestEntity.status 字段，值与 SQL DDL 一致）
+enum FriendRequestStatus {
+  PENDING = 0;                        // 待处理
+  ACCEPTED = 1;                       // 已接受
+  REQUEST_REJECTED = 2;               // 已拒绝（命名带 REQUEST_ 前缀避开 FriendRelationStatus.REJECTED 同包冲突 — proto3 enum value 用 C++ scoping）
+}
+
 // 好友申请条目
 message FriendRequestItem {
   int64 request_id = 1;               // 申请 ID
@@ -88,7 +95,7 @@ message FriendRequestItem {
   string from_username = 3;           // 对方用户名
   string from_avatar = 4;             // 对方头像 URL
   string message = 5;                 // 申请附言
-  string status = 6;                  // 申请状态：pending / accepted / rejected
+  FriendRequestStatus status = 6;     // 申请状态（M22: 由 string 改为 enum，与 FriendRelationStatus 风格一致）
   int64 created_at = 7;               // 申请时间（毫秒时间戳）
   FriendRequestDirection direction = 8; // 申请方向（新增字段，默认 INCOMING 兼容旧客户端）
 }

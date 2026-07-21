@@ -1,6 +1,7 @@
 package com.nebula.gateway.handler.friend
 
 import com.nebula.chat.friend.FriendRequestItem
+import com.nebula.chat.friend.FriendRequestStatus
 import com.nebula.chat.friend.FriendRequestsReq
 import com.nebula.chat.friend.FriendRequestsResp
 import com.nebula.gateway.session.Session
@@ -48,7 +49,7 @@ class FriendRequestsHandlerTest {
                 .setFromUsername("user2")
                 .setFromAvatar("https://example.com/avatar2.jpg")
                 .setMessage("你好，加个好友")
-                .setStatus("pending")
+                .setStatus(FriendRequestStatus.PENDING)
                 .setCreatedAt(1700000000000L)
                 .build())
             .addRequests(FriendRequestItem.newBuilder()
@@ -57,7 +58,7 @@ class FriendRequestsHandlerTest {
                 .setFromUsername("user3")
                 .setFromAvatar("https://example.com/avatar3.jpg")
                 .setMessage("好久不见")
-                .setStatus("pending")
+                .setStatus(FriendRequestStatus.PENDING)
                 .setCreatedAt(1700000000000L)
                 .build())
             .build()
@@ -79,7 +80,7 @@ class FriendRequestsHandlerTest {
         assertEquals("user2", item1.fromUsername)
         assertEquals("https://example.com/avatar2.jpg", item1.fromAvatar)
         assertEquals("你好，加个好友", item1.message)
-        assertEquals("pending", item1.status)
+        assertEquals(FriendRequestStatus.PENDING, item1.status)
         assertTrue(item1.createdAt > 0)
 
         // 验证第二条申请的字段
@@ -89,7 +90,7 @@ class FriendRequestsHandlerTest {
         assertEquals("user3", item2.fromUsername)
         assertEquals("https://example.com/avatar3.jpg", item2.fromAvatar)
         assertEquals("好久不见", item2.message)
-        assertEquals("pending", item2.status)
+        assertEquals(FriendRequestStatus.PENDING, item2.status)
     }
 
     // ═══════════════════════════════════════════════════════════

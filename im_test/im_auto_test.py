@@ -503,7 +503,8 @@ class NebulaBot:
         requests_resp = pb.friend.FriendRequestsResp()
         requests_resp.ParseFromString(resp.result)
 
-        pending = [item for item in requests_resp.requests if item.status == "pending"]
+        pending = [item for item in requests_resp.requests
+                   if item.status == pb.friend.FriendRequestStatus.Value("PENDING")]
         if not pending:
             self.log.info("无待处理的历史好友请求")
             return
