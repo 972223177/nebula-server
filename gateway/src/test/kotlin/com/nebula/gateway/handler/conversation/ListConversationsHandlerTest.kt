@@ -3,6 +3,7 @@ package com.nebula.gateway.handler.conversation
 import com.nebula.chat.conversation.ConvListReq
 import com.nebula.chat.conversation.ConvListResp
 import com.nebula.chat.conversation.ConversationBrief
+import com.nebula.chat.conversation.ConversationType
 import com.nebula.gateway.handler.SessionKey
 import com.nebula.gateway.session.Session
 import com.nebula.service.conversation.ConversationService
@@ -40,7 +41,7 @@ class ListConversationsHandlerTest {
     /** 构建一个 ConversationBrief */
     private fun brief(
         id: String,
-        type: String = "private",
+        type: ConversationType = ConversationType.PRIVATE,
         name: String = "",
         lastReadMsgId: Long = 0L,
         updatedAt: Long = 0L
@@ -63,8 +64,8 @@ class ListConversationsHandlerTest {
         val now = LocalDateTime.now()
         val epochMs = now.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
         val mockResp = ConvListResp.newBuilder()
-            .addConversations(brief("conv-001", type = "private", updatedAt = epochMs))
-            .addConversations(brief("conv-002", type = "group", updatedAt = now.minusDays(1).atZone(ZoneOffset.UTC).toInstant().toEpochMilli()))
+            .addConversations(brief("conv-001", type = ConversationType.PRIVATE, updatedAt = epochMs))
+            .addConversations(brief("conv-002", type = ConversationType.GROUP, updatedAt = now.minusDays(1).atZone(ZoneOffset.UTC).toInstant().toEpochMilli()))
             .setHasMore(false)
             .build()
 
@@ -78,7 +79,7 @@ class ListConversationsHandlerTest {
         assertFalse(resp.hasMore)
         assertEquals("conv-001", resp.conversationsList[0].conversationId)
         assertEquals("conv-002", resp.conversationsList[1].conversationId)
-        assertEquals("group", resp.conversationsList[1].type)
+        assertEquals(ConversationType.GROUP, resp.conversationsList[1].type)
     }
 
     @Test
@@ -155,7 +156,7 @@ class ListConversationsHandlerTest {
         val mockResp = ConvListResp.newBuilder()
             .addConversations(ConversationBrief.newBuilder()
                 .setConversationId("conv-001")
-                .setType("private")
+                .setType(ConversationType.PRIVATE)
                 .setName("测试私聊")
                 .setAvatarUrl("http://a.com/1.png")
                 .setLastMessageId(999L)
@@ -175,7 +176,7 @@ class ListConversationsHandlerTest {
         assertEquals(1, resp.conversationsCount)
         val brief = resp.conversationsList[0]
         assertEquals("conv-001", brief.conversationId)
-        assertEquals("private", brief.type)
+        assertEquals(ConversationType.PRIVATE, brief.type)
         assertEquals("测试私聊", brief.name)
         assertEquals("http://a.com/1.png", brief.avatarUrl)
         assertEquals(999L, brief.lastMessageId)

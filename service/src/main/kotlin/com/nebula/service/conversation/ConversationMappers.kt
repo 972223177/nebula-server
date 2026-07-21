@@ -1,7 +1,7 @@
 package com.nebula.service.conversation
 
 import com.nebula.chat.conversation.ConversationBrief
-import com.nebula.common.enum.ConversationType
+import com.nebula.chat.conversation.ConversationType
 import com.nebula.common.util.toEpochMillis
 import com.nebula.repository.entity.ConversationEntity
 
@@ -21,7 +21,7 @@ import com.nebula.repository.entity.ConversationEntity
  * ## 字段集（必须保持稳定）
  *
  * - `conversationId`：会话 ID（必填）
- * - `type`：私聊 "private"，群聊 "group"（来自 [ConversationType] 枚举）
+ * - `type`：会话类型（来自 [ConversationType] 枚举）
  * - `name`：私聊由调用方传 [displayName]（对方昵称/用户名），群聊由调用方传 entity.name
  * - `avatarUrl`：会话头像
  * - `lastMessageId/Preview/Ts`：最后一条消息元信息
@@ -33,7 +33,6 @@ import com.nebula.repository.entity.ConversationEntity
  * @param displayName 私聊场景下的对方显示名（群聊场景传 entity.name 即可）
  * @param lastReadMessageId 当前用户的 lastReadMessageId，0 表示从未读
  * @return 完整构造的 ConversationBrief
- * @throws NoSuchElementException 当 [ConversationType.fromCode] 找不到对应 code（数据损坏）
  */
 fun ConversationEntity.toConversationBrief(
     displayName: String,
@@ -41,7 +40,8 @@ fun ConversationEntity.toConversationBrief(
 ): ConversationBrief {
     return ConversationBrief.newBuilder()
         .setConversationId(requireNotNull(id) { "会话ID不能为null" })
-        .setType(ConversationType.fromCode(type).name.lowercase())
+        // M23: type 改为 proto enum（ConversationType），取代 common 端 ConversationType + .name.lowercase() 转换
+        .setType(ConversationType.forNumber(type))
         .setName(displayName)
         .setAvatarUrl(avatar)
         .setLastMessageId(lastMessageId)

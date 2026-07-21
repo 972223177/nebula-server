@@ -76,11 +76,20 @@ message GroupMembersResp {
   repeated com.nebula.chat.group.GroupMember members = 1; // 群成员列表
 }
 
+// 会话类型
+// - proto3 要求第一个值为 0，加 UNKNOWN 哑值
+// - 业务值与 SQL DDL 一致：PRIVATE=1（私聊）, GROUP=2（群聊）
+enum ConversationType {
+  CONVERSATION_TYPE_UNKNOWN = 0;      // 未知/未设置（proto3 哑值，不应在业务中出现）
+  PRIVATE = 1;                        // 私聊会话
+  GROUP = 2;                          // 群聊会话
+}
+
 // 会话简要信息
 // 未读数由客户端根据 last_read_msg_id 自行计算
 message ConversationBrief {
   string conversation_id = 1;         // 会话ID
-  string type = 2;                    // 会话类型：private / group
+  ConversationType type = 2;          // 会话类型（M23: 由 string "private"/"group" 改为 enum，与 FriendRequestStatus 风格一致）
   string name = 3;                    // 会话名称
   string avatar_url = 4;              // 会话头像 URL
   int64 last_message_id = 5;          // 最后一条消息 ID
