@@ -429,7 +429,7 @@ class FriendService(
                 .setFromAvatar(user?.avatar ?: "")
                 .setMessage(reqEntity.message)
                 // M22: status 改为 proto enum（FriendRequestStatus），取代原 string 转换
-                .setStatus(com.nebula.chat.friend.FriendRequestStatus.forNumber(reqEntity.status))
+                .setStatus(FriendRequestStatus.forNumber(reqEntity.status))
                 .setCreatedAt(reqEntity.createdAt?.toEpochMillis() ?: 0)
                 .setDirection(FriendRequestDirection.INCOMING)
                 .build())
@@ -445,7 +445,7 @@ class FriendService(
                 .setFromAvatar(user?.avatar ?: "")
                 .setMessage(reqEntity.message)
                 // M22: status 改为 proto enum（FriendRequestStatus），取代原 string 转换
-                .setStatus(com.nebula.chat.friend.FriendRequestStatus.forNumber(reqEntity.status))
+                .setStatus(FriendRequestStatus.forNumber(reqEntity.status))
                 .setCreatedAt(reqEntity.createdAt?.toEpochMillis() ?: 0)
                 .setDirection(FriendRequestDirection.OUTGOING)
                 .build())
