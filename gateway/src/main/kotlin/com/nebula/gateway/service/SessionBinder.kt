@@ -163,16 +163,12 @@ internal class SessionBinder(
         }
 
         // D-67: 激活缓存再投递
-        if (evictedToken != null) {
-            // eviction callback 在 registerWithDeviceType 中同步执行完成
-            // 注意：如果旧连接清理超过 10s，缓冲区超时保护会强制激活投递。
-            // 此时旧连接可能仍在，投递到旧连接的消息在 onCompleted 后丢失。
-            // 这是"防饿死"权衡：宁可丢失少量消息也不阻塞新连接。
-            // 丢失的消息可通过 Phase 10 的 gap detect + auto-pull 恢复。
-            observer.activateDelivery()
-        } else {
-            // 无旧连接，直接激活投递（首次登录或超时重连后旧连接已清理）
-            observer.deliveryActive = true
-        }
+        // 不论 evictedToken 是否为 null，均需 activateDelivery() 来 flush pendingBuffer：
+        // - evictedToken != null: 同类型设备互踢，旧连接清理期间 push 进缓存，需 flush
+        // - evictedToken == null: register 后、deliveryActive=true 设置前的窗口期内，
+        //   若有 push（如 FRIEND_REQUEST）通过 PushService 命中本 observer，会因 deliveryActive=false
+        //   而被缓存到 pendingBuffer。若仅设标志不 flush，该消息将永久丢失。
+        //   修复点：之前 else 分支仅 `observer.deliveryActive = true`，未 flush 缓存 → BUG
+        observer.activateDelivery()
     }
 }

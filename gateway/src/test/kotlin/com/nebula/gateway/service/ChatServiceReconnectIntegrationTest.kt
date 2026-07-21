@@ -513,6 +513,48 @@ class ChatServiceReconnectIntegrationTest {
         assert(deliveryActive) { "Expected deliveryActive to be true after first login" }
     }
 
+    /**
+     * 修复 race condition：register 之后、deliveryActive=true 之前若有 push 命中 observer，
+     * 消息会被缓存到 pendingBuffer。bind() 必须 flush 该缓存，否则消息永久丢失
+     * （典型场景：用户1 在用户2 完成登录的微小窗口内发起 friend/add，FRIEND_REQUEST 进
+     * pendingBuffer 后永远不会被投递，用户2 在线却收不到好友申请）。
+     */
+    @Test
+    fun handleLoginSuccessShouldFlushPendingBufferWhenNoEvictedToken() = runTest {
+        // 使用 runTest 的 TestScope 重建 ChatService，确保所有 fire-and-forget 协程跟随完成
+        chatService = createChatService(scope = this)
+
+        // Given: 创建 ChatStreamObserver，首次注册无旧连接被驱逐
+        val observer = createChatStreamObserver(mockResponseObserver)
+        coEvery { sessionRegistry.registerWithDeviceType(any()) } returns null
+        coEvery { friendService.findFriendsByUserId(any()) } returns emptyList()
+        coEvery { onlineStatusService.setOnline(any()) } returns Unit
+
+        // 模拟 race condition：register 之后、deliveryActive=true 之前 push 进 pendingBuffer
+        // （如 FRIEND_REQUEST 在用户2 登录窗口内由用户1 发起）
+        val pendingBuffer: ConcurrentLinkedQueue<Envelope> = getField(observer, "pendingBuffer")
+        val friendRequestEnvelope = Envelope.newBuilder()
+            .setDirection(Direction.PUSH)
+            .setRequestId("friend-request-race")
+            .build()
+        pendingBuffer.add(friendRequestEnvelope)
+        assert(pendingBuffer.size == 1) { "Expected pendingBuffer pre-populated with 1 push" }
+
+        val response = buildLoginResponse()
+
+        // When: 通过反射调用 handleLoginSuccess
+        callHandleLoginSuccess(observer, response)
+
+        // Then: pendingBuffer 中的 push 必须被投递（不能永久丢失）
+        verify(exactly = 1) { mockResponseObserver.onNext(friendRequestEnvelope) }
+        assert(pendingBuffer.isEmpty()) {
+            "Expected pendingBuffer to be flushed after login bind, got ${pendingBuffer.size} buffered"
+        }
+        // deliveryActive = true
+        val deliveryActive: Boolean = getField(observer, "deliveryActive")
+        assert(deliveryActive) { "Expected deliveryActive to be true after first login" }
+    }
+
     @Test
     fun handleLoginSuccessShouldActivateDeliveryWhenEvictedTokenExists() = runTest {
         // 使用 runTest 的 TestScope 重建 ChatService，确保所有 fire-and-forget 协程跟随完成
