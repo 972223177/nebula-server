@@ -138,20 +138,29 @@ class FriendService(
             // 好友申请通过模式检查（使用 Protobuf 枚举，与 UserPrivacyService 返回类型一致）
             when (approvalMode) {
                 FriendApprovalMode.AUTO_REJECT -> {
-                    // 自动拒绝：直接创建 status=2 的申请记录，不推送通知
+                    // 自动拒绝：直接创建/复用 status=2 的申请记录，不推送通知
                     logger.info { "好友申请自动拒绝: fromUid=$fromUid, toUid=$toUid, mode=AUTO_REJECT" }
-                    val requestEntity = FriendRequestEntity(
-                        fromUid = fromUid,
-                        toUid = toUid,
-                        status = 2,
-                        message = req.message
-                    ).apply {
-                        createdAt = LocalDateTime.now()
-                        updatedAt = LocalDateTime.now()
+                    // 复用既有 (from_uid, to_uid) 记录，避免重复插入触发 uk_from_to_status 冲突（D-80）
+                    val autoRejectEntity = friendRequestDao.findByFromUidAndToUid(em, fromUid, toUid)
+                    val requestId = if (autoRejectEntity != null) {
+                        autoRejectEntity.message = req.message
+                        autoRejectEntity.status = 2
+                        autoRejectEntity.updatedAt = LocalDateTime.now()
+                        autoRejectEntity.id ?: 0L
+                    } else {
+                        val entity = FriendRequestEntity(
+                            fromUid = fromUid,
+                            toUid = toUid,
+                            status = 2,
+                            message = req.message
+                        ).apply {
+                            createdAt = LocalDateTime.now()
+                            updatedAt = LocalDateTime.now()
+                        }
+                        friendRequestDao.insert(em, entity).id ?: 0L
                     }
-                    val savedRequest = friendRequestDao.insert(em, requestEntity)
                     return@execute FriendAddResult(
-                        requestId = savedRequest.id ?: 0L,
+                        requestId = requestId,
                         isMutualAccept = false,
                         isAutoAccepted = false,
                         isAutoRejected = true,
@@ -200,10 +209,30 @@ class FriendService(
                 )
             }
 
-            // 检查是否已有待处理申请
-            val existingRequest = friendRequestDao.findByFromUidAndToUidAndStatus(em, fromUid, toUid, 0)
+            // 检查是否已有同一 (from_uid, to_uid) 方向的申请
+            val existingRequest = friendRequestDao.findByFromUidAndToUid(em, fromUid, toUid)
             if (existingRequest != null) {
-                throw FriendException(BizCode.REQUEST_HANDLED, "已存在待处理的好友申请")
+                when (existingRequest.status) {
+                    // 已存在待处理申请：幂等拒绝
+                    0 -> throw FriendException(BizCode.REQUEST_HANDLED, "已存在待处理的好友申请")
+                    // 已拒绝/已接受等非 pending 历史记录：复用该记录并重置为待处理，
+                    // 避免同一 (from_uid, to_uid) 重复插入不同 status 行而触发
+                    // uk_from_to_status 唯一约束冲突（D-80）
+                    else -> {
+                        existingRequest.message = req.message
+                        existingRequest.status = 0
+                        existingRequest.updatedAt = LocalDateTime.now()
+                        return@execute FriendAddResult(
+                            requestId = existingRequest.id ?: 0L,
+                            isMutualAccept = false,
+                            isAutoAccepted = false,
+                            isAutoRejected = false,
+                            convId = null,
+                            fromUid = fromUid,
+                            toUid = toUid
+                        )
+                    }
+                }
             }
 
             // 创建好友申请
