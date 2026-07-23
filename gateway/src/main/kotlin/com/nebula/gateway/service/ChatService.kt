@@ -5,6 +5,7 @@ import com.nebula.common.BizCode
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.DeliverableStreamObserver
+import com.nebula.gateway.session.EvictionReason
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.service.admin.DeadLetterService
@@ -35,7 +36,7 @@ private const val DELIVERY_TIMEOUT_MS = 10_000L
  * 职责：
  * - 实现 BindableService，注册 name=[SERVICE_NAME] 的 BIDI_STREAMING gRPC 服务
  * - 接收 Envelope 消息，根据 Direction 分发给 Dispatcher 或 PingProcessor
- * - 维护 tokenToObserver 映射，支持同类型设备互踢时的 LOGOUT 推送（D-05 eviction callback）
+ * - 维护 tokenToObserver 映射，支持同类型设备互踢时经 eviction callback 推送 DISCONNECT 并关闭旧连接（D-05）
  * - 在 onCompleted()/onError() 中清理 tokenToObserver/UserStreamRegistry，防止内存泄漏
  * - 装配子组件：SessionBinder（登录绑定）、LoginBindingInterceptor（响应拦截）、
  *   PingProcessor（心跳）、FriendStatusNotifier（在线广播）
@@ -593,34 +594,34 @@ class ChatService(
      */
     private fun ensureEvictionCallbackRegistered() {
         if (evictionCallbackRegistered.compareAndSet(false, true)) {
-            sessionRegistry.onEviction { token ->
-                // 仅 peek 取 observer 引用用于推送 DISCONNECT：tokenToObserver 的删除统一收归
+            sessionRegistry.onEviction { token, reason ->
+                // 仅 peek 取 observer 引用：tokenToObserver 的删除统一收归
                 // cleanupConnection（onCompleted 内）单一出口，避免 eviction 与 cleanupConnection 双重删除。
                 val observer = tokenToObserver[token] ?: return@onEviction
-                // 2026-07 review F1：改为 serverScope.launch 异步写穿，避免 runBlocking 阻塞登录请求协程（互踢场景）。
-                // serverScope 不受连接取消链（connectionScope.cancel）影响，DISCONNECT 不会被取消，写穿比 runBlocking 更可靠。
-                // sendEnvelope 与 onCompleted 必须在同一 launch 块内顺序执行：sendMutex 保证 DISCONNECT 的 onNext
-                // 先于 onCompleted() 的 responseObserver.onCompleted() 写穿；onCompleted 内部不持 sendMutex，无重入风险。
                 serverScope.launch {
-                    // Step 1: 推送 DISCONNECT 通知（D-68, D-85）。
-                    try {
-                        val disconnectEnvelope = Envelope.newBuilder()
-                            .setDirection(Direction.PUSH)
-                            .setRequestId("")  // 系统推送无 request_id
-                            .setMessage(Message.newBuilder()
-                                .setEventType(PushEventType.DISCONNECT)
-                                .setContent("连接将被关闭，请触发重连流程")
-                                .build())
-                            .build()
-                        val chatObserver = observer as? ChatStreamObserver
-                        if (chatObserver != null) {
-                            chatObserver.sendEnvelope(disconnectEnvelope)
-                        } else {
-                            observer.onNext(disconnectEnvelope)
+                    // 仅互踢（KICK）需向被驱逐连接推送 DISCONNECT 通知其被踢下线；
+                    // 主动登出（LOGOUT）被驱逐的就是发起登出的连接自身，客户端已主动退出，无需推送（AUTH-06）。
+                    if (reason == EvictionReason.KICK) {
+                        // Step 1: 推送 DISCONNECT 通知（D-68, D-85）
+                        try {
+                            val disconnectEnvelope = Envelope.newBuilder()
+                                .setDirection(Direction.PUSH)
+                                .setRequestId("")  // 系统推送无 request_id
+                                .setMessage(Message.newBuilder()
+                                    .setEventType(PushEventType.DISCONNECT)
+                                    .setContent("连接将被关闭，请触发重连流程")
+                                    .build())
+                                .build()
+                            val chatObserver = observer as? ChatStreamObserver
+                            if (chatObserver != null) {
+                                chatObserver.sendEnvelope(disconnectEnvelope)
+                            } else {
+                                observer.onNext(disconnectEnvelope)
+                            }
+                        } catch (e: Exception) {
+                            // 连接可能已损坏，推送失败不阻塞清理
+                            logger.warn(e) { "Failed to push DISCONNECT, connection may already be broken" }
                         }
-                    } catch (e: Exception) {
-                        // 连接可能已损坏，推送失败不阻塞清理
-                        logger.warn(e) { "Failed to push DISCONNECT, connection may already be broken" }
                     }
 
                     // Step 2: 关闭连接（触发 cleanupConnection）

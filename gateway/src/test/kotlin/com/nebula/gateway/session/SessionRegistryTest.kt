@@ -92,13 +92,15 @@ class SessionRegistryTest {
         registry.addToLocalCache(testSession)
 
         var callbackToken: String? = null
-        registry.onEviction { token -> callbackToken = token }
+        var callbackReason: EvictionReason? = null
+        registry.onEviction { token, reason -> callbackToken = token; callbackReason = reason }
 
         registry.unregister(testSession.token)
 
-        // 验证回调被触发
+        // 验证回调被触发且透传默认原因 KICK
         assertNotNull(callbackToken)
         assertEquals(testSession.token, callbackToken)
+        assertEquals(EvictionReason.KICK, callbackReason)
 
         // 验证 L1 已移除
         val cached = registry.getFromLocalCache(testSession.token)

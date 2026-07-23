@@ -3,6 +3,7 @@ package com.nebula.gateway.handler.user
 import com.nebula.chat.user.LogoutReq
 import com.nebula.common.BizCode
 import com.nebula.gateway.handler.SessionKey
+import com.nebula.gateway.session.EvictionReason
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.session.SessionRegistry
 import io.mockk.coVerify
@@ -40,6 +41,6 @@ class LogoutHandlerTest {
 
         assertEquals(BizCode.OK.code, resp.code)
         assertEquals("user/logout", resp.method)
-        coVerify(exactly = 1) { sessionRegistry.unregister("logout-token-abc") }
+        coVerify(exactly = 1) { sessionRegistry.unregister("logout-token-abc", EvictionReason.LOGOUT) }
     }
 }

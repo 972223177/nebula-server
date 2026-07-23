@@ -12,6 +12,17 @@ import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
+ * 驱逐原因 — 区分「主动登出」与「同设备互踢」，决定 eviction 回调是否向被驱逐连接推送 DISCONNECT（AUTH-06）。
+ *
+ * - [KICK]: 同设备互踢（新登录驱逐旧连接），被驱逐的是**其他连接**，需推送 DISCONNECT 通知其被踢下线
+ * - [LOGOUT]: 主动登出（user/logout），被驱逐的就是**发起登出的连接自身**，无需推送 DISCONNECT（客户端已主动退出）
+ */
+enum class EvictionReason {
+    KICK,
+    LOGOUT
+}
+
+/**
  * Session 注册中心 — L1(ConcurrentHashMap) + L2(SessionStore) 二级缓存（D-18）。
  *
  * 职责：
@@ -39,7 +50,7 @@ class SessionRegistry(
     private val deviceTypeIndex = ConcurrentHashMap<String, String>()
 
     /** 缓存驱逐回调列表 — 当 Session 被驱逐时通知关闭 StreamObserver（D-20） */
-    private val evictionCallbacks = CopyOnWriteArrayList<(String) -> Unit>()
+    private val evictionCallbacks = CopyOnWriteArrayList<(String, EvictionReason) -> Unit>()
 
     /** Json 实例用于 Session 与 JSON 互转，存储到 Redis */
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
@@ -73,7 +84,7 @@ class SessionRegistry(
      *
      * @param callback 接收 token 参数的回调函数
      */
-    fun onEviction(callback: (token: String) -> Unit) {
+    fun onEviction(callback: (token: String, reason: EvictionReason) -> Unit) {
         evictionCallbacks.add(callback)
     }
 
@@ -310,11 +321,13 @@ class SessionRegistry(
      * - [removeFromLocalCache] = 仅清 L1，保留 L2。——用于断连清理，支持重连。
      *
      * @param token 待注销的 Session Token
+     * @param reason 驱逐原因（[EvictionReason.KICK] 互踢需推送 DISCONNECT / [EvictionReason.LOGOUT] 主动登出仅关流），
+     *   默认 [EvictionReason.KICK]，保证既有互踢调用方无需改动
      */
-    suspend fun unregister(token: String) {
+    suspend fun unregister(token: String, reason: EvictionReason = EvictionReason.KICK) {
         val session = removeFromLocalCache(token)
         removeFromRedis(token)
-        evictionCallbacks.forEach { it(token) }
+        evictionCallbacks.forEach { it(token, reason) }
         // 清理 Redis 设备类型映射（D-05）
         if (session != null) {
             deleteDeviceTypeMapping(session)

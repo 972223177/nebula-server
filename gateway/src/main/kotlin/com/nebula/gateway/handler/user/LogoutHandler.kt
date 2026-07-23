@@ -5,6 +5,7 @@ import com.nebula.chat.user.LogoutReq
 import com.nebula.common.BizCode
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
+import com.nebula.gateway.session.EvictionReason
 import com.nebula.gateway.session.SessionRegistry
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.currentCoroutineContext
@@ -15,8 +16,9 @@ import kotlinx.coroutines.currentCoroutineContext
  * 职责：
  * - 从协程上下文取出当前 Session，调用 [SessionRegistry.unregister] 主动下线
  *   （L1 本地缓存 + L2 Redis + 设备类型映射全清，token 彻底失效）
- * - unregister 触发 eviction 回调，向本连接推送 DISCONNECT 并关闭 gRPC 流；
- *   客户端据此主动重建连接并以新账号登录，实现「切换账号 = 关闭旧流 + 新流登录」
+ * - unregister 触发 eviction 回调并以 [EvictionReason.LOGOUT] 关闭本连接 gRPC 流；
+ *   主动登出不推送 DISCONNECT（被驱逐的就是发起登出的连接自身，客户端已主动退出），
+ *   避免客户端把登出误判为「被其他设备踢下线」
  *
  * 设计决策（AUTH-06）：
  * - 复用系统已有的「同设备互踢」eviction 机制来关闭连接，不新增连接管理代码
@@ -36,8 +38,8 @@ class LogoutHandler(
         val userId = session.userId
         val token = session.token
 
-        // AUTH-06: 主动注销当前 Session，token 立即失效；eviction 回调会推送 LOGOUT 并关闭本连接
-        sessionRegistry.unregister(token)
+        // AUTH-06: 主动注销当前 Session，token 立即失效；以 LOGOUT 原因触发 eviction 仅关闭本连接，不推送 DISCONNECT
+        sessionRegistry.unregister(token, EvictionReason.LOGOUT)
 
         logger.info { "用户退出登录: userId=$userId, token=${token.take(8)}..." }
         return Response.newBuilder()

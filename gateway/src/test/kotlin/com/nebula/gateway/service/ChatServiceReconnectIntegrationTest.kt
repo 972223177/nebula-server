@@ -8,6 +8,7 @@ import com.nebula.chat.common.DeviceType
 import com.nebula.chat.user.LoginResp
 import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.push.PushService
+import com.nebula.gateway.session.EvictionReason
 import com.nebula.gateway.session.SessionRegistry
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.service.admin.DeadLetterService
@@ -55,7 +56,7 @@ class ChatServiceReconnectIntegrationTest {
 
     // 反射相关
     private lateinit var chatStreamObserverClass: Class<*>
-    private lateinit var evictionCallback: (String) -> Unit
+    private lateinit var evictionCallback: (String, EvictionReason) -> Unit
 
     /** 反射获取 private 字段值 */
     @Suppress("UNCHECKED_CAST")
@@ -225,7 +226,7 @@ class ChatServiceReconnectIntegrationTest {
         mockResponseObserver = mockk(relaxed = true)
 
         // 捕获 eviction callback
-        var capturedCallback: ((String) -> Unit)? = null
+        var capturedCallback: ((String, EvictionReason) -> Unit)? = null
         every { sessionRegistry.onEviction(any()) } answers {
             capturedCallback = firstArg()
         }
@@ -236,7 +237,7 @@ class ChatServiceReconnectIntegrationTest {
         chatStreamObserverClass = ChatService::class.java.declaredClasses
             .first { it.simpleName == "ChatStreamObserver" }
 
-        evictionCallback = { token -> capturedCallback?.invoke(token) }
+        evictionCallback = { token, reason -> capturedCallback?.invoke(token, reason) }
     }
 
     /**
@@ -598,7 +599,7 @@ class ChatServiceReconnectIntegrationTest {
 
         // When: 触发 eviction callback（匹配的 token），并推进协程使异步链（DISCONNECT + onCompleted →
         // cleanupConnection）执行完毕；userId 为 null 时不启动 60s 延迟离线协程，runCurrent 即可收敛。
-        evictionCallback("target-token")
+        evictionCallback("target-token", EvictionReason.KICK)
         testScheduler.runCurrent()
 
         // Then:
@@ -620,13 +621,41 @@ class ChatServiceReconnectIntegrationTest {
     }
 
     @Test
+    fun evictionCallbackWithLogoutReasonShouldCloseWithoutDISCONNECT() = runTest {
+        // Given: 主动登出（LOGOUT）场景，eviction 不应推送 DISCONNECT，仅关闭连接（AUTH-06）。
+        // 使用独立 mock responseObserver 隔离其他测试的 onNext 记录，确保 exactly = 0 断言准确。
+        chatService = createChatService(scope = this)
+        ensureEvictionRegistered()
+        val localResponseObserver = mockk<StreamObserver<Envelope>>(relaxed = true)
+        val evictedObserver = createChatStreamObserver(localResponseObserver)
+        setField(evictedObserver, "token", "target-token")
+        val tokenToObserver: ConcurrentHashMap<String, StreamObserver<Envelope>> =
+            getField(chatService, "tokenToObserver")
+        tokenToObserver["target-token"] = evictedObserver
+
+        // When: 以 LOGOUT 原因触发 eviction，并推进协程
+        evictionCallback("target-token", EvictionReason.LOGOUT)
+        testScheduler.runCurrent()
+
+        // Then:
+        // 1. token 由 cleanupConnection 移除（与 KICK 一致）
+        assert(!tokenToObserver.containsKey("target-token")) {
+            "Expected token removed from tokenToObserver by cleanupConnection"
+        }
+        // 2. 不推送 DISCONNECT（主动登出无需通知自身）
+        verify(exactly = 0) { localResponseObserver.onNext(any()) }
+        // 3. 仍关闭连接
+        verify(exactly = 1) { localResponseObserver.onCompleted() }
+    }
+
+    @Test
     fun evictionCallbackShouldSkipWhenTokenNotInTokenToObserver() {
         // Given: 确保 eviction callback 已注册 + tokenToObserver 为空
         ensureEvictionRegistered()
         val evictedObserver = mockk<StreamObserver<Envelope>>(relaxed = true)
 
         // When: 触发 eviction callback（不存在的 token）
-        evictionCallback("unknown-token")
+        evictionCallback("unknown-token", EvictionReason.KICK)
 
         // Then: 没有任何 observer 被操作
         verify(exactly = 0) { evictedObserver.onNext(any()) }
