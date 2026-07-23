@@ -8,12 +8,13 @@ import org.koin.dsl.module
 /**
  * 用户业务 Handler Koin 模块 — 注册 User 相关的 Handler 和组件。
  *
- * Phase 5: 包含 PingHandler + 8 个用户业务 Handler
+ * Phase 5: 包含 PingHandler + 9 个用户业务 Handler（login/logout/register/search/getProfile/batchGet/batchGetStatus/setPrivacy/getPrivacy）
  * Handler 依赖 Service 层而非直接依赖 Repository。
  */
 val userHandlerModule = module {
     // Phase 5: User Handler — 依赖 Service 层
     single { LoginHandler(get(), get()) }                     // UserService + SessionRegistry
+    single { LogoutHandler(get()) }                            // SessionRegistry（AUTH-06 主动下线）
     single { RegisterHandler(get(), get()) }                   // SensitiveWordService + UserService
     single { SearchUserHandler(get()) }                       // UserService
     single { GetProfileHandler(get()) }                       // UserService
@@ -24,6 +25,6 @@ val userHandlerModule = module {
 
     // HandlerCollector 注册
     single<HandlerCollector>(named("user")) { UserHandlerCollector(
-        get(), get(), get(), get(), get(), get(), get(), get()
+        get(), get(), get(), get(), get(), get(), get(), get(), get()
     ) }
 }

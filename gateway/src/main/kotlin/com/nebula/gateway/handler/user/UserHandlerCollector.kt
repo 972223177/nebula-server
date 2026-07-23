@@ -9,6 +9,7 @@ import com.nebula.gateway.handler.HandlerCollector
  */
 class UserHandlerCollector(
     private val loginHandler: LoginHandler,
+    private val logoutHandler: LogoutHandler,
     private val registerHandler: RegisterHandler,
     private val searchUserHandler: SearchUserHandler,
     private val getProfileHandler: GetProfileHandler,
@@ -20,6 +21,7 @@ class UserHandlerCollector(
 
     override fun registerAll(registry: HandlerRegistry) {
         registry.register(loginHandler)
+        registry.register(logoutHandler)
         registry.register(registerHandler)
         registry.register(searchUserHandler)
         registry.register(getProfileHandler)

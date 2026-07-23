@@ -132,6 +132,7 @@ class GatewayModuleTest {
         // Phase 5: User Handler
         single { PingHandler() }
         single { LoginHandler(userService, get()) }
+        single { LogoutHandler(get()) }
         single { RegisterHandler(sensitiveWordService, userService) }
         single { SearchUserHandler(userService) }
         single { GetProfileHandler(userService) }
@@ -228,6 +229,7 @@ class GatewayModuleTest {
 
         val userCollector = com.nebula.gateway.handler.user.UserHandlerCollector(
             GlobalContext.get().get<LoginHandler>(),
+            GlobalContext.get().get<LogoutHandler>(),
             GlobalContext.get().get<RegisterHandler>(),
             GlobalContext.get().get<SearchUserHandler>(),
             GlobalContext.get().get<GetProfileHandler>(),
@@ -278,6 +280,7 @@ class GatewayModuleTest {
 
         // Phase 5: User Handler
         assertNotNull(registry.get("user/login"))
+        assertNotNull(registry.get("user/logout"))
         assertNotNull(registry.get("user/register"))
         assertNotNull(registry.get("user/search"))
         assertNotNull(registry.get("user/getProfile"))
@@ -425,6 +428,7 @@ class GatewayModuleTest {
         val registry = GlobalContext.get().get<HandlerRegistry>()
         val collector = UserHandlerCollector(
             GlobalContext.get().get<LoginHandler>(),
+            GlobalContext.get().get<LogoutHandler>(),
             GlobalContext.get().get<RegisterHandler>(),
             GlobalContext.get().get<SearchUserHandler>(),
             GlobalContext.get().get<GetProfileHandler>(),
@@ -435,6 +439,7 @@ class GatewayModuleTest {
         )
         collector.registerAll(registry)
         assertNotNull(registry.get("user/login"))
+        assertNotNull(registry.get("user/logout"))
         assertNotNull(registry.get("user/register"))
         assertNotNull(registry.get("user/search"))
         assertNotNull(registry.get("user/getProfile"))

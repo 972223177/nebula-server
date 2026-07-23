@@ -19,6 +19,7 @@ class UserHandlerCollectorTest {
         val registry = HandlerRegistry()
         val collector = UserHandlerCollector(
             loginHandler = mockk { every { method } returns "user/login" },
+            logoutHandler = mockk { every { method } returns "user/logout" },
             registerHandler = mockk { every { method } returns "user/register" },
             searchUserHandler = mockk { every { method } returns "user/search" },
             getProfileHandler = mockk { every { method } returns "user/getProfile" },
@@ -31,6 +32,7 @@ class UserHandlerCollectorTest {
         collector.registerAll(registry)
 
         assertNotNull(registry.get("user/login"), "user/login 应已注册")
+        assertNotNull(registry.get("user/logout"), "user/logout 应已注册")
         assertNotNull(registry.get("user/register"), "user/register 应已注册")
         assertNotNull(registry.get("user/search"), "user/search 应已注册")
         assertNotNull(registry.get("user/getProfile"), "user/getProfile 应已注册")

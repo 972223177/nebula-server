@@ -580,26 +580,33 @@ class ChatServiceReconnectIntegrationTest {
     // ==================== 第 6 组：tokenToObserver eviction 测试 ====================
 
     @Test
-    fun evictionCallbackShouldRemoveObserverAndPushDISCONNECTWhenTokenMatches() {
-        // Given: 确保 eviction callback 已注册 + tokenToObserver 包含 token→ChatStreamObserver 映射。
+    fun evictionCallbackShouldRemoveObserverAndPushDISCONNECTWhenTokenMatches() = runTest {
+        // Given: 注入 TestScope 作为 serverScope，使 eviction 内的 fire-and-forget 协程（DISCONNECT 推送 +
+        // onCompleted → cleanupConnection）可确定性推进；重建 ChatService 并重新捕获 eviction callback。
         // 注意：必须用真实 ChatStreamObserver 实例（与生产 handleLoginSuccess 存入的类型一致），
         // 否则 eviction 回调走 else 分支（observer.onNext），无法覆盖 P0 修复的真实 if 分支
         // （chatObserver.sendEnvelope 同步写穿 DISCONNECT）。
+        chatService = createChatService(scope = this)
         ensureEvictionRegistered()
         val evictedObserver = createChatStreamObserver(mockResponseObserver)
+        // AUTH-06 优化：eviction 仅 peek 取 observer 引用，tokenToObserver 的删除收归 cleanupConnection
+        // （onCompleted 内）单一出口，因此此处必须设置 token 字段供 cleanupConnection 精确删除。
+        setField(evictedObserver, "token", "target-token")
         val tokenToObserver: ConcurrentHashMap<String, StreamObserver<Envelope>> =
             getField(chatService, "tokenToObserver")
         tokenToObserver["target-token"] = evictedObserver
 
-        // When: 触发 eviction callback（匹配的 token）
+        // When: 触发 eviction callback（匹配的 token），并推进协程使异步链（DISCONNECT + onCompleted →
+        // cleanupConnection）执行完毕；userId 为 null 时不启动 60s 延迟离线协程，runCurrent 即可收敛。
         evictionCallback("target-token")
+        testScheduler.runCurrent()
 
         // Then:
-        // 1. tokenToObserver 中已移除该 token
+        // 1. tokenToObserver 中已移除该 token（由 cleanupConnection 在 onCompleted 内完成，而非 eviction）
         assert(!tokenToObserver.containsKey("target-token")) {
-            "Expected token removed from tokenToObserver"
+            "Expected token removed from tokenToObserver by cleanupConnection"
         }
-        // 2. DISCONNECT Envelope 被同步写穿到旧连接的 responseObserver（P0 修复核心断言）
+        // 2. DISCONNECT Envelope 被写穿到旧连接的 responseObserver（P0 修复核心断言）
         val disconnectSlot = slot<Envelope>()
         verify(exactly = 1) { mockResponseObserver.onNext(capture(disconnectSlot)) }
         assert(disconnectSlot.captured.direction == Direction.PUSH) {

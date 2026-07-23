@@ -594,7 +594,9 @@ class ChatService(
     private fun ensureEvictionCallbackRegistered() {
         if (evictionCallbackRegistered.compareAndSet(false, true)) {
             sessionRegistry.onEviction { token ->
-                val observer = tokenToObserver.remove(token) ?: return@onEviction
+                // 仅 peek 取 observer 引用用于推送 DISCONNECT：tokenToObserver 的删除统一收归
+                // cleanupConnection（onCompleted 内）单一出口，避免 eviction 与 cleanupConnection 双重删除。
+                val observer = tokenToObserver[token] ?: return@onEviction
                 // 2026-07 review F1：改为 serverScope.launch 异步写穿，避免 runBlocking 阻塞登录请求协程（互踢场景）。
                 // serverScope 不受连接取消链（connectionScope.cancel）影响，DISCONNECT 不会被取消，写穿比 runBlocking 更可靠。
                 // sendEnvelope 与 onCompleted 必须在同一 launch 块内顺序执行：sendMutex 保证 DISCONNECT 的 onNext

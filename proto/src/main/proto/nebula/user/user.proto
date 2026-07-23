@@ -124,6 +124,13 @@ message GetPrivacyResp {
   FriendApprovalMode friend_approval = 2;  // 好友申请通过模式
 }
 
+// ---- user/logout ----
+// 退出登录请求（空消息，userId/token 由服务端从 Session 中获取）
+// 此接口响应不包含业务数据（无 result 字段），仅通过 Response.code 和 Response.msg 表示操作结果；
+// 登出成功后服务端主动注销当前 Session（L1+L2+设备类型映射全清），并向本连接推送 LOGOUT(DISCONNECT) 后关闭连接，
+// 客户端收到后应主动重建 gRPC 流并以新账号登录（即“切换账号 = 关闭旧流 + 新流登录”）。
+message LogoutReq {}
+
 // 用户简要信息（多接口复用）
 message UserBrief {
   int64 uid = 1;                      // 用户 UID
