@@ -196,7 +196,7 @@ class SendMessageHandlerTest {
             }
         }
         assertEquals(BizCode.INTERNAL_ERROR, exception.bizCode)
-        assertTrue(exception.message!!.contains("Redis connection timeout"))
+        assertTrue(exception.message.contains("Redis connection timeout"))
     }
 
     /**
@@ -225,10 +225,16 @@ class SendMessageHandlerTest {
         // （真实多成员 + Redis 写入路径由集成测试覆盖）。
         coEvery { conversationService.getConversationMembers("conv-001") } returns emptyList()
 
-        // 调用方协程（模拟发送方连接上下文）
+        // 使用 TestScope 作为 serverScope（推送挂在其上），使推送确定性推进，
+        // 消除原实现依赖 Dispatchers.Default 线程池 + 固定 1s 等待的顺序相关偶发（FLAKE-2026-07）。
+        val testHandler = SendMessageHandler(
+            sensitiveWordService, messageService, pushService, conversationService, connection, this
+        )
+
+        // 调用方协程（模拟发送方连接上下文，仍用真实 Dispatchers.Default 代表真实调用方）
         val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         callerScope.launch(SessionKey(session)) {
-            handler.handle(
+            testHandler.handle(
                 SendMessageReq.newBuilder()
                     .setConversationId("conv-001")
                     .setContent("Hello")
@@ -239,10 +245,10 @@ class SendMessageHandlerTest {
         // 模拟发送方连接断开 / 请求上下文被取消
         callerScope.cancel()
 
-        // 推送挂在 serverScope（= 注入的 scope）上，不受 callerScope 取消影响。
+        // 推送挂在 TestScope（this）上，不随 callerScope 取消而丢失；runCurrent 确定性驱动推送执行。
         // 若 P1 回归（推送错误绑在 callerScope），callerScope.cancel() 会取消它，
         // pushMessageToMembers 不会被调用，coVerify 将失败。
-        delay(1000)
+        testScheduler.runCurrent()
         coVerify(exactly = 1) { pushService.pushMessageToMembers(any(), any()) }
         callerScope.cancel()
     }
