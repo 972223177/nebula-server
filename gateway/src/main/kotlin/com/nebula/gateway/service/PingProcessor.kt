@@ -11,6 +11,13 @@ import kotlinx.coroutines.withContext
 /**
  * PING 心跳处理器（D-27, D-57）。
  *
+ * 处理协议级 Direction.PING（区别于业务 method "system/ping"，见 [com.nebula.gateway.handler.PingHandler]）：
+ * - Direction.PING 在 ChatService.onNext 阶段直接路由到本处理器，绕过 Dispatcher / 认证 / 业务 Handler，
+ *   是最低层、最轻量的保活，且会刷新在线状态 TTL —— 这是客户端主心跳（续活 + 判断连接可用）。
+ * - system/ping 走完整业务管道、跳过认证、但不刷新 TTL，仅作业务链路级探针 / 诊断端点，不用于客户端保活。
+ * 客户端应统一使用 Direction.PING 做心跳：收到对应 requestId 的 Direction.PONG 即判定连接可用；
+ * 超时（建议 10~15s，对等服务端 keepAliveTimeout 10s 量级）未收到则触发重连。
+ *
  * 从 ChatService.handlePing 抽离。PING 是协议级保活，非业务请求，单独成组件职责更清晰。
  * connectionScope 作为方法参数传入（per-connection），绝不注入单例组件，守住"连接态不泄漏"边界。
  *
@@ -31,6 +38,9 @@ internal class PingProcessor(
     //  REQUEST 和 PING 均视为活跃（重置 lastActivityAt）。
     /**
      * 处理 PING 心跳请求，回复 PONG Envelope + 刷新在线状态 TTL（D-27, D-57）。
+     *
+     * 回复的 PONG Envelope 原样带回 [Envelope.getRequestId]，客户端据此将 PONG 与发出的 PING
+     * 配对，判定「整条链路（传输 + 业务）健康、连接可用」；超时未收到配对 PONG 则触发重连。
      *
      * @param envelope PING 请求 Envelope
      * @param observer 当前连接句柄（提供 connectionScope / sendEnvelope）
