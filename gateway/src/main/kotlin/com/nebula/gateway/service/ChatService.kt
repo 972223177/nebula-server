@@ -659,7 +659,14 @@ class ChatService(
          * @return true 表示属可接受的连接中断，可降级日志
          */
         private fun isExpectedDisconnect(cause: Throwable): Boolean {
-            val status = (cause as? StatusException)?.status
+            // 客户端取消触发 onError 时，gRPC 经由 ServerCalls.StreamingServerCallListener.onCancel
+            // 调用 Status.asRuntimeException() 抛出 StatusRuntimeException（非 StatusException），
+            // 二者需分别提取 status，否则 as? StatusException 强转失败导致本方法误判为异常断连。
+            val status = when (cause) {
+                is StatusException -> cause.status
+                is StatusRuntimeException -> cause.status
+                else -> null
+            }
             return status?.code == Status.Code.CANCELLED || cause is CancellationException
         }
     }
