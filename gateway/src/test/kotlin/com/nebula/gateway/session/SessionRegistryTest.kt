@@ -109,4 +109,60 @@ class SessionRegistryTest {
         // 验证 Redis delete 被调用
         coVerify(exactly = 1) { sessionStore.delete(testSession.token) }
     }
+
+    @Test
+    fun peekDeviceTypeTokenReturnsNullWhenNoMapping() {
+        // 未注册任何设备类型映射时，peek 应返回 null
+        assertNull(registry.peekDeviceTypeToken(testSession.userId, testSession.deviceType))
+    }
+
+    @Test
+    fun peekDeviceTypeTokenReturnsExistingToken() = runTest {
+        coEvery { sessionStore.save(any(), any()) } returns Unit
+        coEvery { sessionStore.saveRaw(any(), any()) } returns Unit
+
+        registry.registerWithDeviceType(testSession)
+
+        // 注册后应能 peek 到当前 token
+        assertEquals(testSession.token, registry.peekDeviceTypeToken(testSession.userId, testSession.deviceType))
+    }
+
+    @Test
+    fun replaceSessionSilentlyReplacesMappingWithoutEviction() = runTest {
+        coEvery { sessionStore.save(any(), any()) } returns Unit
+        coEvery { sessionStore.delete(any()) } returns Unit
+        coEvery { sessionStore.saveRaw(any(), any()) } returns Unit
+        coEvery { sessionStore.deleteKey(any()) } returns Unit
+
+        registry.registerWithDeviceType(testSession)
+
+        // 注册驱逐回调，验证静默替换不应触发
+        var evictionFired = false
+        registry.onEviction { _, _ -> evictionFired = true }
+
+        val newSession = testSession.copy(token = "test-token-new", connectionId = "conn-002")
+        val replaced = registry.replaceSessionSilently(newSession)
+
+        // 返回被替换的旧 token
+        assertEquals(testSession.token, replaced)
+        // 关键：静默替换不触发 eviction 回调（AUTH-07 自踢防护）
+        assertEquals(false, evictionFired)
+        // 设备类型映射已指向新 token
+        assertEquals("test-token-new", registry.peekDeviceTypeToken(testSession.userId, testSession.deviceType))
+        // 旧 token 已从 L1 移除，新 token 已写入 L1
+        assertNull(registry.getFromLocalCache(testSession.token))
+        assertNotNull(registry.getFromLocalCache("test-token-new"))
+    }
+
+    @Test
+    fun replaceSessionSilentlyReturnsNullWhenNoExisting() = runTest {
+        coEvery { sessionStore.save(any(), any()) } returns Unit
+        coEvery { sessionStore.saveRaw(any(), any()) } returns Unit
+
+        // 无旧映射时首次静默替换应返回 null（仅写入新映射）
+        val replaced = registry.replaceSessionSilently(testSession)
+
+        assertNull(replaced)
+        assertEquals(testSession.token, registry.peekDeviceTypeToken(testSession.userId, testSession.deviceType))
+    }
 }

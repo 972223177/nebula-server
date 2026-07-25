@@ -107,13 +107,15 @@ internal class SessionBinder(
     }
 
     /**
-     * 绑定 Session 并完成 StreamObserver 注册 + 在线状态通知 + 投递激活（D-05, D-67, CQ-13）。
+     * 绑定 Session 并完成 StreamObserver 注册 + 在线状态通知 + 投递激活（D-05, D-67, CQ-13, AUTH-07）。
      *
      * 由 [bindOnLoginSuccess] 与 [bindOnRegisterSuccess] 共享，避免重复代码。
      * 响应 Envelope 发送已上移到 ChatService（Phase 2），本方法只负责绑定副作用。
      *
      * 流程：
-     * 1. 注册 Session 到 SessionRegistry（同类型设备互踢，返回被驱逐的旧 token）
+     * 1. 判定是否"同一条流重登录（自踢）"：peek 同设备类型旧 token，若其映射的 observer
+     *    与当前 observer 是同一实例，则走 [SessionRegistry.replaceSessionSilently] 静默替换，
+     *    不推送 DISCONNECT（AUTH-07）；否则走 [SessionRegistry.registerWithDeviceType] 正常互踢。
      * 2. 更新 tokenToObserver 映射（清理旧 token，设置新映射）
      * 3. 设置 userId/token/deviceType，取消旧延迟离线任务
      * 4. 注册到 UserStreamRegistry（D-01）
@@ -129,14 +131,31 @@ internal class SessionBinder(
         uid: Long,
         observer: ConnectionContext
     ) {
-        // 注册 Session（同类型设备互踢，返回被驱逐的旧 token）
-        val evictedToken = sessionRegistry.registerWithDeviceType(session)
-        if (evictedToken != null) {
-            logger.info { "同类型设备互踢: userId=${session.userId}, deviceType=${session.deviceType}, evictedToken=${evictedToken.take(8)}..." }
+        // AUTH-07 自踢防护：先 peek 同设备类型旧 token（只读，不驱逐），
+        // 若其映射到与当前【同一】StreamObserver 实例，说明是同一条 gRPC 流上重复 login，
+        // 不应向自身推送 DISCONNECT，改为静默替换映射。
+        val existingToken = sessionRegistry.peekDeviceTypeToken(session.userId, session.deviceType)
+        val selfReLogin = existingToken != null && tokenToObserver[existingToken] === observer
+
+        // 注册 Session：
+        // - 自踢场景：静默替换（不推 DISCONNECT）
+        // - 跨连接重登录：正常互踢（KICK，推 DISCONNECT）
+        val evictedToken = if (selfReLogin) {
+            logger.debug {
+                "同一条流重登录，静默替换映射（自踢防护，不推 DISCONNECT）: " +
+                    "userId=${session.userId}, deviceType=${session.deviceType}, " +
+                    "oldToken=${existingToken!!.take(8)}..., newToken=${session.token.take(8)}..."
+            }
+            sessionRegistry.replaceSessionSilently(session)
+        } else {
+            sessionRegistry.registerWithDeviceType(session)
         }
 
-        // 更新 tokenToObserver：清理旧 token 映射，设置新映射
         if (evictedToken != null) {
+            if (!selfReLogin) {
+                logger.info { "同类型设备互踢: userId=${session.userId}, deviceType=${session.deviceType}, evictedToken=${evictedToken.take(8)}..." }
+            }
+            // 更新 tokenToObserver：清理旧 token 映射（互踢与自踢都需清，防止 stale 映射泄漏），设置新映射
             tokenToObserver.remove(evictedToken)
         }
         tokenToObserver[session.token] = observer

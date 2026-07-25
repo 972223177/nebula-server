@@ -370,6 +370,55 @@ class SessionRegistry(
     }
 
     /**
+     * 仅查询同 userId+deviceType 当前映射的 token，不触发任何驱逐/回调。
+     *
+     * 供 SessionBinder.bind 判断"同一条流重登录（自踢）"：配合调用方持有的 tokenToObserver，
+     * 若查到的旧 token 映射到与当前登录【相同】的 StreamObserver 实例，则判定为自踢，应走
+     * [replaceSessionSilently] 而非 [registerWithDeviceType]。
+     *
+     * 只读查询，绝不修改 deviceTypeIndex / L1 / L2，也绝不触碰 eviction 回调（AUTH-07 自踢防护）。
+     *
+     * @param userId 用户 ID
+     * @param deviceType 设备类型字符串
+     * @return 当前映射的 token，无则 null
+     */
+    fun peekDeviceTypeToken(userId: Long, deviceType: String): String? =
+        deviceTypeIndex[deviceTypeKey(userId, deviceType)]
+
+    /**
+     * 同连接重登录（自踢）场景：用新 Session 静默替换旧 token 映射，不推送 DISCONNECT（AUTH-07）。
+     *
+     * 与 [registerWithDeviceType] 的区别：
+     * 当被驱逐的旧 token 映射到的连接与当前登录连接是【同一 gRPC 流实例】时，若仍走 [unregister]
+     * 会向"当前连接自身"推送 DISCONNECT，导致客户端误判被踢而重连（关联 AUTH-05 互踢 / AUTH-06 登出不推送 DISCONNECT）。
+     * 本方法仅清 L1/L2/设备类型映射并重写新映射，跳过 eviction 回调（不推 DISCONNECT）。
+     *
+     * ⚠️ 调用方（SessionBinder.bind）必须先用 [peekDeviceTypeToken] + tokenToObserver 引用相等
+     * 确认是同一连接，方可调用本方法；跨连接重登录仍应走 [registerWithDeviceType] 触发正常互踢。
+     * 本方法不持有任何 StreamObserver 引用，仅操作 Session 数据，无内存泄漏风险。
+     *
+     * @param session 新 Session
+     * @return 被静默替换的旧 token（供调用方清理 tokenToObserver 旧条目，防止 stale 映射泄漏），无旧映射则 null
+     */
+    suspend fun replaceSessionSilently(session: Session): String? {
+        val key = deviceTypeKey(session.userId, session.deviceType)
+        val existingToken = deviceTypeIndex[key]
+        if (existingToken != null) {
+            // 仅清 L1+L2+设备类型映射，跳过 eviction 回调（不推 DISCONNECT）
+            val oldSession = removeFromLocalCache(existingToken)
+            removeFromRedis(existingToken)
+            if (oldSession != null) deleteDeviceTypeMapping(oldSession)
+        }
+        // 写新映射（L1 + L2 token key）——无论是否有旧映射都写，保证新 Session 生效
+        register(session)
+        // 写设备类型交叉引用
+        saveDeviceTypeMapping(session)
+        // 更新本地索引
+        deviceTypeIndex[key] = session.token
+        return existingToken
+    }
+
+    /**
      * 生成设备类型索引 key。
      *
      * @param userId 用户 ID
