@@ -6,6 +6,8 @@ services:
       # 与 server 的 DB_PASSWORD 同源，统一从项目根 .env 注入（缺失时兜底 root123，仅本地开发）
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root123}
       MYSQL_DATABASE: nebula
+      # 时区与 server 保持一致（Asia/Shanghai, UTC+8），避免两端时区不同导致 timestamp 列 8 小时漂移
+      TZ: Asia/Shanghai
     ports:
       - "3306:3306"
     volumes:
@@ -45,6 +47,9 @@ services:
       SERPER_API_KEY: ${SERPER_API_KEY}
       # 开发环境，自动加载 config/dev.conf 的默认密码
       ENV: dev
+      # 容器时区设为北京时间（UTC+8）：JVM 默认时区与 logback 时间戳均跟随 TZ，
+      # 修复容器内日志比本机慢 8 小时（原默认 UTC）的问题
+      TZ: Asia/Shanghai
     depends_on:
       mysql:
         condition: service_healthy
