@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.conversation.CreateGroupReq
@@ -28,7 +29,7 @@ class CreateGroupHandler(
     private val pushService: PushService
 ) : Handler<CreateGroupReq, CreateGroupResp> {
 
-    override val method: String = "conversation/create_group"
+    override val method: String = MethodNames.Conversation.CREATE_GROUP
 
     override suspend fun handle(req: CreateGroupReq): CreateGroupResp {
         val session = currentCoroutineContext().requireSession()

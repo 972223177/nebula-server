@@ -1,4 +1,5 @@
 package com.nebula.gateway.service
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Direction
 import com.nebula.chat.Envelope
@@ -673,7 +674,7 @@ class ChatServiceReconnectIntegrationTest {
             .setDeviceId("device-001")
             .build()
         return Response.newBuilder()
-            .setMethod("user/login")
+            .setMethod(MethodNames.User.LOGIN)
             .setCode(200)
             .setResult(loginResp.toByteString())
             .build()

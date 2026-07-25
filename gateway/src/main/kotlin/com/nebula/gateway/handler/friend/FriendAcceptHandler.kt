@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.friend
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -29,7 +30,7 @@ class FriendAcceptHandler(
     @Suppress("unused") private val lockManager: ConversationLockManager
 ) : Handler<FriendAcceptReq, Response> {
 
-    override val method: String = "friend/accept"
+    override val method: String = MethodNames.Friend.ACCEPT
 
     override suspend fun handle(req: FriendAcceptReq): Response {
         val session = currentCoroutineContext().requireSession()

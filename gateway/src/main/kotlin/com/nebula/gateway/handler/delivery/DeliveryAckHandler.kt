@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.delivery
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Response
 import com.nebula.chat.message.DeliveryAckPayload
@@ -30,7 +31,7 @@ class DeliveryAckHandler(
     private val conversationService: ConversationService
 ) : Handler<DeliveryAckPayload, Response> {
 
-    override val method: String = "message/delivery_ack"
+    override val method: String = MethodNames.Message.DELIVERY_ACK
 
     companion object {
         private val logger = KotlinLogging.logger {}

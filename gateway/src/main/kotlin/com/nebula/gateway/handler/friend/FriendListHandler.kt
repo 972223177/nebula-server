@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.friend
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.friend.FriendListReq
 import com.nebula.chat.friend.FriendListResp
@@ -18,7 +19,7 @@ class FriendListHandler(
     private val friendService: FriendService
 ) : Handler<FriendListReq, FriendListResp> {
 
-    override val method: String = "friend/list"
+    override val method: String = MethodNames.Friend.LIST
 
     override suspend fun handle(req: FriendListReq): FriendListResp {
         val session = currentCoroutineContext().requireSession()

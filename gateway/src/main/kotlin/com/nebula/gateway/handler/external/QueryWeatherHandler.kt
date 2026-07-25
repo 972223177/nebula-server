@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.external
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.external.WeatherRequest
 import com.nebula.chat.external.WeatherResponse
@@ -22,7 +23,7 @@ class QueryWeatherHandler(
 ) : Handler<WeatherRequest, WeatherResponse> {
 
     /** 路由方法名 */
-    override val method: String = "external/query_weather"
+    override val method: String = MethodNames.External.QUERY_WEATHER
 
     /**
      * 处理天气查询请求。

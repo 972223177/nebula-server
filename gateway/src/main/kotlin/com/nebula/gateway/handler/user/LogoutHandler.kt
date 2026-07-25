@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Response
 import com.nebula.chat.user.LogoutReq
@@ -31,7 +32,7 @@ class LogoutHandler(
     private val sessionRegistry: SessionRegistry
 ) : Handler<LogoutReq, Response> {
 
-    override val method: String = "user/logout"
+    override val method: String = MethodNames.User.LOGOUT
 
     override suspend fun handle(req: LogoutReq): Response {
         val session = currentCoroutineContext().requireSession()

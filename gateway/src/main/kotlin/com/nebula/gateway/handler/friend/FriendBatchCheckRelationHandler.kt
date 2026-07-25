@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.friend
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.friend.FriendBatchCheckRelationReq
 import com.nebula.chat.friend.FriendBatchCheckRelationResp
@@ -20,7 +21,7 @@ class FriendBatchCheckRelationHandler(
     private val friendService: FriendService
 ) : Handler<FriendBatchCheckRelationReq, FriendBatchCheckRelationResp> {
 
-    override val method: String = "friend/batchCheck"
+    override val method: String = MethodNames.Friend.BATCH_CHECK
 
     override suspend fun handle(req: FriendBatchCheckRelationReq): FriendBatchCheckRelationResp {
         val session = currentCoroutineContext().requireSession()

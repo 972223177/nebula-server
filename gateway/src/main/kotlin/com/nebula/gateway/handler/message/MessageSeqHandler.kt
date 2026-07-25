@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.message
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.message.MessageSeqReq
 import com.nebula.chat.message.MessageSeqResp
@@ -21,7 +22,7 @@ class MessageSeqHandler(
     private val seqService: SeqService
 ) : Handler<MessageSeqReq, MessageSeqResp> {
 
-    override val method: String = "message/seq"
+    override val method: String = MethodNames.Message.SEQ
 
     override suspend fun handle(req: MessageSeqReq): MessageSeqResp {
         val session = currentCoroutineContext().requireSession()

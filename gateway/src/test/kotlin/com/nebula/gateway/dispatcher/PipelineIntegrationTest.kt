@@ -1,4 +1,5 @@
 package com.nebula.gateway.dispatcher
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
@@ -68,7 +69,7 @@ class PipelineIntegrationTest {
         // 构建 Interceptor Pipeline — 手动构造（D-07 顺序）
         val sessionRegistry = mockk<SessionRegistry>()
         val interceptors = listOf(
-            AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping")),
+            AuthInterceptor(sessionRegistry, skipMethods = setOf(MethodNames.System.PING)),
             LogInterceptor(),
             RateLimitInterceptor(),
             ExceptionInterceptor()
@@ -76,7 +77,7 @@ class PipelineIntegrationTest {
         val dispatcher = Dispatcher(registry, interceptors)
 
         // 执行 PingHandler 请求
-        val request = Request.newBuilder().setMethod("system/ping").build()
+        val request = Request.newBuilder().setMethod(MethodNames.System.PING).build()
         val response = dispatcher.dispatch(request)
 
         // 验证：ping 请求应返回 200
@@ -119,7 +120,7 @@ class PipelineIntegrationTest {
         // 自定义 AuthInterceptor，覆盖 extractToken 返回固定 token
         val customAuthInterceptor = object : AuthInterceptor(
             sessionRegistry,
-            skipMethods = setOf("system/ping")
+            skipMethods = setOf(MethodNames.System.PING)
         ) {
             override fun extractToken(request: Request): String? = "test-token"
         }

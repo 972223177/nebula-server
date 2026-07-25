@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.SearchUserReq
 import com.nebula.chat.user.SearchUserResp
@@ -17,7 +18,7 @@ class SearchUserHandler(
     private val userService: UserService
 ) : Handler<SearchUserReq, SearchUserResp> {
 
-    override val method: String = "user/search"
+    override val method: String = MethodNames.User.SEARCH
 
     override suspend fun handle(req: SearchUserReq): SearchUserResp {
         return userService.searchUsers(

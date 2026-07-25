@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.BatchGetStatusResp
 import com.nebula.chat.user.BatchIdRequest
@@ -18,7 +19,7 @@ class BatchGetStatusHandler(
     private val privacyService: UserPrivacyService
 ) : Handler<BatchIdRequest, BatchGetStatusResp> {
 
-    override val method: String = "user/batchGetStatus"
+    override val method: String = MethodNames.User.BATCH_GET_STATUS
 
     override suspend fun handle(req: BatchIdRequest): BatchGetStatusResp {
         val hiddenUserIds = privacyService.batchGetHideOnlineStatus(req.uidsList)

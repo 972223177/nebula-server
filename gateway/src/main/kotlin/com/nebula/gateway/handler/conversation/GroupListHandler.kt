@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.conversation.GroupListReq
 import com.nebula.chat.conversation.GroupListResp
@@ -19,7 +20,7 @@ class GroupListHandler(
     private val conversationService: ConversationService
 ) : Handler<GroupListReq, GroupListResp> {
 
-    override val method: String = "conversation/group_list"
+    override val method: String = MethodNames.Conversation.GROUP_LIST
 
     override suspend fun handle(req: GroupListReq): GroupListResp {
         val session = currentCoroutineContext().requireSession()

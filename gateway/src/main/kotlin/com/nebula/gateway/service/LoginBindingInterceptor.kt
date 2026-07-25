@@ -1,4 +1,5 @@
 package com.nebula.gateway.service
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
@@ -26,7 +27,7 @@ internal class LoginBindingInterceptor(
         request: Request
     ): Response {
         when (response.method) {
-            "user/login" -> {
+            MethodNames.User.LOGIN -> {
                 if (response.code == BizCode.OK.code) {
                     logger.info { "[stream] #${observer.connId} 拦截登录成功响应，开始 Session 绑定" }
                     sessionBinder.bindOnLoginSuccess(response, observer)

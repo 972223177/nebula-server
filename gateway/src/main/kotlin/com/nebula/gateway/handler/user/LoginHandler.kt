@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.LoginReq
 import com.nebula.chat.user.LoginResp
@@ -27,7 +28,7 @@ class LoginHandler(
     private val sessionRegistry: SessionRegistry
 ) : Handler<LoginReq, LoginResp> {
 
-    override val method: String = "user/login"
+    override val method: String = MethodNames.User.LOGIN
 
     override suspend fun handle(req: LoginReq): LoginResp {
         // 场景 1: Token 重连（AUTH-02）

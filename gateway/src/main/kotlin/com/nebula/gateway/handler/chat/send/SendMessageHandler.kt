@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.chat.send
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.chat.SendMessageReq
 import com.nebula.chat.chat.SendMessageResp
@@ -55,7 +56,7 @@ class SendMessageHandler(
     private val redis: RedisCoroutinesCommands<String, String> =
         RedisCoroutinesCommandsImpl(connection.reactive())
 
-    override val method: String = "chat/send"
+    override val method: String = MethodNames.Chat.SEND
 
     companion object {
         private val logger = KotlinLogging.logger {}

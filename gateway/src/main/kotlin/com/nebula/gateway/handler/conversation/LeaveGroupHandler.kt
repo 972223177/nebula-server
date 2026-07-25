@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -31,7 +32,7 @@ class LeaveGroupHandler(
     private val pushService: PushService
 ) : Handler<LeaveGroupReq, Response> {
 
-    override val method: String = "conversation/leave_group"
+    override val method: String = MethodNames.Conversation.LEAVE_GROUP
 
     companion object {
         /** 群主角色常量 */

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.GetPrivacyReq
 import com.nebula.chat.user.GetPrivacyResp
@@ -18,7 +19,7 @@ class GetPrivacyHandler(
     private val userPrivacyService: UserPrivacyService
 ) : Handler<GetPrivacyReq, GetPrivacyResp> {
 
-    override val method: String = "user/getPrivacy"
+    override val method: String = MethodNames.User.GET_PRIVACY
 
     override suspend fun handle(req: GetPrivacyReq): GetPrivacyResp {
         val session = currentCoroutineContext().requireSession()

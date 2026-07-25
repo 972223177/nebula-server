@@ -33,7 +33,7 @@ import com.nebula.common.BizCode
 class PingHandler : Handler<Request, Response> {
 
     /** method 路由：system/ping — 应用层心跳探测 */
-    override val method: String = "system/ping"
+    override val method: String = MethodNames.System.PING
 
     /**
      * 处理心跳请求，返回 pong 响应。

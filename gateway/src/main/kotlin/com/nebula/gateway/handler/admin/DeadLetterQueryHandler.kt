@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.admin
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.admin.DeadLetterItem
 import com.nebula.chat.admin.DeadLetterQueryReq
@@ -19,7 +20,7 @@ class DeadLetterQueryHandler(
     private val deadLetterService: DeadLetterService
 ) : Handler<DeadLetterQueryReq, DeadLetterQueryResp> {
 
-    override val method: String = "admin/dead_letters"
+    override val method: String = MethodNames.Admin.DEAD_LETTERS
 
     override suspend fun handle(req: DeadLetterQueryReq): DeadLetterQueryResp {
         val page = if (req.page <= 0) 1 else req.page

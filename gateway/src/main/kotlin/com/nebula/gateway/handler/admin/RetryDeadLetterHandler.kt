@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.admin
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.admin.RetryDeadLetterReq
 import com.nebula.chat.admin.RetryDeadLetterResp
@@ -17,7 +18,7 @@ class RetryDeadLetterHandler(
     private val deadLetterService: DeadLetterService
 ) : Handler<RetryDeadLetterReq, RetryDeadLetterResp> {
 
-    override val method: String = "admin/retry_dead_letter"
+    override val method: String = MethodNames.Admin.RETRY_DEAD_LETTER
 
     override suspend fun handle(req: RetryDeadLetterReq): RetryDeadLetterResp {
         val success = deadLetterService.retry(req.deadLetterId)

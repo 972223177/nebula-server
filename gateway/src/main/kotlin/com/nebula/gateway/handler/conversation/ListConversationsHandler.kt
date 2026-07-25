@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.conversation.ConvListReq
 import com.nebula.chat.conversation.ConvListResp
@@ -18,7 +19,7 @@ class ListConversationsHandler(
     private val conversationService: ConversationService
 ) : Handler<ConvListReq, ConvListResp> {
 
-    override val method: String = "conversation/list"
+    override val method: String = MethodNames.Conversation.LIST
 
     override suspend fun handle(req: ConvListReq): ConvListResp {
         val session = currentCoroutineContext().requireSession()

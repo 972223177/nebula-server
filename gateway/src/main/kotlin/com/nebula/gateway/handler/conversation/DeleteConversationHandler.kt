@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -38,7 +39,7 @@ class DeleteConversationHandler(
     private val pushService: PushService
 ) : Handler<DeleteConversationReq, Response> {
 
-    override val method: String = "conversation/delete"
+    override val method: String = MethodNames.Conversation.DELETE
 
     override suspend fun handle(req: DeleteConversationReq): Response {
         val session = currentCoroutineContext().requireSession()

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.RegisterReq
 import com.nebula.chat.user.RegisterResp
@@ -27,7 +28,7 @@ class RegisterHandler(
     private val userService: UserService
 ) : Handler<RegisterReq, RegisterResp> {
 
-    override val method: String = "user/register"
+    override val method: String = MethodNames.User.REGISTER
 
     override suspend fun handle(req: RegisterReq): RegisterResp {
         // 敏感词检测：昵称含敏感词则拒绝注册，直接报接口错误（CONTENT_VIOLATION）。

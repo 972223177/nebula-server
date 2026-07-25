@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -29,7 +30,7 @@ class InviteMemberHandler(
     private val pushService: PushService
 ) : Handler<InviteMemberReq, Response> {
 
-    override val method: String = "conversation/invite_member"
+    override val method: String = MethodNames.Conversation.INVITE_MEMBER
 
     override suspend fun handle(req: InviteMemberReq): Response {
         val session = currentCoroutineContext().requireSession()

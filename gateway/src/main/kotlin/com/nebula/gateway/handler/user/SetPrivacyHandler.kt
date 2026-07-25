@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -41,7 +42,7 @@ class SetPrivacyHandler(
     private val serverScope: CoroutineScope
 ) : Handler<SetPrivacyReq, Response> {
 
-    override val method: String = "user/setPrivacy"
+    override val method: String = MethodNames.User.SET_PRIVACY
 
     override suspend fun handle(req: SetPrivacyReq): Response {
         val session = currentCoroutineContext().requireSession()

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.friend
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Response
 import com.nebula.chat.friend.FriendRejectReq
@@ -19,7 +20,7 @@ class FriendRejectHandler(
     private val friendService: FriendService
 ) : Handler<FriendRejectReq, Response> {
 
-    override val method: String = "friend/reject"
+    override val method: String = MethodNames.Friend.REJECT
 
     override suspend fun handle(req: FriendRejectReq): Response {
         val session = currentCoroutineContext().requireSession()

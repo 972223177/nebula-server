@@ -1,4 +1,5 @@
 package com.nebula.gateway.di
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.gateway.codec.ProtoCodec
 import com.nebula.gateway.dispatcher.Dispatcher
@@ -51,7 +52,7 @@ val frameworkModule = module {
     // 使用前缀匹配：admin/ 覆盖所有 admin/* 管理接口，system/sensitive_word 覆盖客户端下载接口。
     single<Interceptor>(named("authInterceptor")) { AuthInterceptor(
         get(),
-        skipMethods = setOf("system/ping", "admin/", "system/sensitive_word", "user/login", "user/register")
+        skipMethods = setOf(MethodNames.System.PING, MethodNames.Admin.PREFIX, MethodNames.System.SENSITIVE_WORD_PREFIX, MethodNames.User.LOGIN, MethodNames.User.REGISTER)
     ) }
     single<Interceptor>(named("logInterceptor")) { LogInterceptor() }
     single<Interceptor>(named("rateLimitInterceptor")) { RateLimitInterceptor() }

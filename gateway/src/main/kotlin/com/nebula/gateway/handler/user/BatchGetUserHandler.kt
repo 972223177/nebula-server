@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.BatchGetUserResp
 import com.nebula.chat.user.BatchIdRequest
@@ -16,7 +17,7 @@ class BatchGetUserHandler(
     private val userService: UserService
 ) : Handler<BatchIdRequest, BatchGetUserResp> {
 
-    override val method: String = "user/batchGet"
+    override val method: String = MethodNames.User.BATCH_GET
 
     override suspend fun handle(req: BatchIdRequest): BatchGetUserResp {
         return userService.batchGetUsers(req)

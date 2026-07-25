@@ -1,4 +1,5 @@
 package com.nebula.gateway.di
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.common.sensitiveword.SensitiveWordService
@@ -276,12 +277,12 @@ class GatewayModuleTest {
         friendCollector.registerAll(registry)
 
         // System Handler
-        assertNotNull(registry.get("system/ping"))
+        assertNotNull(registry.get(MethodNames.System.PING))
 
         // Phase 5: User Handler
-        assertNotNull(registry.get("user/login"))
+        assertNotNull(registry.get(MethodNames.User.LOGIN))
         assertNotNull(registry.get("user/logout"))
-        assertNotNull(registry.get("user/register"))
+        assertNotNull(registry.get(MethodNames.User.REGISTER))
         assertNotNull(registry.get("user/search"))
         assertNotNull(registry.get("user/getProfile"))
         assertNotNull(registry.get("user/batchGet"))
@@ -290,7 +291,7 @@ class GatewayModuleTest {
         assertNotNull(registry.get("user/getPrivacy"))
 
         // Phase 6: Chat & Message Handler
-        assertNotNull(registry.get("chat/send"))
+        assertNotNull(registry.get(MethodNames.Chat.SEND))
         assertNotNull(registry.get("message/pull"))
         assertNotNull(registry.get("message/read"))
 
@@ -331,7 +332,7 @@ class GatewayModuleTest {
             GlobalContext.get().get<DeliveryAckHandler>()
         )
         collector.registerAll(registry)
-        assertNotNull(registry.get("chat/send"))
+        assertNotNull(registry.get(MethodNames.Chat.SEND))
         assertNotNull(registry.get("message/pull"))
         assertNotNull(registry.get("message/read"))
         assertNotNull(registry.get("message/seq"))
@@ -414,7 +415,7 @@ class GatewayModuleTest {
         val pingHandler = GlobalContext.get().get<PingHandler>()
         val collector = SystemHandlerCollector(pingHandler)
         collector.registerAll(registry)
-        assertNotNull(registry.get("system/ping"))
+        assertNotNull(registry.get(MethodNames.System.PING))
     }
 
     /**
@@ -438,9 +439,9 @@ class GatewayModuleTest {
             GlobalContext.get().get<GetPrivacyHandler>()
         )
         collector.registerAll(registry)
-        assertNotNull(registry.get("user/login"))
+        assertNotNull(registry.get(MethodNames.User.LOGIN))
         assertNotNull(registry.get("user/logout"))
-        assertNotNull(registry.get("user/register"))
+        assertNotNull(registry.get(MethodNames.User.REGISTER))
         assertNotNull(registry.get("user/search"))
         assertNotNull(registry.get("user/getProfile"))
         assertNotNull(registry.get("user/batchGet"))

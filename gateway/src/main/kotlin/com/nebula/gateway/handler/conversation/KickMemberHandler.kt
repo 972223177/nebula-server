@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -30,7 +31,7 @@ class KickMemberHandler(
     private val pushService: PushService
 ) : Handler<KickMemberReq, Response> {
 
-    override val method: String = "conversation/kick_member"
+    override val method: String = MethodNames.Conversation.KICK_MEMBER
 
     override suspend fun handle(req: KickMemberReq): Response {
         val session = currentCoroutineContext().requireSession()

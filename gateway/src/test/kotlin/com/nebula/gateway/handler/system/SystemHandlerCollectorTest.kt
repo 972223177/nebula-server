@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.system
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.PingHandler
@@ -20,7 +21,7 @@ class SystemHandlerCollectorTest {
 
         collector.registerAll(registry)
 
-        val entry = registry.get("system/ping")
+        val entry = registry.get(MethodNames.System.PING)
         assertNotNull(entry, "system/ping 应已注册")
     }
 }

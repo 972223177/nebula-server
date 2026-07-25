@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.message
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.message.PullMessagesReq
 import com.nebula.chat.message.PullMessagesResp
@@ -18,7 +19,7 @@ class PullMessagesHandler(
     private val messageService: MessageService
 ) : Handler<PullMessagesReq, PullMessagesResp> {
 
-    override val method: String = "message/pull"
+    override val method: String = MethodNames.Message.PULL
 
     override suspend fun handle(req: PullMessagesReq): PullMessagesResp {
         val session = currentCoroutineContext().requireSession()

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.user
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.user.GetProfileReq
 import com.nebula.chat.user.GetProfileResp
@@ -16,7 +17,7 @@ class GetProfileHandler(
     private val userService: UserService
 ) : Handler<GetProfileReq, GetProfileResp> {
 
-    override val method: String = "user/getProfile"
+    override val method: String = MethodNames.User.GET_PROFILE
 
     override suspend fun handle(req: GetProfileReq): GetProfileResp {
         return userService.getProfile(req.uid)

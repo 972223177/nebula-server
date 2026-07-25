@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.external
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.external.SearchRequest
 import com.nebula.chat.external.SearchResponse
@@ -22,7 +23,7 @@ class WebSearchHandler(
 ) : Handler<SearchRequest, SearchResponse> {
 
     /** 路由方法名 */
-    override val method: String = "external/web_search"
+    override val method: String = MethodNames.External.WEB_SEARCH
 
     /**
      * 处理网页搜索请求。

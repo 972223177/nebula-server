@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.chat
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import io.mockk.every
@@ -18,7 +19,7 @@ class ChatHandlerCollectorTest {
     fun registerAllShouldRegisterChatAndMessageHandlers() = runTest {
         val registry = HandlerRegistry()
         val collector = ChatHandlerCollector(
-            sendMessageHandler = mockk { every { method } returns "chat/send" },
+            sendMessageHandler = mockk { every { method } returns MethodNames.Chat.SEND },
             pullMessagesHandler = mockk { every { method } returns "message/pull" },
             readReportHandler = mockk { every { method } returns "message/read" },
             messageSeqHandler = mockk { every { method } returns "message/seq" },
@@ -27,7 +28,7 @@ class ChatHandlerCollectorTest {
 
         collector.registerAll(registry)
 
-        assertNotNull(registry.get("chat/send"), "chat/send 应已注册")
+        assertNotNull(registry.get(MethodNames.Chat.SEND), "chat/send 应已注册")
         assertNotNull(registry.get("message/pull"), "message/pull 应已注册")
         assertNotNull(registry.get("message/read"), "message/read 应已注册")
         assertNotNull(registry.get("message/seq"), "message/seq 应已注册")

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.friend
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Response
 import com.nebula.chat.friend.FriendDeleteReq
@@ -19,7 +20,7 @@ class FriendDeleteHandler(
     private val friendService: FriendService
 ) : Handler<FriendDeleteReq, Response> {
 
-    override val method: String = "friend/delete"
+    override val method: String = MethodNames.Friend.DELETE
 
     override suspend fun handle(req: FriendDeleteReq): Response {
         val session = currentCoroutineContext().requireSession()

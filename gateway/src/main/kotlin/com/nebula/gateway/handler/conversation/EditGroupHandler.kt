@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
@@ -27,7 +28,7 @@ class EditGroupHandler(
     private val pushService: PushService
 ) : Handler<EditGroupReq, Response> {
 
-    override val method: String = "conversation/edit_group_info"
+    override val method: String = MethodNames.Conversation.EDIT_GROUP_INFO
 
     override suspend fun handle(req: EditGroupReq): Response {
         val session = currentCoroutineContext().requireSession()

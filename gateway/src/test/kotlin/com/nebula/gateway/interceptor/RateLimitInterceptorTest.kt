@@ -1,4 +1,5 @@
 package com.nebula.gateway.interceptor
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
@@ -154,7 +155,7 @@ class RateLimitInterceptorTest {
 
         coEvery { mockChain.proceed(any()) } returns Response.newBuilder().setCode(200).build()
 
-        val request = Request.newBuilder().setMethod("chat/send").build()
+        val request = Request.newBuilder().setMethod(MethodNames.Chat.SEND).build()
 
         // When: 第一次获取信号量成功
         val resp1 = withContext(SessionKey(session)) {
@@ -241,7 +242,7 @@ class RateLimitInterceptorTest {
         // When: 同一 IP 发送 5 次注册请求
         val results = (1..5).map {
             val request = Request.newBuilder()
-                .setMethod("user/register")
+                .setMethod(MethodNames.User.REGISTER)
                 .putMetadata("x-client-ip", "10.10.10.10")
                 .build()
             interceptor.intercept(request, mockChain)
@@ -266,14 +267,14 @@ class RateLimitInterceptorTest {
         // When: 同一 IP 发送 6 次注册请求
         repeat(5) {
             val request = Request.newBuilder()
-                .setMethod("user/register")
+                .setMethod(MethodNames.User.REGISTER)
                 .putMetadata("x-client-ip", ip)
                 .build()
             interceptor.intercept(request, mockChain)
         }
 
         val request6 = Request.newBuilder()
-            .setMethod("user/register")
+            .setMethod(MethodNames.User.REGISTER)
             .putMetadata("x-client-ip", ip)
             .build()
         val resp429 = interceptor.intercept(request6, mockChain)
@@ -294,7 +295,7 @@ class RateLimitInterceptorTest {
         // When: IP-A 用完 5 次配额，IP-B 仍然可以注册
         repeat(5) {
             val request = Request.newBuilder()
-                .setMethod("user/register")
+                .setMethod(MethodNames.User.REGISTER)
                 .putMetadata("x-client-ip", "192.168.1.1")
                 .build()
             interceptor.intercept(request, mockChain)
@@ -303,7 +304,7 @@ class RateLimitInterceptorTest {
         // IP-A 第 6 次：应被拒绝
         val respA = interceptor.intercept(
             Request.newBuilder()
-                .setMethod("user/register")
+                .setMethod(MethodNames.User.REGISTER)
                 .putMetadata("x-client-ip", "192.168.1.1")
                 .build(),
             mockChain
@@ -313,7 +314,7 @@ class RateLimitInterceptorTest {
         // IP-B 第 1 次：应正常通行
         val respB = interceptor.intercept(
             Request.newBuilder()
-                .setMethod("user/register")
+                .setMethod(MethodNames.User.REGISTER)
                 .putMetadata("x-client-ip", "192.168.1.2")
                 .build(),
             mockChain

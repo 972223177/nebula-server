@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.admin
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import io.mockk.every
@@ -45,8 +46,8 @@ class AdminHandlerCollectorTest {
             every { method } returns retryDeadLetterMethod
         }
 
-        assertTrue(deadLetterQueryHandler.method.startsWith("admin/"), "DeadLetterQueryHandler method 应以 admin/ 为前缀")
-        assertTrue(retryDeadLetterHandler.method.startsWith("admin/"), "RetryDeadLetterHandler method 应以 admin/ 为前缀")
+        assertTrue(deadLetterQueryHandler.method.startsWith(MethodNames.Admin.PREFIX), "DeadLetterQueryHandler method 应以 admin/ 为前缀")
+        assertTrue(retryDeadLetterHandler.method.startsWith(MethodNames.Admin.PREFIX), "RetryDeadLetterHandler method 应以 admin/ 为前缀")
     }
 
     @Test

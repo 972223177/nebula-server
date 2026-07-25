@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.sensitiveword
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.sensitiveword.SensitiveWordDownloadReq
 import com.nebula.chat.sensitiveword.SensitiveWordDownloadResp
@@ -19,7 +20,7 @@ class SensitiveWordDownloadHandler(
 ) : Handler<SensitiveWordDownloadReq, SensitiveWordDownloadResp> {
 
     /** method 路由：system/sensitive_word_download */
-    override val method: String = "system/sensitive_word_download"
+    override val method: String = MethodNames.System.SENSITIVE_WORD_DOWNLOAD
 
     override suspend fun handle(req: SensitiveWordDownloadReq): SensitiveWordDownloadResp {
         val limit = if (req.limit <= 0) DEFAULT_LIMIT else req.limit.coerceAtMost(MAX_LIMIT)

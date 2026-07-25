@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.sensitiveword
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.sensitiveword.SensitiveWordReloadReq
@@ -27,7 +28,7 @@ class SensitiveWordReloadHandler(
 ) : Handler<SensitiveWordReloadReq, SensitiveWordReloadResp> {
 
     /** method 路由：admin/sensitive_word_reload（admin/ 前缀跳过认证，与其他 admin 接口一致） */
-    override val method: String = "admin/sensitive_word_reload"
+    override val method: String = MethodNames.Admin.SENSITIVE_WORD_RELOAD
 
     override suspend fun handle(req: SensitiveWordReloadReq): SensitiveWordReloadResp {
         val ok = sensitiveWordService.reload()

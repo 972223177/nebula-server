@@ -1,4 +1,5 @@
 package com.nebula.gateway.interceptor
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
@@ -24,7 +25,7 @@ import kotlinx.coroutines.withContext
  */
 open class AuthInterceptor(
     private val sessionRegistry: SessionRegistry,
-    private val skipMethods: Set<String> = setOf("system/ping", "admin/", "system/sensitive_word")
+    private val skipMethods: Set<String> = setOf(MethodNames.System.PING, MethodNames.Admin.PREFIX, MethodNames.System.SENSITIVE_WORD_PREFIX)
 ) : Interceptor {
 
     override suspend fun intercept(request: Request, chain: Interceptor.Chain): Response {

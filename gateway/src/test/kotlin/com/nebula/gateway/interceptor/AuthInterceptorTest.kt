@@ -1,4 +1,5 @@
 package com.nebula.gateway.interceptor
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Request
 import com.nebula.chat.Response
@@ -26,9 +27,9 @@ class AuthInterceptorTest {
     @Test
     fun skipAuthForSystemPing() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
-        val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping"))
+        val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf(MethodNames.System.PING))
 
-        val request = Request.newBuilder().setMethod("system/ping").build()
+        val request = Request.newBuilder().setMethod(MethodNames.System.PING).build()
         val mockChain = mockk<Interceptor.Chain>()
         val expectedResp = Response.newBuilder().setCode(200).build()
 
@@ -43,9 +44,9 @@ class AuthInterceptorTest {
     @Test
     fun rejectWhenTokenMissing() = runTest {
         val sessionRegistry = mockk<SessionRegistry>()
-        val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping"))
+        val interceptor = AuthInterceptor(sessionRegistry, skipMethods = setOf(MethodNames.System.PING))
 
-        val request = Request.newBuilder().setMethod("user/login").build()
+        val request = Request.newBuilder().setMethod(MethodNames.User.LOGIN).build()
         val mockChain = mockk<Interceptor.Chain>()
 
         val resp = interceptor.intercept(request, mockChain)
@@ -62,11 +63,11 @@ class AuthInterceptorTest {
         coEvery { sessionRegistry.validate(any()) } returns null
 
         // 通过匿名子类覆盖 extractToken 返回固定的 token
-        val interceptor = object : AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping")) {
+        val interceptor = object : AuthInterceptor(sessionRegistry, skipMethods = setOf(MethodNames.System.PING)) {
             override fun extractToken(request: Request): String? = "test-token-abc"
         }
 
-        val request = Request.newBuilder().setMethod("user/login").build()
+        val request = Request.newBuilder().setMethod(MethodNames.User.LOGIN).build()
         val mockChain = mockk<Interceptor.Chain>()
 
         val resp = interceptor.intercept(request, mockChain)
@@ -90,11 +91,11 @@ class AuthInterceptorTest {
         )
         coEvery { sessionRegistry.validate(any()) } returns session
 
-        val interceptor = object : AuthInterceptor(sessionRegistry, skipMethods = setOf("system/ping")) {
+        val interceptor = object : AuthInterceptor(sessionRegistry, skipMethods = setOf(MethodNames.System.PING)) {
             override fun extractToken(request: Request): String? = "test-token-abc"
         }
 
-        val request = Request.newBuilder().setMethod("user/login").build()
+        val request = Request.newBuilder().setMethod(MethodNames.User.LOGIN).build()
         val mockChain = mockk<Interceptor.Chain>()
         val expectedResp = Response.newBuilder().setCode(200).build()
 

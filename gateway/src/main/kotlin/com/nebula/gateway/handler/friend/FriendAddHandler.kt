@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.friend
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.friend.FriendAcceptedPayload
@@ -37,7 +38,7 @@ class FriendAddHandler(
     @Suppress("unused") private val lockManager: ConversationLockManager
 ) : Handler<FriendAddReq, FriendAddResp> {
 
-    override val method: String = "friend/add"
+    override val method: String = MethodNames.Friend.ADD
 
     override suspend fun handle(req: FriendAddReq): FriendAddResp {
         val session = currentCoroutineContext().requireSession()

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.conversation
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.conversation.CreatePrivateConversationReq
 import com.nebula.chat.conversation.CreatePrivateConversationResp
@@ -19,7 +20,7 @@ class CreatePrivateConversationHandler(
     private val conversationService: ConversationService
 ) : Handler<CreatePrivateConversationReq, CreatePrivateConversationResp> {
 
-    override val method: String = "conversation/create_private"
+    override val method: String = MethodNames.Conversation.CREATE_PRIVATE
 
     override suspend fun handle(req: CreatePrivateConversationReq): CreatePrivateConversationResp {
         val session = currentCoroutineContext().requireSession()

@@ -1,4 +1,5 @@
 package com.nebula.gateway.handler.message
+import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.Response
 import com.nebula.chat.message.ReadReceiptPayload
@@ -45,7 +46,7 @@ class ReadReportHandler(
     private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 ) : Handler<ReadReportReq, Response> {
 
-    override val method: String = "message/read"
+    override val method: String = MethodNames.Message.READ
 
     companion object {
         /** 日志记录器 */

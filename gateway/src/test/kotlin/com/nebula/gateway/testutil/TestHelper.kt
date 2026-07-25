@@ -1,4 +1,5 @@
 package com.nebula.gateway.testutil
+import com.nebula.gateway.handler.MethodNames
 
 import com.google.protobuf.ByteString
 import com.google.protobuf.MessageLite
@@ -165,7 +166,7 @@ fun buildTestDispatcher(
     registry: HandlerRegistry,
     session: Session = DEFAULT_SESSION,
     sessionRegistry: SessionRegistry = mockk(),
-    skipMethods: Set<String> = setOf("system/ping")
+    skipMethods: Set<String> = setOf(MethodNames.System.PING)
 ): Dispatcher {
     val authInterceptor = object : AuthInterceptor(sessionRegistry, skipMethods = skipMethods) {
         override fun extractToken(request: Request): String? = session.token
