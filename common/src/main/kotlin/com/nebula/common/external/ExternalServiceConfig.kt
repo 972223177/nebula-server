@@ -73,6 +73,10 @@ data class IpGeoConfig(
  * 由全体登录用户共用一个池，并非每用户额度（详见 external-service-backend.md §3.1）。
  * 每用户防御子限（weather-per-user-daily-limit / search-per-user-monthly-limit）仅用于防止
  * 单用户把共享池瞬间烧光，须 ≤ 对应全局上限。
+ *
+ * IP 定位（高德）配额：**geo-daily-limit** 为当前生效的日帽（默认 500，约 15000/月均摊，
+ * 避免烧穿高德月额度）；**geo-monthly-limit** 为预留的月度硬上限（B 方案，默认 15000，
+ * 对齐高德 IP 定位月额度），当前未启用，仅预留字段与配置位。
  */
 data class ExternalServiceQuotaConfig(
     /** 配额持久化文件路径（仅 Redis 降级兜底用，正常部署不依赖） */
@@ -85,10 +89,17 @@ data class ExternalServiceQuotaConfig(
     val weatherPerUserDailyLimit: Int,
     /** 每用户搜索月上限（防御子限，须 ≤ searchMonthlyLimit），默认 500 */
     val searchPerUserMonthlyLimit: Int,
-    /** IP 定位全局共享日上限，默认 1000（参考高德免费版每日额度，全体用户共用一个池） */
+    /** IP 定位全局共享日上限，默认 500（A 方案：压到 ≈15000/月均摊，避免烧穿高德月额度；全体用户共用一个池） */
     val geoDailyLimit: Int,
     /** 每用户 IP 定位日上限（防御子限，须 ≤ geoDailyLimit），默认 50 */
     val geoPerUserDailyLimit: Int,
+    /**
+     * IP 定位全局共享月上限（预留 B 方案，默认 15000，对齐高德 IP 定位月额度）。
+     * 当前**未启用**：GEO 配额仍按 [geoDailyLimit] 日帽执行（见 QuotaManager / ExternalServiceOrchestrator）。
+     * 启用 B 时：limitOf(GEO) 改为同时校验日帽 + 月帽（新增月度计数键 `ext:quota:geo_month`，
+     * quotaRemainingSeconds 增加月度重置分支），本字段即作为月帽硬上限。
+     */
+    val geoMonthlyLimit: Int,
     /** 预警百分比（用量达到此比例时进入预警态，仅服务端日志），默认 80 */
     val warnThreshold: Int,
     /** 拒绝百分比（用量达到此比例时返回 QUOTA_EXCEEDED），默认 95 */

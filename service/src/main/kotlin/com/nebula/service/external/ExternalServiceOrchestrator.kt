@@ -131,6 +131,9 @@ class ExternalServiceOrchestrator(
      *
      * 流程与天气/搜索一致：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 →
      * 预估扣减（1 次上游调用）→ 调 GeoIpService（高德 IP 定位）→ 写缓存（24h）。
+     * 当前仅日帽（[com.nebula.common.external.ExternalServiceQuotaConfig.geoDailyLimit]，默认 500）生效；
+     * [com.nebula.common.external.ExternalServiceQuotaConfig.geoMonthlyLimit] 为预留月度帽（B 方案），
+     * 启用后此处需同时校验月用量（新增月度计数键与重置分支）。
      *
      * IP 来自客户端连接元数据（由 Handler 经 `coroutineContext.requireClientIp()` 提取），
      * 客户端不传参，避免伪造定位。`x-forwarded-for` 可能含多级代理，取首个（最原始客户端）IP。

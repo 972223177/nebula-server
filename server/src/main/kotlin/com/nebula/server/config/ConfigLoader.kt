@@ -220,8 +220,9 @@ object ConfigLoader {
                 searchMonthlyLimit = quota.getInt("search-monthly-limit"),
                 weatherPerUserDailyLimit = quota.getInt("weather-per-user-daily-limit"),
                 searchPerUserMonthlyLimit = quota.getInt("search-per-user-monthly-limit"),
-                geoDailyLimit = if (quota.hasPath("geo-daily-limit")) quota.getInt("geo-daily-limit") else 1000,
+                geoDailyLimit = if (quota.hasPath("geo-daily-limit")) quota.getInt("geo-daily-limit") else 500,
                 geoPerUserDailyLimit = if (quota.hasPath("geo-per-user-daily-limit")) quota.getInt("geo-per-user-daily-limit") else 50,
+                geoMonthlyLimit = if (quota.hasPath("geo-monthly-limit")) quota.getInt("geo-monthly-limit") else 15000,
                 warnThreshold = quota.getInt("warning-threshold"),
                 rejectThreshold = quota.getInt("reject-threshold"),
                 flushIntervalSeconds = quota.getInt("flush-interval-seconds")

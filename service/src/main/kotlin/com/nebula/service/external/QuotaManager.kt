@@ -18,7 +18,8 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * WEATHER 按日重置（和风天气免费 1000 次/天全局共享池），
  * SEARCH 按月重置（Serper 2500 次/月全局共享池），
- * GEO 按日重置（高德 IP 定位每日额度全局共享池，默认 1000 次/天）。
+ * GEO 按日重置（高德 IP 定位，当前生效日帽默认 500 次/天；
+ *   月度硬上限 geoMonthlyLimit=15000 为预留 B 方案，暂未启用，详见 ExternalServiceQuotaConfig）。
  */
 enum class QuotaCategory { WEATHER, SEARCH, GEO }
 
@@ -34,6 +35,7 @@ fun quotaRemainingSeconds(category: QuotaCategory): Long {
     val now = LocalDateTime.now()
     return when (category) {
         QuotaCategory.WEATHER, QuotaCategory.GEO -> {
+            // GEO 当前按日重置（日帽 geoDailyLimit）。B 方案启用月度帽时将新增月度分支（geo_month 计数键）。
             val tomorrow = now.toLocalDate().plusDays(1).atStartOfDay()
             max(1, java.time.temporal.ChronoUnit.SECONDS.between(now, tomorrow))
         }
@@ -82,7 +84,7 @@ class QuotaManager(
 
     /** 启动：Redis 主路径无需刷盘；文件降级态由 consume/usage 按需进入并启动刷盘协程 */
     fun start() {
-        log.info { "QuotaManager 启动（Redis 主路径，weather-daily=${config.weatherDailyLimit}, search-monthly=${config.searchMonthlyLimit}）" }
+        log.info { "QuotaManager 启动（Redis 主路径，weather-daily=${config.weatherDailyLimit}, search-monthly=${config.searchMonthlyLimit}, geo-daily=${config.geoDailyLimit}, geo-monthly-reserved=${config.geoMonthlyLimit}）" }
     }
 
     /** 停止：取消自有协程作用域（文件降级刷盘协程随之结束） */
@@ -228,6 +230,8 @@ class QuotaManager(
     private fun limitOf(category: QuotaCategory): Long = when (category) {
         QuotaCategory.WEATHER -> config.weatherDailyLimit.toLong()
         QuotaCategory.SEARCH -> config.searchMonthlyLimit.toLong()
+        // GEO 当前仅日帽生效（geoDailyLimit）。B 方案启用后改为取 min(日帽用量, 月帽用量) 双校验，
+        // 月度计数键 geo_month 与 quotaRemainingSeconds 月度分支届时一并落地。
         QuotaCategory.GEO -> config.geoDailyLimit.toLong()
     }
 
