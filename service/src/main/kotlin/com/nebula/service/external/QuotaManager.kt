@@ -17,12 +17,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * 配额计数类别。
  *
  * WEATHER 按日重置（和风天气免费 1000 次/天全局共享池），
- * SEARCH 按月重置（Serper 2500 次/月全局共享池）。
+ * SEARCH 按月重置（Serper 2500 次/月全局共享池），
+ * GEO 按日重置（高德 IP 定位每日额度全局共享池，默认 1000 次/天）。
  */
-enum class QuotaCategory { WEATHER, SEARCH }
+enum class QuotaCategory { WEATHER, SEARCH, GEO }
 
 /**
- * 计算某类别配额周期剩余秒数（weather=当日余秒，search=当月余秒）。
+ * 计算某类别配额周期剩余秒数（weather=当日余秒，search=当月余秒，geo=当日余秒）。
  *
  * 供 [QuotaManager] / [PerUserQuotaStore] 设置 Redis EXPIRE 与对外返回重置倒计时共用。
  *
@@ -32,7 +33,7 @@ enum class QuotaCategory { WEATHER, SEARCH }
 fun quotaRemainingSeconds(category: QuotaCategory): Long {
     val now = LocalDateTime.now()
     return when (category) {
-        QuotaCategory.WEATHER -> {
+        QuotaCategory.WEATHER, QuotaCategory.GEO -> {
             val tomorrow = now.toLocalDate().plusDays(1).atStartOfDay()
             max(1, java.time.temporal.ChronoUnit.SECONDS.between(now, tomorrow))
         }
@@ -174,6 +175,7 @@ class QuotaManager(
         val file = fileOf()
         fileCounts[QuotaCategory.WEATHER] = 0
         fileCounts[QuotaCategory.SEARCH] = 0
+        fileCounts[QuotaCategory.GEO] = 0
         if (!file.exists()) return
         try {
             val props = file.readLines().mapNotNull { line ->
@@ -185,6 +187,8 @@ class QuotaManager(
                 if (props["weather.date"] == today()) props["weather.count"]?.toLongOrNull() ?: 0 else 0
             fileCounts[QuotaCategory.SEARCH] =
                 if (props["search.month"] == thisMonth()) props["search.count"]?.toLongOrNull() ?: 0 else 0
+            fileCounts[QuotaCategory.GEO] =
+                if (props["geo.date"] == today()) props["geo.count"]?.toLongOrNull() ?: 0 else 0
         } catch (e: Exception) {
             log.warn { "配额文件解析失败，归零: ${e.message}" }
         }
@@ -200,6 +204,8 @@ class QuotaManager(
             sb.append("weather.count=${fileCounts[QuotaCategory.WEATHER] ?: 0}\n")
             sb.append("search.month=${thisMonth()}\n")
             sb.append("search.count=${fileCounts[QuotaCategory.SEARCH] ?: 0}\n")
+            sb.append("geo.date=${today()}\n")
+            sb.append("geo.count=${fileCounts[QuotaCategory.GEO] ?: 0}\n")
             tmp.writeText(sb.toString())
             // POSIX 原子替换：崩溃只可能留下 .tmp 残留，原文件始终完整
             tmp.renameTo(file)
@@ -222,6 +228,7 @@ class QuotaManager(
     private fun limitOf(category: QuotaCategory): Long = when (category) {
         QuotaCategory.WEATHER -> config.weatherDailyLimit.toLong()
         QuotaCategory.SEARCH -> config.searchMonthlyLimit.toLong()
+        QuotaCategory.GEO -> config.geoDailyLimit.toLong()
     }
 
     private fun keyOf(category: QuotaCategory): String = "ext:quota:${category.name.lowercase()}"

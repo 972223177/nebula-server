@@ -14,6 +14,7 @@ import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.conversation.*
 import com.nebula.gateway.handler.delivery.DeliveryAckHandler
 import com.nebula.gateway.handler.external.ExternalHandlerCollector
+import com.nebula.gateway.handler.external.IpLocationHandler
 import com.nebula.gateway.handler.external.QueryWeatherHandler
 import com.nebula.gateway.handler.external.WebSearchHandler
 import com.nebula.gateway.handler.friend.*
@@ -182,11 +183,12 @@ class GatewayModuleTest {
         single { SensitiveWordDownloadHandler(get()) }
         single { SensitiveWordReloadHandler(get(), get()) }
 
-        // 外部服务（天气 / 搜索）—— 镜像生产 externalHandlerModule
+        // 外部服务（天气 / 搜索 / IP 定位）—— 镜像生产 externalHandlerModule
         single { externalOrchestrator }
         single { QueryWeatherHandler(get()) }
         single { WebSearchHandler(get()) }
-        single<HandlerCollector>(named("external")) { ExternalHandlerCollector(get(), get()) }
+        single { IpLocationHandler(get()) }
+        single<HandlerCollector>(named("external")) { ExternalHandlerCollector(get(), get(), get()) }
     }
 
     @AfterEach
@@ -479,10 +481,12 @@ class GatewayModuleTest {
         val registry = GlobalContext.get().get<HandlerRegistry>()
         val collector = ExternalHandlerCollector(
             GlobalContext.get().get<QueryWeatherHandler>(),
-            GlobalContext.get().get<WebSearchHandler>()
+            GlobalContext.get().get<WebSearchHandler>(),
+            GlobalContext.get().get<IpLocationHandler>()
         )
         collector.registerAll(registry)
         assertNotNull(registry.get("external/query_weather"))
         assertNotNull(registry.get("external/web_search"))
+        assertNotNull(registry.get("external/geo_ip"))
     }
 }

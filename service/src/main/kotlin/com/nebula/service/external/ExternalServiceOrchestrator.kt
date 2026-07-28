@@ -1,5 +1,6 @@
 package com.nebula.service.external
 
+import com.nebula.chat.external.IpLocationResponse
 import com.nebula.chat.external.SearchResponse
 import com.nebula.chat.external.SearchResultItem
 import com.nebula.chat.external.WeatherResponse
@@ -17,6 +18,7 @@ import java.time.LocalDate
  * 完整流程：
  * - 天气：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 → 预估扣减（约 8 次上游调用）→ 调 WeatherService → 写缓存
  * - 搜索：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 → 扣减 1 → 调 SearchService → 写缓存（按 SearchType 分级 TTL）
+ * - IP 定位：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 → 扣减 1 → 调 GeoIpService（高德）→ 写缓存（24h）
  *
  * 职责：
  * - 缓存查询（命中直接返回，不扣配额）——缓存由本编排层统一负责（§4.2/§4.6）
@@ -29,6 +31,7 @@ import java.time.LocalDate
  *
  * @param weatherService 和风天气服务
  * @param searchService Serper 搜索服务
+ * @param geoIpService 高德 IP 定位服务（国内可达，需 Key）
  * @param quotaManager 全局配额管理器（Redis 主存储 + 文件降级）
  * @param cache 外部服务缓存（L1 + L2）
  * @param perUserQuotaStore 每用户防御子限存储（Redis 计数）
@@ -38,6 +41,7 @@ import java.time.LocalDate
 class ExternalServiceOrchestrator(
     private val weatherService: WeatherService,
     private val searchService: SearchService,
+    private val geoIpService: GeoIpService,
     private val quotaManager: QuotaManager,
     private val cache: ExternalServiceCache,
     private val perUserQuotaStore: PerUserQuotaStore,
@@ -121,6 +125,62 @@ class ExternalServiceOrchestrator(
         cache.putSearchResponse(cacheKey, response, searchTtlMs(type))
         return response
     }
+
+    /**
+     * IP 地理定位编排（D-XX）。
+     *
+     * 流程与天气/搜索一致：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 →
+     * 预估扣减（1 次上游调用）→ 调 GeoIpService（高德 IP 定位）→ 写缓存（24h）。
+     *
+     * IP 来自客户端连接元数据（由 Handler 经 `coroutineContext.requireClientIp()` 提取），
+     * 客户端不传参，避免伪造定位。`x-forwarded-for` 可能含多级代理，取首个（最原始客户端）IP。
+     *
+     * @param userId 调用方用户 ID（用于每用户防御子限）
+     * @param clientIp 客户端真实 IP（由 Handler 从连接元数据提取）
+     * @return 定位结果封装的 IpLocationResponse
+     * @throws BizException QUOTA_EXCEEDED / SERVICE_UNAVAILABLE（由 ExceptionInterceptor 转为 Response）
+     */
+    suspend fun locateByIp(userId: Long, clientIp: String): IpLocationResponse {
+        val ip = normalizeIp(clientIp)
+        val cacheKey = "geoip:$ip"
+        cache.getGeoIp(cacheKey)?.let {
+            log.debug { "IP 定位缓存命中 userId=$userId ip=$ip" }
+            return it
+        }
+        if (quotaManager.usagePercent(QuotaCategory.GEO) >= quotaConfig.rejectThreshold) {
+            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.GEO))
+        }
+        if (!perUserQuotaStore.tryConsume(userId, QuotaCategory.GEO, quotaConfig.geoPerUserDailyLimit, dateKey())) {
+            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.GEO))
+        }
+        if (!quotaManager.consume(QuotaCategory.GEO, 1)) {
+            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.GEO))
+        }
+        val result = geoIpService.locate(ip)
+        val safeFormatted = ExternalContentSanitizer.sanitize(result.formatted) // §7.1 间接提示注入防护
+        val resp = IpLocationResponse.newBuilder()
+            .setFormatted(safeFormatted)
+            .setCountry(ExternalContentSanitizer.sanitizeInline(result.country))
+            .setRegion(ExternalContentSanitizer.sanitizeInline(result.region))
+            .setCity(ExternalContentSanitizer.sanitizeInline(result.city))
+            .setLatitude(result.latitude)
+            .setLongitude(result.longitude)
+            .setTimezone(ExternalContentSanitizer.sanitizeInline(result.timezone))
+            .setIsp(ExternalContentSanitizer.sanitizeInline(result.isp))
+            .build()
+        cache.putGeoIp(cacheKey, resp, ipGeoTtlMs())
+        return resp
+    }
+
+    /** 规范化客户端 IP：x-forwarded-for 可能为 "ip, proxy1, proxy2"，取首个最原始客户端 IP；"unknown" 原样透传 */
+    private fun normalizeIp(raw: String): String {
+        val trimmed = raw.trim()
+        val first = trimmed.split(",").firstOrNull()?.trim() ?: trimmed
+        return if (first.isBlank()) "unknown" else first
+    }
+
+    /** IP 定位 L2 TTL（毫秒），默认取配置 ipGeoTtlSeconds（24h） */
+    private fun ipGeoTtlMs(): Long = cacheConfig.l2.ipGeoTtlSeconds * 1000L
 
     /** 按搜索类型选择 L2 TTL（稳定类长 TTL 省调用；时效类短 TTL 防过期） */
     private fun searchTtlMs(type: SearchService.SearchType): Long = when (type) {

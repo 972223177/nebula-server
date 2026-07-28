@@ -40,7 +40,8 @@ val serviceKoinModule = module {
     single { QuotaManager(get(), get()) }                               // ExternalServiceQuotaConfig + Redis 连接
     single { WeatherService(get(), get()) }                            // ExternalServiceConfig + ExternalServiceCache（GeoAPI 缓存）
     single { SearchService(get()) }                                     // ExternalServiceConfig
-    single { ExternalServiceOrchestrator(get(), get(), get(), get(), get(), get(), get()) }
+    single { GeoIpService(get()) }                                      // ExternalServiceConfig（ipGeo 段）
+    single { ExternalServiceOrchestrator(get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // 配额模块生命周期（由 ModuleInitializer 在启动/关闭时管理，遵守分层依赖）
     // 注意：无参构造 —— QuotaManager 在 init() 阶段才懒解析，避免收集阶段急切依赖运行时 declare 的 Redis 连接

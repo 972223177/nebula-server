@@ -82,6 +82,7 @@ object MethodNames {
     object External {
         const val QUERY_WEATHER = "external/query_weather"
         const val WEB_SEARCH = "external/web_search"
+        const val GEO_IP = "external/geo_ip"
     }
 
     /** 管理类方法（admin 组）。 */

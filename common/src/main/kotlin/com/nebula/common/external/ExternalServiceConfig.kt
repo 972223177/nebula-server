@@ -18,6 +18,8 @@ data class ExternalServiceConfig(
     val wttr: WttrConfig,
     /** Serper 搜索配置（有 Key，无免费兜底） */
     val serper: SerperConfig,
+    /** IP 定位配置（高德 Amap，国内可达，需 Key） */
+    val ipGeo: IpGeoConfig,
     /** 配额配置（全局共享池 + 每用户防御子限 + 阈值） */
     val quota: ExternalServiceQuotaConfig,
     /** 缓存配置（L1 本地 LRU + L2 Redis 二级） */
@@ -54,6 +56,16 @@ data class SerperConfig(
     val timeoutMs: Int
 )
 
+/** IP 定位配置（D-XX）—— 对接高德(Amap) IP 定位（国内可达，需 Key）。 */
+data class IpGeoConfig(
+    /** 高德 IP 定位地址（固定 v3/ip 路径，{ip} 由服务按客户端 IP 填充） */
+    val baseUrl: String,
+    /** 高德 Web 服务 Key（留空时 IP 定位降级为 SERVICE_UNAVAILABLE） */
+    val apiKey: String,
+    /** 上游 HTTP 超时（毫秒） */
+    val timeoutMs: Int
+)
+
 /**
  * 配额配置（D-XX）。
  *
@@ -73,6 +85,10 @@ data class ExternalServiceQuotaConfig(
     val weatherPerUserDailyLimit: Int,
     /** 每用户搜索月上限（防御子限，须 ≤ searchMonthlyLimit），默认 500 */
     val searchPerUserMonthlyLimit: Int,
+    /** IP 定位全局共享日上限，默认 1000（参考高德免费版每日额度，全体用户共用一个池） */
+    val geoDailyLimit: Int,
+    /** 每用户 IP 定位日上限（防御子限，须 ≤ geoDailyLimit），默认 50 */
+    val geoPerUserDailyLimit: Int,
     /** 预警百分比（用量达到此比例时进入预警态，仅服务端日志），默认 80 */
     val warnThreshold: Int,
     /** 拒绝百分比（用量达到此比例时返回 QUOTA_EXCEEDED），默认 95 */
@@ -112,5 +128,7 @@ data class L2Config(
     /** 搜索 L2 稳定类 TTL（秒），默认 21600（6 小时，search 普通网页） */
     val searchStableTtlSeconds: Int,
     /** 搜索 L2 时效类 TTL（秒），默认 600（10 分钟，news 类型） */
-    val searchNewsTtlSeconds: Int
+    val searchNewsTtlSeconds: Int,
+    /** IP 定位 L2 TTL（秒），默认 86400（24h，定位结果长期稳定可长缓存省调用） */
+    val ipGeoTtlSeconds: Int
 )

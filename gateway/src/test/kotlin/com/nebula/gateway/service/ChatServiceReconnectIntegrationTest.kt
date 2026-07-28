@@ -265,6 +265,13 @@ class ChatServiceReconnectIntegrationTest {
         // When: 调用 deliver(envelope)
         invokeMethod(observer, "deliver", envelope)
 
+        // deliver 在 connectionScope(Dispatchers.IO) 上 launch 后随即返回，onNext 在后台协程执行；
+        // 必须等待该子协程完成后再断言，否则在调度竞争激烈时（如全量测试套件）会误判 onNext 未调用。
+        val connectionScope: CoroutineScope = getField(observer, "connectionScope")
+        runBlocking {
+            connectionScope.coroutineContext[Job]?.children?.forEach { it.join() }
+        }
+
         // Then: responseObserver.onNext 被调用
         verify(exactly = 1) { mockResponseObserver.onNext(envelope) }
     }

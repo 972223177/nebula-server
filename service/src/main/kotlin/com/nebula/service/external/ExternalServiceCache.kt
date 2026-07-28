@@ -134,4 +134,35 @@ class ExternalServiceCache(
             null
         }
     }
+
+    /**
+     * IP 定位结果专用缓存写：将完整 [com.nebula.chat.external.IpLocationResponse]（含结构化字段）
+     * 序列化为 Base64 后写入，避免通用 [put] 仅存 formatted 文本导致命中时丢失经纬度/时区等结构化字段。
+     * 复用通用 [put] 的双写（L1 + L2）与 TTL 逻辑，类别 [QuotaCategory.GEO]。
+     *
+     * @param key 规范化后的定位缓存键（"geoip:{ip}"）
+     * @param response 待缓存的完整定位响应
+     * @param ttlOverrideMs 可选 L2 TTL 覆盖（毫秒），默认取 [com.nebula.common.external.ExternalServiceCacheConfig.l2.ipGeoTtlSeconds]
+     */
+    suspend fun putGeoIp(key: String, response: com.nebula.chat.external.IpLocationResponse, ttlOverrideMs: Long? = null) {
+        val encoded = Base64.getEncoder().encodeToString(response.toByteArray())
+        put(key, encoded, QuotaCategory.GEO, ttlOverrideMs)
+    }
+
+    /**
+     * IP 定位结果专用缓存读：命中返回完整 [com.nebula.chat.external.IpLocationResponse]（含结构化字段），
+     * 未命中返回 null。反序列化失败时记录 warn 并返回 null（触发回源），**绝不向上抛出**。
+     *
+     * @param key 规范化后的定位缓存键（"geoip:{ip}"）
+     * @return 完整定位响应，未命中或反序列化失败返回 null
+     */
+    suspend fun getGeoIp(key: String): com.nebula.chat.external.IpLocationResponse? {
+        val encoded = get(key) ?: return null
+        return try {
+            com.nebula.chat.external.IpLocationResponse.parseFrom(Base64.getDecoder().decode(encoded))
+        } catch (e: Exception) {
+            log.warn { "IP 定位缓存反序列化失败（降级回源）: ${e.message}" }
+            null
+        }
+    }
 }

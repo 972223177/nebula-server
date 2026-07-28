@@ -40,7 +40,8 @@ class ExternalServiceCacheTest {
                 geoTtlSeconds = 86400,
                 searchTtlSeconds = 3600,
                 searchStableTtlSeconds = 21600,
-                searchNewsTtlSeconds = 600
+                searchNewsTtlSeconds = 600,
+                ipGeoTtlSeconds = 86400
             )
         )
         return ExternalServiceCache(config, conn)

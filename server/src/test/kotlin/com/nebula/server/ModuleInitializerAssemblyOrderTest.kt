@@ -85,6 +85,8 @@ class ModuleInitializerAssemblyOrderTest {
                             searchMonthlyLimit = 2500,
                             weatherPerUserDailyLimit = 250,
                             searchPerUserMonthlyLimit = 500,
+                            geoDailyLimit = 1000,
+                            geoPerUserDailyLimit = 50,
                             warnThreshold = 80,
                             rejectThreshold = 95,
                             flushIntervalSeconds = 10

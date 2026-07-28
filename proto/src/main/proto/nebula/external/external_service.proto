@@ -67,3 +67,24 @@ message SearchResponse {
   // 1. [标题] ...摘要...
   // 2. [标题] ...摘要...
 }
+
+// ─── IP 定位查询 ───
+
+// external/geo_ip 请求。
+// 此接口响应不包含业务参数（无 params 字段），仅通过 Response.code 和 Response.msg 表示操作结果。
+// IP 由服务端从连接元数据（x-client-ip / x-forwarded-for）提取客户端真实 IP，客户端无需传参。
+message IpLocationRequest {
+  // 故意留空：IP 来源于服务端，不接收客户端传入（避免客户端伪造定位）。
+}
+
+// external/geo_ip 响应。
+message IpLocationResponse {
+  string formatted = 1;   // 格式化定位文本，直接注入 LLM context，如 "中国 广东 深圳（114.06,22.54）时区Asia/Shanghai 运营商xxx"
+  string country = 2;     // 国家（中文或英文，取决于上游），如 "中国"
+  string region = 3;      // 省/州，如 "广东省"
+  string city = 4;        // 城市，如 "深圳市"
+  double latitude = 5;    // 纬度
+  double longitude = 6;   // 经度
+  string timezone = 7;    // IANA 时区，如 "Asia/Shanghai"
+  string isp = 8;         // 运营商 / 组织，如 "China Telecom"
+}

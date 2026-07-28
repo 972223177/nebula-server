@@ -182,6 +182,7 @@ object ConfigLoader {
         val qw = config.getConfig("external-service.qweather")
         val wttr = config.getConfig("external-service.wttr")
         val serper = config.getConfig("external-service.serper")
+        val geo = if (config.hasPath("external-service.ipgeo")) config.getConfig("external-service.ipgeo") else null
         val quota = config.getConfig("external-service.quota")
         val cache = config.getConfig("external-service.cache")
         val l1 = cache.getConfig("l1")
@@ -202,12 +203,20 @@ object ConfigLoader {
                 baseUrl = serper.getString("base-url"),
                 timeoutMs = serper.getInt("timeout-ms")
             ),
+            ipGeo = IpGeoConfig(
+                // 高德 IP 定位：需 Key，缺省回退到公共默认地址，部署可通过环境变量覆盖
+                baseUrl = geo?.getString("base-url") ?: "https://restapi.amap.com/v3/ip",
+                apiKey = if (geo?.hasPath("api-key") == true) geo.getString("api-key") else "",
+                timeoutMs = geo?.getInt("timeout-ms") ?: 5000
+            ),
             quota = ExternalServiceQuotaConfig(
                 filePath = if (quota.hasPath("file-path")) quota.getString("file-path") else "~/.nebula/external_service_quota.yaml",
                 weatherDailyLimit = quota.getInt("weather-daily-limit"),
                 searchMonthlyLimit = quota.getInt("search-monthly-limit"),
                 weatherPerUserDailyLimit = quota.getInt("weather-per-user-daily-limit"),
                 searchPerUserMonthlyLimit = quota.getInt("search-per-user-monthly-limit"),
+                geoDailyLimit = if (quota.hasPath("geo-daily-limit")) quota.getInt("geo-daily-limit") else 1000,
+                geoPerUserDailyLimit = if (quota.hasPath("geo-per-user-daily-limit")) quota.getInt("geo-per-user-daily-limit") else 50,
                 warnThreshold = quota.getInt("warning-threshold"),
                 rejectThreshold = quota.getInt("reject-threshold"),
                 flushIntervalSeconds = quota.getInt("flush-interval-seconds")
@@ -224,7 +233,8 @@ object ConfigLoader {
                     geoTtlSeconds = l2.getInt("geo-ttl-seconds"),
                     searchTtlSeconds = l2.getInt("search-ttl-seconds"),
                     searchStableTtlSeconds = l2.getInt("search-stable-ttl-seconds"),
-                    searchNewsTtlSeconds = l2.getInt("search-news-ttl-seconds")
+                    searchNewsTtlSeconds = l2.getInt("search-news-ttl-seconds"),
+                    ipGeoTtlSeconds = if (l2.hasPath("ip-geo-ttl-seconds")) l2.getInt("ip-geo-ttl-seconds") else 86400
                 )
             )
         )
