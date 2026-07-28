@@ -67,4 +67,43 @@ class ClientIpResolverTest {
         assertFalse(IpCidr("192.168.0.0/16").contains("192.169.0.1"))
         assertTrue(IpCidr("203.0.113.9").contains("203.0.113.9")) // 单 IP 等价于 /32
     }
+
+    @Test
+    fun isPublicUnicastIpv4AcceptsPublicAddresses() {
+        // 公网单播 IPv4（含公网 DNS 解析服务器与文档公网段）
+        assertTrue(isPublicUnicastIpv4("8.8.8.8"))
+        assertTrue(isPublicUnicastIpv4("1.1.1.1"))
+        assertTrue(isPublicUnicastIpv4("203.0.113.7"))
+        assertTrue(isPublicUnicastIpv4("198.51.100.7"))
+        assertTrue(isPublicUnicastIpv4("223.255.255.254")) // 公网段上限前
+    }
+
+    @Test
+    fun isPublicUnicastIpv4RejectsPrivateAndReserved() {
+        // 私有网段
+        assertFalse(isPublicUnicastIpv4("10.0.0.1"))
+        assertFalse(isPublicUnicastIpv4("172.16.0.1"))
+        assertFalse(isPublicUnicastIpv4("172.31.255.255"))
+        assertFalse(isPublicUnicastIpv4("192.168.1.5"))
+        // 回环 / 链路本地 / CGNAT
+        assertFalse(isPublicUnicastIpv4("127.0.0.1"))
+        assertFalse(isPublicUnicastIpv4("169.254.0.1"))
+        assertFalse(isPublicUnicastIpv4("100.64.0.1"))
+        assertFalse(isPublicUnicastIpv4("100.127.255.254"))
+        // 本网络 / 多播 / 保留
+        assertFalse(isPublicUnicastIpv4("0.0.0.0"))
+        assertFalse(isPublicUnicastIpv4("224.0.0.1"))
+        assertFalse(isPublicUnicastIpv4("240.0.0.1"))
+    }
+
+    @Test
+    fun isPublicUnicastIpv4RejectsInvalidFormats() {
+        // 非法或不可按 IPv4 定位的格式
+        assertFalse(isPublicUnicastIpv4("1.2.3"))           // 不足 4 段
+        assertFalse(isPublicUnicastIpv4("1.2.3.4.5"))       // 超 4 段
+        assertFalse(isPublicUnicastIpv4("256.1.1.1"))       // 段越界
+        assertFalse(isPublicUnicastIpv4("abc"))             // 非数字
+        assertFalse(isPublicUnicastIpv4("::1"))             // IPv6
+        assertFalse(isPublicUnicastIpv4(""))                // 空串
+    }
 }
