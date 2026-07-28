@@ -13,7 +13,8 @@ import kotlinx.coroutines.currentCoroutineContext
  * IP 地理定位 Handler（D-XX）—— method = "external/geo_ip"。
  *
  * 仅做协议适配：从 CoroutineContext 取登录态 userId 与客户端真实 IP
- * （[requireClientIp]，由 ClientIpInterceptor 从连接元数据提取，客户端不传参），
+ * （[requireClientIp]，由传输层 ClientIpServerInterceptor 解析真实客户端 IP 注入，
+ *  客户端无法伪造、无需传参），
  * 委托 [ExternalServiceOrchestrator] 完成配额/缓存/上游编排。业务异常由
  * ExceptionInterceptor 统一捕获并写入 Response.code/msg。
  *

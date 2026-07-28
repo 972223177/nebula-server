@@ -86,7 +86,12 @@ object ConfigLoader {
         return ApplicationConfig(
             env = env,
             server = ServerConfig(
-                port = config.getInt("server.port")
+                port = config.getInt("server.port"),
+                trustedProxies = if (config.hasPath("server.trusted-proxies")) {
+                    config.getStringList("server.trusted-proxies")
+                } else {
+                    emptyList()
+                }
             ),
             snowflake = SnowflakeConfig(
                 workerId = config.getLong("snowflake.worker-id"),

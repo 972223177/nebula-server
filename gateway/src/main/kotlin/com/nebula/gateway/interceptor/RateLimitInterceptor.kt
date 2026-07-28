@@ -3,8 +3,10 @@ package com.nebula.gateway.interceptor
 import com.nebula.chat.Request
 import com.nebula.chat.Response
 import com.nebula.common.BizCode
+import com.nebula.gateway.handler.ClientIpKey
 import com.nebula.gateway.handler.SessionKey
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
@@ -95,11 +97,16 @@ class RateLimitInterceptor(
     private val registerLimiter = RegisterRateLimiter()
 
     override suspend fun intercept(request: Request, chain: Interceptor.Chain): Response {
+        // 优先使用 gRPC 边界已解析的真实客户端 IP（传输层，防伪，见 ClientIpServerInterceptor），
+        // 回退到业务 metadata（兼容历史路径）。客户端无法伪造传输层 IP，限流 key 更可靠。
+        val clientIp = coroutineContext[ClientIpKey]?.ip
+            ?.takeIf { it != "unknown" }
+            ?: extractClientIp(request)
+
         // 注册请求走独立 IP 限流（D-02）
         if (request.method == "user/register") {
-            val ip = extractClientIp(request)
-            if (!registerLimiter.tryAcquire(ip)) {
-                log.warn { "Register rate limit exceeded for ip=$ip" }
+            if (!registerLimiter.tryAcquire(clientIp)) {
+                log.warn { "Register rate limit exceeded for ip=$clientIp" }
                 return Response.newBuilder()
                     .setCode(BizCode.RATE_LIMITED.code)
                     .setMsg("register rate limit exceeded")
@@ -109,7 +116,7 @@ class RateLimitInterceptor(
 
         // 获取限流 key：已认证请求使用 userId，未认证请求使用 IP
         val session = currentCoroutineContext()[SessionKey]
-        val limitKey = session?.session?.userId?.toString() ?: extractClientIp(request)
+        val limitKey = session?.session?.userId?.toString() ?: clientIp
 
         // C-05: 令牌桶 QPS 限流（先于并发限流，快速拒绝突发流量）
         val tokenBucket = userTokenBuckets.computeIfAbsent(limitKey) {

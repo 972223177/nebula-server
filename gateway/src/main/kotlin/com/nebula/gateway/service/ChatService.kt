@@ -3,6 +3,8 @@ package com.nebula.gateway.service
 import com.nebula.chat.*
 import com.nebula.common.BizCode
 import com.nebula.gateway.dispatcher.Dispatcher
+import com.nebula.gateway.handler.ClientIpContextKey
+import com.nebula.gateway.handler.ClientIpKey
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.DeliverableStreamObserver
 import com.nebula.gateway.session.EvictionReason
@@ -232,10 +234,20 @@ class ChatService(
             when (envelope.direction) {
                 Direction.REQUEST -> {
                     logger.info { "[stream] 收到 REQUEST requestId=${envelope.requestId}，method=${envelope.request.method}，metadata=${envelope.request.metadataMap}" }
+                    // 从 gRPC 传输层边界已解析的真实客户端 IP 桥接为协程上下文（客户端无法伪造，
+                    // 详见 ClientIpServerInterceptor / ClientIpResolver）
+                    // 从 gRPC 传输层边界已解析的真实客户端 IP 桥接为协程上下文（客户端无法伪造，
+                    // 详见 ClientIpServerInterceptor / ClientIpResolver）。
+                    // gRPC 读取约定：值经 Key.get(Context) 取出（Context 本身无 get(Key) 方法）。
+                    val grpcCtx = Context.current()
+                    val clientIp = ClientIpContextKey.get(grpcCtx) ?: "unknown"
                     connectionScope.launch {
-                        // fix: 传递 ChatStreamObserver（this）而非 gRPC responseObserver，
+                        // 注入 ClientIpKey 供下游 Handler（如 external/geo_ip）读取；
+                        // 传递 ChatStreamObserver（this）而非 gRPC responseObserver，
                         // 确保 handleLoginSuccess 中的 require(responseObserver is ChatStreamObserver) 不会失败
-                        handleRequest(envelope, this@ChatStreamObserver)
+                        withContext(ClientIpKey(clientIp)) {
+                            handleRequest(envelope, this@ChatStreamObserver)
+                        }
                     }
                 }
                 Direction.PING -> {

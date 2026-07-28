@@ -54,7 +54,6 @@ val frameworkModule = module {
         get(),
         skipMethods = setOf(MethodNames.System.PING, MethodNames.Admin.PREFIX, MethodNames.System.SENSITIVE_WORD_PREFIX, MethodNames.User.LOGIN, MethodNames.User.REGISTER)
     ) }
-    single<Interceptor>(named("clientIpInterceptor")) { ClientIpInterceptor() }
     single<Interceptor>(named("logInterceptor")) { LogInterceptor() }
     single<Interceptor>(named("rateLimitInterceptor")) { RateLimitInterceptor() }
     single<Interceptor>(named("exceptionInterceptor")) { ExceptionInterceptor() }
@@ -62,7 +61,6 @@ val frameworkModule = module {
         get(),
         listOf(
             get<Interceptor>(named("authInterceptor")),
-            get<Interceptor>(named("clientIpInterceptor")),
             get<Interceptor>(named("logInterceptor")),
             get<Interceptor>(named("rateLimitInterceptor")),
             get<Interceptor>(named("exceptionInterceptor"))

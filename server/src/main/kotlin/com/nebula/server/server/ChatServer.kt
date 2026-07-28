@@ -142,6 +142,9 @@ class ChatServer(private val config: ApplicationConfig) {
             .maxConnectionAge(1800, TimeUnit.SECONDS)   // 30 分钟强制刷新连接，防老化、利负载均衡（安全边界，保持不变）
             .maxConnectionAgeGrace(10, TimeUnit.SECONDS)// 强制关闭前等待 10s，给进行中请求留缓冲
 
+            // 真实客户端 IP 注入拦截器（传输层边界，D-XX）：解析不可伪造的客户端 IP 并写入 gRPC Context
+            .intercept(ClientIpServerInterceptor(config.server.trustedProxies))
+
             // 调试拦截器 — 记录每个 gRPC 连接的建立/关闭/消息接收（transport 层日志）
             .intercept(debugInterceptor)
 
