@@ -7,6 +7,7 @@ import com.nebula.common.exception.BizException
 import com.nebula.gateway.testutil.DEFAULT_SESSION
 import com.nebula.gateway.testutil.withSession
 import com.nebula.service.external.ExternalServiceOrchestrator
+import com.nebula.service.external.WebSearchInvoker
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -46,9 +47,7 @@ class WebSearchHandlerTest {
         val resp = SearchResponse.newBuilder()
             .setFormatted("搜索结果（共 3 条）")
             .build()
-        coEvery {
-            orchestrator.webSearch(userId, "kotlin coroutines", 5, "search")
-        } returns resp
+        coEvery { orchestrator.invoke(WebSearchInvoker.SERVICE_ID, eq(userId), any(), any()) } returns resp
 
         val result = withSession(DEFAULT_SESSION) {
             handler.handle(

@@ -88,3 +88,62 @@ message IpLocationResponse {
   string timezone = 7;    // IANA 时区，如 "Asia/Shanghai"
   string isp = 8;         // 运营商 / 组织，如 "China Telecom"
 }
+
+// ============================================================================
+// 服务发现与通用调用（LLM Agent Function Calling 支撑，Phase 10）
+//
+// 不新增 gRPC service，仍走 ChatService.chat 双向流的 Envelope 进出：
+//   - external/list_services：Request.method="external/list_services"，
+//       params=ListServicesRequest.toByteArray()，result=ListServicesResponse.toByteArray()
+//   - external/call_service：Request.method="external/call_service"，
+//       params=CallServiceRequest.toByteArray()，result=CallServiceResponse.toByteArray()
+//
+// 设计要点：
+//   - ServiceDescriptor 是「可被 LLM 自主调用的工具」的统一契约描述，由 list_services 下发给客户端；
+//     客户端据此把工具暴露给 LLM，由 LLM 决定何时调用，无需在服务端写死调用逻辑。
+//   - 现有 3 个内置服务（weather / web_search / geo_ip）已注册进注册表，随版本发布自动被客户端发现；
+//     后续新增服务只需在注册表登记，客户端无需改动即可获得新能力。
+//   - call_service 按 service_id 路由、用 params_json 传参，result_json 为通用 JSON 字符串；
+//     params_json 必须与该服务 input_schema_json 一致，result_json 结构由 output_schema_json 描述。
+//   - 错误码：未知 service_id → NOT_FOUND(1003)；params_json 非法（非 JSON / 非对象 / 缺必填 / 类型不符）
+//     → INVALID_PARAM(1000)；上游配额用尽 / 不可用 / 限流 → 复用既有 SERVICE_UNAVAILABLE / QUOTA_EXCEEDED / RATE_LIMITED 段。
+// ============================================================================
+
+// 单个可被 LLM 调用的外部服务描述（工具定义）。
+message ServiceDescriptor {
+  string id = 1;                    // 稳定唯一 id（snake_case），等于 LLM tool name，如 "weather"
+  string name = 2;                  // 友好显示名，如 "天气查询"
+  string description = 3;           // 清晰描述能力边界，决定 LLM 调用准确率（必填且须准确）
+  string category = 4;              // 分类，如 "weather" / "web_search" / "utility"
+  string input_schema_json = 5;     // 合法 JSON Schema 字符串，描述 params_json 结构（须与实际一致）
+  string output_schema_json = 6;    // 合法 JSON Schema 字符串，描述 result_json 结构（须与实际一致）
+  string risk_level = 7;            // 风险等级 low / mid / high（审批唯一裁决源）
+  string version = 8;               // 描述版本，变更时客户端可据此判断兼容性
+  bool requires_user_consent = 9;   // 是否需要用户确认，须 = (risk_level != "low")（冗余一致性）
+}
+
+// external/list_services 请求。
+message ListServicesRequest {
+  string category = 1;              // 按分类过滤（空表示不按分类过滤）
+  bool only_available = 2;          // 仅返回当前可用（当前所有服务视为可用，字段保留待实时可用性探测）
+  repeated string ids = 3;          // 按 id 列表精确拉取（空表示返回全部）
+  string search_keyword = 4;        // 按关键字模糊过滤 name/description（空表示不过滤）
+}
+
+// external/list_services 响应。
+message ListServicesResponse {
+  repeated ServiceDescriptor services = 1;  // 当前可用工具清单
+  int64 cache_ttl_seconds = 2;              // 客户端缓存建议 TTL（秒）
+  string version_hash = 3;                 // 完整内容哈希，任一字段变化即变，客户端据此判断是否重拉
+}
+
+// external/call_service 请求。
+message CallServiceRequest {
+  string service_id = 1;            // 目标服务 id（即 ServiceDescriptor.id）
+  string params_json = 2;           // 调用参数 JSON，须符合该服务 input_schema_json
+}
+
+// external/call_service 响应。
+message CallServiceResponse {
+  string result_json = 1;           // 调用结果 JSON，须符合该服务 output_schema_json
+}

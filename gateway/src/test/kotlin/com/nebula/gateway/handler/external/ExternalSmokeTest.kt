@@ -11,6 +11,8 @@ import com.nebula.gateway.testutil.createDispatcher
 import com.nebula.gateway.testutil.dispatchAs
 import com.nebula.gateway.testutil.handlerEntry
 import com.nebula.service.external.ExternalServiceOrchestrator
+import com.nebula.service.external.WeatherInvoker
+import com.nebula.service.external.WebSearchInvoker
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -21,13 +23,14 @@ import kotlin.test.assertEquals
 /**
  * 外部服务 Handler 冒烟测试（external-service-backend.md 阶段 5）。
  *
- * 经完整 Dispatcher（Auth + Log + RateLimit + Exception 拦截器链）验证四个场景：
- * - Handler 路由：external/query_weather、external/web_search 正确命中并委托编排层
+ * 经完整 Dispatcher（Auth + Log + RateLimit + Exception 拦截器链）验证四场景：
+ * - Handler 路由：external/query_weather、external/web_search 正确命中并委托编排层统一 invoke
  * - 缓存命中：编排层直接返回缓存内容（不抛错），响应透传回客户端
  * - 配额超限：编排层抛 QUOTA_EXCEEDED(1600) → Response.code=1600
  * - API 降级：编排层抛 SERVICE_UNAVAILABLE(1601) → Response.code=1601
  *
  * 编排层（ExternalServiceOrchestrator）以 mock 注入，聚焦 Handler/路由/异常映射。
+ * 通用调用入口为 invoke(serviceId, userId, clientIp, paramsJson)，不再暴露 typed 方法。
  */
 class ExternalSmokeTest {
 
@@ -53,7 +56,7 @@ class ExternalSmokeTest {
 
     @Test
     fun queryWeatherShouldRouteAndReturnResponse() = runTest {
-        coEvery { orchestrator.queryWeather(any(), "Beijing") } returns
+        coEvery { orchestrator.invoke(WeatherInvoker.SERVICE_ID, any(), any(), any()) } returns
             WeatherResponse.newBuilder().setFormatted("Beijing 晴 25°C").build()
 
         val resp = dispatcher.dispatchAs(
@@ -67,7 +70,7 @@ class ExternalSmokeTest {
 
     @Test
     fun webSearchShouldRouteAndReturnResponse() = runTest {
-        coEvery { orchestrator.webSearch(any(), "kotlin", any(), any()) } returns
+        coEvery { orchestrator.invoke(WebSearchInvoker.SERVICE_ID, any(), any(), any()) } returns
             SearchResponse.newBuilder().setFormatted("搜索结果（共 3 条）").build()
 
         val resp = dispatcher.dispatchAs(
@@ -82,7 +85,7 @@ class ExternalSmokeTest {
     @Test
     fun queryWeatherCacheHitShouldReturnCachedFormatted() = runTest {
         // 编排层命中缓存：直接返回缓存内容，不抛错（代表未走上游 API）
-        coEvery { orchestrator.queryWeather(any(), "Shanghai") } returns
+        coEvery { orchestrator.invoke(WeatherInvoker.SERVICE_ID, any(), any(), any()) } returns
             WeatherResponse.newBuilder().setFormatted("[cached] Shanghai 多云 22°C").build()
 
         val resp = dispatcher.dispatchAs(
@@ -96,7 +99,7 @@ class ExternalSmokeTest {
 
     @Test
     fun queryWeatherQuotaExceededShouldReturn1600() = runTest {
-        coEvery { orchestrator.queryWeather(any(), any()) } throws
+        coEvery { orchestrator.invoke(any(), any(), any(), any()) } throws
             BizException(BizCode.QUOTA_EXCEEDED, "配额已用完，剩余 3600s 重置")
 
         val resp = dispatcher.dispatchAs(
@@ -110,7 +113,7 @@ class ExternalSmokeTest {
 
     @Test
     fun webSearchServiceUnavailableShouldReturn1601() = runTest {
-        coEvery { orchestrator.webSearch(any(), any(), any(), any()) } throws
+        coEvery { orchestrator.invoke(any(), any(), any(), any()) } throws
             BizException(BizCode.SERVICE_UNAVAILABLE, "上游搜索服务暂不可用")
 
         val resp = dispatcher.dispatchAs(

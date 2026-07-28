@@ -8,6 +8,7 @@ import com.nebula.gateway.handler.ClientIpKey
 import com.nebula.gateway.testutil.DEFAULT_SESSION
 import com.nebula.gateway.testutil.withSession
 import com.nebula.service.external.ExternalServiceOrchestrator
+import com.nebula.service.external.GeoIpInvoker
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -50,7 +51,7 @@ class IpLocationHandlerTest {
         val resp = IpLocationResponse.newBuilder()
             .setFormatted("中国 广东 深圳（114.06,22.54）时区Asia/Shanghai 运营商China Telecom")
             .build()
-        coEvery { orchestrator.locateByIp(userId, clientIp) } returns resp
+        coEvery { orchestrator.invoke(GeoIpInvoker.SERVICE_ID, eq(userId), eq(clientIp), any()) } returns resp
 
         val result = withContext(ClientIpKey(clientIp)) {
             withSession(DEFAULT_SESSION) {
@@ -82,11 +83,12 @@ class IpLocationHandlerTest {
     }
 
     /**
-     * 非公网 IPv4（私有/回环/链路本地/保留段）应在本地短路，直接抛 SERVICE_UNAVAILABLE，
-     * 且**完全不调用** orchestrator（不浪费上游配额、不写失败缓存）。
+     * 非公网 IP 的本地短路已下沉到 service 模块 GeoIpInvoker；此处验证 Handler 正确把 Invoker
+     * （经模拟的 orchestrator）抛出的 SERVICE_UNAVAILABLE 透传给客户端，且确实委托了
+     * orchestrator.invoke（不做重复短路、不浪费配额判定）。
      */
     @Test
-    fun handleShouldRejectNonPublicIpLocallyWithoutCallingOrchestrator() = runTest {
+    fun handleShouldPropagateServiceUnavailableFromOrchestrator() = runTest {
         val nonPublicIps = listOf(
             "127.0.0.1",        // 回环
             "10.0.0.1",         // 私有 A
@@ -100,6 +102,9 @@ class IpLocationHandlerTest {
             "::1",              // IPv6 回环
             "not-an-ip"         // 非法格式
         )
+        // 模拟 Invoker 短路抛出的 SERVICE_UNAVAILABLE（真实短路逻辑由 GeoIpInvokerTest 覆盖）
+        coEvery { orchestrator.invoke(GeoIpInvoker.SERVICE_ID, any(), any(), any()) } throws
+            BizException(BizCode.SERVICE_UNAVAILABLE, "非公网 IP 无法地理定位（本地已短路，不调用上游）")
         for (ip in nonPublicIps) {
             val exception = assertFailsWith<BizException> {
                 withContext(ClientIpKey(ip)) {
@@ -110,16 +115,17 @@ class IpLocationHandlerTest {
             }
             assertEquals(BizCode.SERVICE_UNAVAILABLE, exception.bizCode)
         }
-        coVerify(exactly = 0) { orchestrator.locateByIp(any(), any()) }
+        // Handler 对每个非公网 IP 都委托了 orchestrator.invoke，且自身未重复短路
+        coVerify(exactly = nonPublicIps.size) { orchestrator.invoke(GeoIpInvoker.SERVICE_ID, any(), any(), any()) }
     }
 
-    /** 公网 IPv4 应正常委托 orchestrator（不被本地短路拦截）。 */
+    /** 公网 IPv4 应正常委托 orchestrator.invoke（不被本地短路拦截）。 */
     @Test
     fun handleShouldDelegatePublicIpToOrchestrator() = runTest {
         val userId = DEFAULT_SESSION.userId
         val clientIp = "203.0.113.7"
         val resp = IpLocationResponse.newBuilder().setFormatted("中国 广东 深圳").build()
-        coEvery { orchestrator.locateByIp(userId, clientIp) } returns resp
+        coEvery { orchestrator.invoke(GeoIpInvoker.SERVICE_ID, eq(userId), eq(clientIp), any()) } returns resp
 
         val result = withContext(ClientIpKey(clientIp)) {
             withSession(DEFAULT_SESSION) {
@@ -127,6 +133,6 @@ class IpLocationHandlerTest {
             }
         }
         assertEquals("中国 广东 深圳", result.formatted)
-        coVerify(exactly = 1) { orchestrator.locateByIp(userId, clientIp) }
+        coVerify(exactly = 1) { orchestrator.invoke(GeoIpInvoker.SERVICE_ID, eq(userId), eq(clientIp), any()) }
     }
 }

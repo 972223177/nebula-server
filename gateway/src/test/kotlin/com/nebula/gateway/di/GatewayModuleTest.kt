@@ -54,6 +54,7 @@ import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 import kotlin.test.assertNotNull
 
@@ -183,12 +184,21 @@ class GatewayModuleTest {
         single { SensitiveWordDownloadHandler(get()) }
         single { SensitiveWordReloadHandler(get(), get()) }
 
-        // 外部服务（天气 / 搜索 / IP 定位）—— 镜像生产 externalHandlerModule
+        // 外部服务（天气 / 搜索 / IP 定位 / 服务发现 / 通用调用）—— 镜像生产 externalHandlerModule
         single { externalOrchestrator }
         single { QueryWeatherHandler(get()) }
         single { WebSearchHandler(get()) }
         single { IpLocationHandler(get()) }
-        single<HandlerCollector>(named("external")) { ExternalHandlerCollector(get(), get(), get()) }
+        // 镜像生产 externalHandlerModule：同接口多实现用 bind（否则主 key 相同互相覆盖，getAll 只聚合 1 个）
+        single { com.nebula.gateway.handler.external.agent.WeatherServiceProvider() } bind com.nebula.gateway.handler.external.agent.ServiceDefinitionProvider::class
+        single { com.nebula.gateway.handler.external.agent.WebSearchServiceProvider() } bind com.nebula.gateway.handler.external.agent.ServiceDefinitionProvider::class
+        single { com.nebula.gateway.handler.external.agent.GeoIpServiceProvider() } bind com.nebula.gateway.handler.external.agent.ServiceDefinitionProvider::class
+        single { com.nebula.gateway.handler.external.agent.ServiceRegistry(get(), getAll()) }
+        single { com.nebula.gateway.handler.external.agent.ListServicesHandler(get()) }
+        single { com.nebula.gateway.handler.external.agent.CallServiceHandler(get()) }
+        single<HandlerCollector>(named("external")) {
+            ExternalHandlerCollector(get(), get(), get(), get(), get())
+        }
     }
 
     @AfterEach
@@ -482,11 +492,15 @@ class GatewayModuleTest {
         val collector = ExternalHandlerCollector(
             GlobalContext.get().get<QueryWeatherHandler>(),
             GlobalContext.get().get<WebSearchHandler>(),
-            GlobalContext.get().get<IpLocationHandler>()
+            GlobalContext.get().get<IpLocationHandler>(),
+            GlobalContext.get().get<com.nebula.gateway.handler.external.agent.ListServicesHandler>(),
+            GlobalContext.get().get<com.nebula.gateway.handler.external.agent.CallServiceHandler>()
         )
         collector.registerAll(registry)
         assertNotNull(registry.get("external/query_weather"))
         assertNotNull(registry.get("external/web_search"))
         assertNotNull(registry.get("external/geo_ip"))
+        assertNotNull(registry.get("external/list_services"))
+        assertNotNull(registry.get("external/call_service"))
     }
 }

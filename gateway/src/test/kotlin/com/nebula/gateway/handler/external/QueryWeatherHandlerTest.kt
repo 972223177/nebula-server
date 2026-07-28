@@ -7,6 +7,7 @@ import com.nebula.common.exception.BizException
 import com.nebula.gateway.testutil.DEFAULT_SESSION
 import com.nebula.gateway.testutil.withSession
 import com.nebula.service.external.ExternalServiceOrchestrator
+import com.nebula.service.external.WeatherInvoker
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -45,7 +46,7 @@ class QueryWeatherHandlerTest {
         val resp = WeatherResponse.newBuilder()
             .setFormatted("北京 晴 25°C")
             .build()
-        coEvery { orchestrator.queryWeather(userId, "北京") } returns resp
+        coEvery { orchestrator.invoke(WeatherInvoker.SERVICE_ID, eq(userId), any(), any()) } returns resp
 
         val result = withSession(DEFAULT_SESSION) {
             handler.handle(WeatherRequest.newBuilder().setCity("北京").build())

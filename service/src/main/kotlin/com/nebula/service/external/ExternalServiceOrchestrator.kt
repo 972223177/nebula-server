@@ -1,203 +1,45 @@
 package com.nebula.service.external
 
-import com.nebula.chat.external.IpLocationResponse
-import com.nebula.chat.external.SearchResponse
-import com.nebula.chat.external.SearchResultItem
-import com.nebula.chat.external.WeatherResponse
+import com.google.protobuf.Message
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
-import com.nebula.common.external.ExternalServiceCacheConfig
-import com.nebula.common.external.ExternalServiceExceptions
-import com.nebula.common.external.ExternalServiceQuotaConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
-import java.time.LocalDate
 
 /**
- * 外部服务业务编排（D-XX）。
+ * 外部服务编排入口（D-XX，Phase 10）—— 退化为纯注册表 + 通用调用。
  *
- * 完整流程：
- * - 天气：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 → 预估扣减（约 8 次上游调用）→ 调 WeatherService → 写缓存
- * - 搜索：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 → 扣减 1 → 调 SearchService → 写缓存（按 SearchType 分级 TTL）
- * - IP 定位：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 → 扣减 1 → 调 GeoIpService（高德）→ 写缓存（24h）
+ * 仅负责按 service_id 聚合各 [ExternalServiceInvoker] 并暴露统一调用入口，
+ * 具体「参数解析 / 配额 / 缓存 / 上游调用 / 净化」逻辑全部下沉到各 Invoker 独立文件，
+ * 本类不再随服务数增长。gateway 侧专用 Handler 与 [com.nebula.gateway.handler.external.agent.ServiceDefinitionProvider]
+ * 均统一经 [invoke] 路由，零增长承接新服务（新增服务 = 1 个 Invoker 文件 + service 模块 1 行 Koin）。
  *
- * 职责：
- * - 缓存查询（命中直接返回，不扣配额）——缓存由本编排层统一负责（§4.2/§4.6）
- * - 配额检查：全局共享池（1000/天、2500/月）硬上限 + 每用户防御子限（250/天、500/月，≤ 全局上限）
- * - 调用上游 Service → 合并格式化 → 生成 Proto 响应
- * - 统一异常映射：全部抛 [BizException](BizCode) 由 ExceptionInterceptor 写入 Response.code/msg（§2/§4.3）
- *
- * 鉴权与每用户限额：userId 由 Handler 层经 `coroutineContext.requireSession()` 取得后**作为参数传入**，
- * 编排层不直接依赖 gateway 的 SessionKey（遵守 common←repository←service←gateway 单向依赖）。
- *
- * @param weatherService 和风天气服务
- * @param searchService Serper 搜索服务
- * @param geoIpService 高德 IP 定位服务（国内可达，需 Key）
- * @param quotaManager 全局配额管理器（Redis 主存储 + 文件降级）
- * @param cache 外部服务缓存（L1 + L2）
- * @param perUserQuotaStore 每用户防御子限存储（Redis 计数）
- * @param quotaConfig 配额配置（限额、阈值、每用户子限）
- * @param cacheConfig 缓存配置（L2 分级 TTL）
+ * @param invokers 各外部服务执行体（service 模块以 ExternalServiceInvoker<*> 注册，Koin getAll 聚合）
  */
 class ExternalServiceOrchestrator(
-    private val weatherService: WeatherService,
-    private val searchService: SearchService,
-    private val geoIpService: GeoIpService,
-    private val quotaManager: QuotaManager,
-    private val cache: ExternalServiceCache,
-    private val perUserQuotaStore: PerUserQuotaStore,
-    private val quotaConfig: ExternalServiceQuotaConfig,
-    private val cacheConfig: ExternalServiceCacheConfig
+    private val invokers: Map<String, ExternalServiceInvoker<*>>
 ) {
     private val log = KotlinLogging.logger {}
 
-    /**
-     * 天气查询编排。
-     *
-     * @param userId 调用方用户 ID（用于每用户防御子限）
-     * @param city 城市名
-     * @return 格式化天气文本封装的 WeatherResponse
-     * @throws BizException QUOTA_EXCEEDED / INVALID_CITY / SERVICE_UNAVAILABLE（由 ExceptionInterceptor 转为 Response）
-     */
-    suspend fun queryWeather(userId: Long, city: String): WeatherResponse {
-        val cacheKey = "weather:${city.trim().lowercase()}"
-        cache.get(cacheKey)?.let {
-            log.debug { "天气缓存命中 userId=$userId city=$city" }
-            return WeatherResponse.newBuilder().setFormatted(it).build()
-        }
-        if (quotaManager.usagePercent(QuotaCategory.WEATHER) >= quotaConfig.rejectThreshold) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.WEATHER))
-        }
-        if (!perUserQuotaStore.tryConsume(userId, QuotaCategory.WEATHER, quotaConfig.weatherPerUserDailyLimit, dateKey())) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.WEATHER))
-        }
-        if (!quotaManager.consume(QuotaCategory.WEATHER, 8)) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.WEATHER))
-        }
-        val resp = weatherService.queryWeather(city)
-        val safe = ExternalContentSanitizer.sanitize(resp.formatted) // §7.1 间接提示注入防护
-        cache.put(cacheKey, safe, QuotaCategory.WEATHER)
-        return WeatherResponse.newBuilder().setFormatted(safe).build()
+    init {
+        // 启动期 fail-fast：重复 id 会静默覆盖导致服务丢失，提前在构造时暴露
+        val dup = invokers.keys.groupingBy { it }.eachCount().filter { it.value > 1 }.keys
+        require(dup.isEmpty()) { "ExternalServiceOrchestrator 存在重复服务 id: ${dup.joinToString()}" }
     }
 
     /**
-     * 网页搜索编排。
+     * 按 service_id 通用调用外部服务。
      *
-     * @param userId 调用方用户 ID
-     * @param query 搜索词
-     * @param maxResults 最大结果数（将被裁剪到 [1,10]）
-     * @param searchType 搜索类型字符串（白名单校验，见 [SearchService.SearchType]）
-     * @return 格式化搜索结果封装的 SearchResponse
-     * @throws BizException QUOTA_EXCEEDED / INVALID_PARAM（未知类型）/ SERVICE_UNAVAILABLE / RATE_LIMITED
+     * @param id 服务 id（大小写不敏感，免疫 LLM 工具调用的大小写漂移）
+     * @param userId 调用方用户 ID（每用户防御子限）
+     * @param clientIp 客户端真实 IP（IP 定位类服务用于本地短路）
+     * @param paramsJson 统一参数（JSON 对象字符串）
+     * @return 结构化 Proto 响应（已净化）
+     * @throws BizException NOT_FOUND（未知 service_id）/ INVALID_PARAM / QUOTA_EXCEEDED / SERVICE_UNAVAILABLE
      */
-    suspend fun webSearch(userId: Long, query: String, maxResults: Int, searchType: String = "search"): SearchResponse {
-        val type = SearchService.SearchType.fromApi(searchType)
-            ?: throw BizException(BizCode.INVALID_PARAM, "不支持的搜索类型: $searchType")
-        val normalized = query.trim().lowercase().replace(Regex("\\s+"), " ")
-        val cacheKey = "search:$normalized"
-        // 命中返回完整响应（含 items）；通用 get 仅存 formatted，故搜索专用方法避免丢结构化字段
-        cache.getSearchResponse(cacheKey)?.let {
-            log.debug { "搜索缓存命中 userId=$userId query=$query" }
-            return it
-        }
-        if (quotaManager.usagePercent(QuotaCategory.SEARCH) >= quotaConfig.rejectThreshold) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.SEARCH))
-        }
-        if (!perUserQuotaStore.tryConsume(userId, QuotaCategory.SEARCH, quotaConfig.searchPerUserMonthlyLimit, monthKey())) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.SEARCH))
-        }
-        if (!quotaManager.consume(QuotaCategory.SEARCH, 1)) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.SEARCH))
-        }
-        val resp = searchService.searchByType(query, type, maxResults)
-        val safeFormatted = ExternalContentSanitizer.sanitize(resp.formatted) // §7.1 间接提示注入防护（主文本包裹边界标记）
-        // 结构化结果同样来自不可信第三方，逐字段净化（去控制字符+注入词，不包裹标记以免破坏客户端逐条渲染）
-        val safeItems = resp.itemsList.map { item ->
-            SearchResultItem.newBuilder()
-                .setTitle(ExternalContentSanitizer.sanitizeInline(item.title))
-                .setSnippet(ExternalContentSanitizer.sanitizeInline(item.snippet))
-                .setUrl(ExternalContentSanitizer.sanitizeInline(item.url))
-                .build()
-        }
-        val response = SearchResponse.newBuilder()
-            .setFormatted(safeFormatted)
-            .addAllItems(safeItems)
-            .build()
-        cache.putSearchResponse(cacheKey, response, searchTtlMs(type))
-        return response
-    }
-
-    /**
-     * IP 地理定位编排（D-XX）。
-     *
-     * 流程与天气/搜索一致：缓存命中（不扣配额）→ 全局配额拒绝线检查 → 每用户防御子限 →
-     * 预估扣减（1 次上游调用）→ 调 GeoIpService（高德 IP 定位）→ 写缓存（24h）。
-     * 当前仅日帽（[com.nebula.common.external.ExternalServiceQuotaConfig.geoDailyLimit]，默认 500）生效；
-     * [com.nebula.common.external.ExternalServiceQuotaConfig.geoMonthlyLimit] 为预留月度帽（B 方案），
-     * 启用后此处需同时校验月用量（新增月度计数键与重置分支）。
-     *
-     * IP 来自客户端连接元数据（由 Handler 经 `coroutineContext.requireClientIp()` 提取），
-     * 客户端不传参，避免伪造定位。`x-forwarded-for` 可能含多级代理，取首个（最原始客户端）IP。
-     *
-     * @param userId 调用方用户 ID（用于每用户防御子限）
-     * @param clientIp 客户端真实 IP（由 Handler 从连接元数据提取）
-     * @return 定位结果封装的 IpLocationResponse
-     * @throws BizException QUOTA_EXCEEDED / SERVICE_UNAVAILABLE（由 ExceptionInterceptor 转为 Response）
-     */
-    suspend fun locateByIp(userId: Long, clientIp: String): IpLocationResponse {
-        val ip = normalizeIp(clientIp)
-        val cacheKey = "geoip:$ip"
-        cache.getGeoIp(cacheKey)?.let {
-            log.debug { "IP 定位缓存命中 userId=$userId ip=$ip" }
-            return it
-        }
-        if (quotaManager.usagePercent(QuotaCategory.GEO) >= quotaConfig.rejectThreshold) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.GEO))
-        }
-        if (!perUserQuotaStore.tryConsume(userId, QuotaCategory.GEO, quotaConfig.geoPerUserDailyLimit, dateKey())) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.GEO))
-        }
-        if (!quotaManager.consume(QuotaCategory.GEO, 1)) {
-            throw ExternalServiceExceptions.quotaExceeded(quotaManager.remainingSecondsUntilReset(QuotaCategory.GEO))
-        }
-        val result = geoIpService.locate(ip)
-        val safeFormatted = ExternalContentSanitizer.sanitize(result.formatted) // §7.1 间接提示注入防护
-        val resp = IpLocationResponse.newBuilder()
-            .setFormatted(safeFormatted)
-            .setCountry(ExternalContentSanitizer.sanitizeInline(result.country))
-            .setRegion(ExternalContentSanitizer.sanitizeInline(result.region))
-            .setCity(ExternalContentSanitizer.sanitizeInline(result.city))
-            .setLatitude(result.latitude)
-            .setLongitude(result.longitude)
-            .setTimezone(ExternalContentSanitizer.sanitizeInline(result.timezone))
-            .setIsp(ExternalContentSanitizer.sanitizeInline(result.isp))
-            .build()
-        cache.putGeoIp(cacheKey, resp, ipGeoTtlMs())
-        return resp
-    }
-
-    /** 规范化客户端 IP：x-forwarded-for 可能为 "ip, proxy1, proxy2"，取首个最原始客户端 IP；"unknown" 原样透传 */
-    private fun normalizeIp(raw: String): String {
-        val trimmed = raw.trim()
-        val first = trimmed.split(",").firstOrNull()?.trim() ?: trimmed
-        return if (first.isBlank()) "unknown" else first
-    }
-
-    /** IP 定位 L2 TTL（毫秒），默认取配置 ipGeoTtlSeconds（24h） */
-    private fun ipGeoTtlMs(): Long = cacheConfig.l2.ipGeoTtlSeconds * 1000L
-
-    /** 按搜索类型选择 L2 TTL（稳定类长 TTL 省调用；时效类短 TTL 防过期） */
-    private fun searchTtlMs(type: SearchService.SearchType): Long = when (type) {
-        SearchService.SearchType.NEWS -> cacheConfig.l2.searchNewsTtlSeconds * 1000L
-        SearchService.SearchType.SEARCH -> cacheConfig.l2.searchStableTtlSeconds * 1000L
-        else -> cacheConfig.l2.searchTtlSeconds * 1000L
-    }
-
-    /** 当日日期键（每用户天气日限周期） */
-    private fun dateKey(): String = LocalDate.now().toString()
-
-    /** 当月键（每用户搜索月限周期） */
-    private fun monthKey(): String {
-        val d = LocalDate.now()
-        return "%04d-%02d".format(d.year, d.monthValue)
+    suspend fun invoke(id: String, userId: Long, clientIp: String, paramsJson: String): Message {
+        val invoker = invokers[id.lowercase()]
+            ?: throw BizException(BizCode.NOT_FOUND, "未知 service_id: $id")
+        log.debug { "外部服务调用 id=$id userId=$userId" }
+        return invoker.invoke(userId, clientIp, paramsJson)
     }
 }

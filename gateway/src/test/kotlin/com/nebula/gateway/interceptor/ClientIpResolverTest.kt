@@ -1,5 +1,6 @@
 package com.nebula.gateway.interceptor
 
+import com.nebula.common.net.isPublicUnicastIpv4
 import io.grpc.Metadata
 import java.net.InetSocketAddress
 import kotlin.test.Test
