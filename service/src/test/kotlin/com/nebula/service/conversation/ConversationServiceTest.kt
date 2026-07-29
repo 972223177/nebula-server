@@ -42,7 +42,8 @@ class ConversationServiceTest {
         txRunner = mockk()
         em = mockk(relaxed = true)
         conversationService = ConversationService(
-            conversationDao, conversationMemberDao, userDao, friendshipDao, txRunner
+            GroupService(conversationDao, conversationMemberDao, userDao, txRunner),
+            ConversationQueryService(conversationDao, conversationMemberDao, userDao, friendshipDao, txRunner)
         )
         coEvery { txRunner.execute<Any>(any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")

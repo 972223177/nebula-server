@@ -4,7 +4,9 @@ import com.nebula.common.init.DeadLetterCallback
 import com.nebula.common.init.ModuleInitializer
 import com.nebula.service.admin.DeadLetterService
 import com.nebula.service.chat.MessageService
+import com.nebula.service.conversation.ConversationQueryService
 import com.nebula.service.conversation.ConversationService
+import com.nebula.service.conversation.GroupService
 import com.nebula.service.external.*
 import com.nebula.service.friend.FriendService
 import com.nebula.service.sequence.SeqService
@@ -27,7 +29,9 @@ val serviceKoinModule = module {
     single { UserPrivacyService(get(), get()) }
     single { OnlineStatusService(get()) }
     single { MessageService(get(), get(), get(), get(), get(), get(), get(), get()) }
-    single { ConversationService(get(), get(), get(), get(), get()) }
+    single { GroupService(get(), get(), get(), get()) }                 // 群生命周期 + 成员（ConversationService Facade 子服务）
+    single { ConversationQueryService(get(), get(), get(), get(), get()) } // 会话查询/列表/删除/私聊（ConversationService Facade 子服务）
+    single { ConversationService(get(), get()) }                          // 聚合服务：by 委托 Group/Query 子服务，Handler 零改动
     single { FriendService(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { DeadLetterService(get(), get(), get(), get()) }
     single<DeadLetterCallback> { get<DeadLetterService>() }
