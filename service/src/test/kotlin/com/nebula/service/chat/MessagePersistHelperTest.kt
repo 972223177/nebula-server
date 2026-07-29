@@ -61,7 +61,7 @@ class MessagePersistHelperTest {
     @Test
     fun toChatMessageMapsAllFields() {
         val entity = MessageEntity("c1", 7L, 2, "hi", null, null, 50L, 123L).apply { id = 42L }
-        val msg = helper.toChatMessage(entity)
+        val msg = entity.toChatMessage()
         assertEquals(42L, msg.msgId)
         assertEquals("c1", msg.conversationId)
         assertEquals(7L, msg.senderUid)

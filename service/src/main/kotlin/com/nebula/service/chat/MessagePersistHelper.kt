@@ -1,9 +1,6 @@
 package com.nebula.service.chat
 
-import com.google.protobuf.ByteString
 import com.nebula.chat.chat.SendMessageReq
-import com.nebula.chat.message.ChatMessage
-import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.redis.MessageQueueRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.util.Base64
@@ -76,27 +73,5 @@ class MessagePersistHelper(
             "payload" to (if (req.payload.size() > 0) Base64.getEncoder().encodeToString(req.payload.toByteArray()) else "")
         )
         messageQueueRepository.enqueue(streamFields)
-    }
-
-    /**
-     * 将 [MessageEntity] 转换为 [ChatMessage] Protobuf。
-     *
-     * @param entity 消息实体
-     * @return 转换后的 ChatMessage
-     */
-    fun toChatMessage(entity: MessageEntity): ChatMessage {
-        val builder = ChatMessage.newBuilder()
-            .setMsgId(requireNotNull(entity.id) { "MessageEntity.id 不应为null" })
-            .setConversationId(entity.conversationId)
-            .setSenderUid(entity.senderUid)
-            .setMessageTypeValue(entity.messageType)
-            .setContent(entity.content)
-            .setClientTs(entity.clientTs)
-            .setServerTs(entity.serverTs)
-        val payloadBytes = entity.payload
-        if (payloadBytes != null && payloadBytes.isNotEmpty()) {
-            builder.setPayload(ByteString.copyFrom(payloadBytes))
-        }
-        return builder.build()
     }
 }

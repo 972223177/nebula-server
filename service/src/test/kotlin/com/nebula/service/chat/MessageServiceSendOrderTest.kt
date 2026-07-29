@@ -6,6 +6,7 @@ import com.nebula.repository.dao.*
 import com.nebula.repository.entity.ConversationEntity
 import com.nebula.repository.entity.ConversationMemberEntity
 import com.nebula.repository.redis.MessageQueueRepository
+import com.nebula.service.chat.MessageServiceImpl
 import com.nebula.service.sequence.SeqService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -36,7 +37,7 @@ class MessageServiceSendOrderTest {
     private lateinit var idGenerator: SnowflakeIdGenerator
     private lateinit var seqService: SeqService
     private lateinit var em: EntityManager
-    private lateinit var messageService: MessageService
+    private lateinit var messageService: MessageServiceImpl
 
     private val convId = "private:1:2"
     private val senderUid = 1L
@@ -52,7 +53,7 @@ class MessageServiceSendOrderTest {
         idGenerator = mockk()
         seqService = mockk()
         em = mockk(relaxed = true)
-        messageService = MessageService(
+        messageService = MessageServiceImpl(
             messageDao, conversationMemberDao, conversationDao,
             friendshipDao, txRunner, messageQueueRepository, idGenerator, seqService
         )
