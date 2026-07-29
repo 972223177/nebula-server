@@ -35,7 +35,7 @@ class UserServiceTest {
     private lateinit var txRunner: JpaTxRunner
     private lateinit var idGenerator: SnowflakeIdGenerator
     private lateinit var onlineStatusRepository: OnlineStatusRepository
-    private lateinit var userService: UserService
+    private lateinit var userService: UserServiceImpl
     private lateinit var em: EntityManager
 
     /** 测试用固定用户 ID */
@@ -54,7 +54,7 @@ class UserServiceTest {
         idGenerator = mockk()
         onlineStatusRepository = mockk()
         em = mockk(relaxed = true)
-        userService = spyk(UserService(userDao, txRunner, idGenerator, onlineStatusRepository))
+        userService = spyk(UserServiceImpl(userDao, txRunner, idGenerator, onlineStatusRepository))
 
         // 默认 txRunner.execute 直接执行传入的 lambda
         coEvery { txRunner.execute<Any>(any()) } coAnswers {

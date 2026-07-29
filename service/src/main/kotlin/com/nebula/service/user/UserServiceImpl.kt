@@ -1,0 +1,276 @@
+package com.nebula.service.user
+
+import com.nebula.chat.user.*
+import com.nebula.common.BizCode
+import com.nebula.common.exception.UserException
+import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.repository.dao.JpaTxRunner
+import com.nebula.repository.dao.UserDao
+import com.nebula.repository.entity.UserEntity
+import com.nebula.repository.redis.OnlineStatusRepository
+import io.github.oshai.kotlinlogging.KotlinLogging
+import jakarta.persistence.PersistenceException
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+
+/**
+ * 用户业务契约（2026-07-29 字面 Facade 改造，仿 `conversation/ConversationService`）。
+ *
+ * 所有公开方法声明在此接口；[UserServiceImpl] 实现之，聚合 Facade [UserService] 经 `by` 委托暴露。
+ * Handler 仅依赖 [UserService]（即本接口），不感知实现拆分。
+ */
+interface UserOperations {
+    /** 用户注册（D-01, D-02, AUTH-01） */
+    suspend fun register(req: RegisterReq): Long
+
+    /** 用户登录（D-04, D-05, AUTH-01） */
+    suspend fun loginByPassword(req: LoginReq): Long
+
+    /** 按用户名搜索用户（D-07, D-08） */
+    suspend fun searchUsers(keyword: String, cursor: Long, limit: Int): SearchUserResp
+
+    /** 获取用户详细资料 */
+    suspend fun getProfile(uid: Long): GetProfileResp
+
+    /** 批量查询用户信息 */
+    suspend fun batchGetUsers(req: BatchIdRequest): BatchGetUserResp
+
+    /** BCrypt 密码验证（D-03） */
+    fun verifyPassword(rawPassword: String, storedHash: String): Boolean
+}
+
+/**
+ * 用户业务服务实现（D-01 ~ D-05, D-07 ~ D-08）。
+ *
+ * 提供用户注册、登录、搜索、资料查询、批量查询等核心业务逻辑。
+ * 不依赖网关层组件（SessionRegistry、PushService 等），由调用方（Handler）负责 Session 管理和推送。
+ *
+ * 事务通过 [JpaTxRunner] 管理（替代原 Spring TransactionTemplate）。
+ * Entity→Protobuf 映射下沉到 [com.nebula.service.user.toUserBrief] / [com.nebula.service.user.toGetProfileResp]
+ * （`UserMappers.kt`），本类仅保留业务编排。
+ */
+class UserServiceImpl(
+    private val userDao: UserDao,
+    private val txRunner: JpaTxRunner,
+    private val idGenerator: SnowflakeIdGenerator,
+    private val onlineStatusRepository: OnlineStatusRepository
+) : UserOperations {
+
+    companion object {
+        /** 日志记录器 */
+        private val logger = KotlinLogging.logger {}
+        /** BCrypt cost 因子（D-03） */
+        private const val BCRYPT_COST = 12
+        /** 密码最小长度 */
+        private const val MIN_PASSWORD_LENGTH = 6
+        /** 单页最大返回条数（D-08） */
+        private const val MAX_SEARCH_LIMIT = 20
+        /**
+         * Snowflake ID 上界（粗略估计）。
+         *
+         * 用于 searchUsers 游标兼容：旧客户端可能传 createdAt 毫秒（如 1.7e12）作为 cursor，
+         * 远小于 Long.MAX_VALUE 但超过 Snowflake ID 上界，应被识别为"首次查询"。
+         * 当前 ID 生成器 workerId=1, datacenterId=1，时间戳起点 2020-01-01
+         * → ID 上界约 2^63 - 1，使用 1e18 作为保守阈值。
+         */
+        private const val SNOWFLAKE_ID_MAX = 1_000_000_000_000_000_000L
+    }
+
+    /**
+     * BCrypt 密码编码器，延迟初始化为单例复用。
+     *
+     * [BCryptPasswordEncoder] 本身是线程安全的，使用 [by lazy] 确保全局唯一实例，
+     * 避免 register() 和 verifyPassword() 中重复创建对象，减少高频场景下的 GC 压力。
+     */
+    private val passwordEncoder: BCryptPasswordEncoder by lazy {
+        BCryptPasswordEncoder(BCRYPT_COST)
+    }
+
+    /**
+     * 用户注册（D-01, D-02, AUTH-01）。
+     *
+     * 校验用户名唯一性 → 校验密码强度 → BCrypt 哈希密码 → 生成 Snowflake ID → 持久化。
+     * 写入与唯一性检查在同一事务中完成（D-09），由 [JpaTxRunner] 承载。
+     *
+     * @param req 注册请求（含 username, password, nickname, avatar）
+     * @return 注册响应（含 uid）
+     * @throws UserException 用户名已存在、密码过短、参数无效时
+     */
+    override suspend fun register(req: RegisterReq): Long {
+        val password = req.password
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            throw UserException(BizCode.INVALID_PARAM, "密码长度不能少于 $MIN_PASSWORD_LENGTH 位")
+        }
+
+        val username = req.username.trim()
+        if (username.isBlank()) {
+            throw UserException(BizCode.INVALID_PARAM, "用户名不能为空")
+        }
+
+        val passwordHash = passwordEncoder.encode(password)
+
+        val user = UserEntity(
+            username = username,
+            passwordHash = passwordHash,
+            nickname = req.nickname.ifBlank { username },
+            avatar = req.avatar.ifBlank { "" }
+        )
+        user.id = idGenerator.nextId()
+        val now = LocalDateTime.now()
+        user.createdAt = now
+        user.updatedAt = now
+
+        // 持久化用户（DB UNIQUE KEY uk_username 兜底，catch 异常转为业务错误）
+        return try {
+            txRunner.execute { em ->
+                // 事务内再次校验唯一性，避免两个并发请求同时通过前置检查
+                if (userDao.findByUsername(em, username) != null) {
+                    throw UserException(BizCode.USERNAME_EXISTS)
+                }
+                userDao.insert(em, user)
+            }
+            // 在事务成功提交后校验，requireNotNull 在事务内已完成（id 早于事务生成）
+            val newUid = requireNotNull(user.id) { "用户ID不能为null" }
+            logger.info { "用户注册成功 uid=$newUid username=$username" }
+            newUid
+        } catch (e: UserException) {
+            if (e.bizCode == BizCode.USERNAME_EXISTS) {
+                logger.warn { "用户注册失败：用户名已存在 username=$username" }
+            }
+            throw e
+        } catch (e: PersistenceException) {
+            // 检测唯一约束冲突（多种实现，Hibernate 抛 ConstraintViolationException 被 JPA 包装为 PersistenceException）
+            if (e.message?.contains("Duplicate", ignoreCase = true) == true ||
+                e.message?.contains("ConstraintViolation", ignoreCase = true) == true ||
+                e.message?.contains("uk_username", ignoreCase = true) == true) {
+                throw UserException(BizCode.USERNAME_EXISTS, "用户名已存在")
+            }
+            throw e
+        }
+    }
+
+    /**
+     * 用户登录（D-04, D-05, AUTH-01）。
+     *
+     * 两种登录场景：
+     * 1. Token 重连（req.hasToken()）：验证 Token 有效性（需 SessionRegistry 配合，由调用方处理）
+     * 2. 密码登录：验证用户名密码
+     *
+     * 注意：Token 重连场景的 SessionRegistry 验证由 Handler 层完成，
+     * 此方法仅处理密码登录场景。
+     *
+     * @param req 登录请求（含 username + password）
+     * @return 用户 ID（LoginResp 的构建由 Handler 层完成，因需要 SessionRegistry 生成 Token）
+     * @throws UserException 用户不存在、密码错误时
+     */
+    override suspend fun loginByPassword(req: LoginReq): Long {
+        val username = req.username ?: throw UserException(BizCode.INVALID_PARAM, "用户名不能为空")
+        val password = req.password ?: throw UserException(BizCode.INVALID_PARAM, "密码不能为空")
+
+        val user = txRunner.execute { em -> userDao.findByUsername(em, username) }
+            ?: run {
+                logger.warn { "登录失败：用户不存在 username=$username" }
+                throw UserException(BizCode.USER_NOT_FOUND)
+            }
+
+        if (!verifyPassword(password, user.passwordHash)) {
+            logger.warn { "登录失败：密码错误 uid=${user.id} username=$username" }
+            throw UserException(BizCode.AUTH_FAILED)
+        }
+
+        logger.info { "用户登录成功 uid=${user.id} username=$username" }
+        return requireNotNull(user.id) { "用户ID不能为null" }
+    }
+
+    /**
+     * 按用户名搜索用户（D-07, D-08）。
+     *
+     * 游标分页，按 createdAt 倒序。
+     *
+     * @param keyword 搜索关键词
+     * @param cursor 游标（毫秒时间戳），0 表示首次查询
+     * @param limit 每页条数（最大 MAX_SEARCH_LIMIT）
+     * @return 搜索响应（含用户列表、游标、hasMore）
+     */
+    override suspend fun searchUsers(keyword: String, cursor: Long, limit: Int): SearchUserResp {
+        val trimmed = keyword.trim()
+        if (trimmed.isBlank()) {
+            return SearchUserResp.getDefaultInstance()
+        }
+
+        val actualLimit = if (limit in 1..MAX_SEARCH_LIMIT) limit else MAX_SEARCH_LIMIT
+        // Phase 5.1: 游标从 createdAt 毫秒改为用户 id（Snowflake 单调递增）
+        // 客户端契约保持 cursor: Long 不变，但语义变了（首次传 0，后续传返回的 nextCursor）
+        // 兼容旧客户端：如果传的不是合理的 id（> 0 且 < Snowflake 上限），视为首次查询
+        val cursorId = if (cursor in 1..SNOWFLAKE_ID_MAX) cursor else 0L
+
+        val users = txRunner.execute { em ->
+            userDao.findByUsernameContainingById(em, trimmed, cursorId, actualLimit + 1)
+        }
+
+        val hasMore = users.size > actualLimit
+        val result = if (hasMore) users.dropLast(1) else users
+
+        val builder = SearchUserResp.newBuilder()
+        result.forEach { entity ->
+            builder.addUsers(entity.toUserBrief())
+        }
+        // nextCursor 改为最后一行的 id
+        builder.setNextCursor(result.lastOrNull()?.id ?: 0L)
+        builder.setHasMore(hasMore)
+        return builder.build()
+    }
+
+    /**
+     * 获取用户详细资料。
+     *
+     * @param uid 目标用户 ID
+     * @return 用户资料响应
+     * @throws UserException 用户不存在
+     */
+    override suspend fun getProfile(uid: Long): GetProfileResp {
+        val user = txRunner.execute { em -> userDao.findById(em, uid) }
+            ?: throw UserException(BizCode.USER_NOT_FOUND)
+
+        return user.toGetProfileResp()
+    }
+
+    /**
+     * 批量查询用户信息。
+     *
+     * @param req 批量请求（含 uid 列表）
+     * @return 批量用户信息响应
+     */
+    override suspend fun batchGetUsers(req: BatchIdRequest): BatchGetUserResp {
+        val uidList = req.uidsList
+        if (uidList.isEmpty()) {
+            return BatchGetUserResp.getDefaultInstance()
+        }
+
+        val users = txRunner.execute { em -> userDao.findAllById(em, uidList) }
+            .associateBy { it.id }
+
+        val builder = BatchGetUserResp.newBuilder()
+        uidList.forEach { uid ->
+            val user = users[uid]
+            if (user != null) {
+                builder.addUsers(user.toUserBrief())
+            }
+        }
+        return builder.build()
+    }
+
+    /**
+     * BCrypt 密码验证（D-03）。
+     *
+     * MockK 原生支持 mock final 方法，无需 open。
+     *
+     * @param rawPassword 明文密码
+     * @param storedHash 数据库中存储的 BCrypt 哈希
+     * @return 是否匹配
+     */
+    override fun verifyPassword(rawPassword: String, storedHash: String): Boolean {
+        return passwordEncoder.matches(rawPassword, storedHash)
+    }
+}

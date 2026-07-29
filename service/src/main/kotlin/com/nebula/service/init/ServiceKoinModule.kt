@@ -17,7 +17,9 @@ import com.nebula.service.sequence.SeqServiceImpl
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.OnlineStatusServiceImpl
 import com.nebula.service.user.UserPrivacyService
+import com.nebula.service.user.UserPrivacyServiceImpl
 import com.nebula.service.user.UserService
+import com.nebula.service.user.UserServiceImpl
 import org.koin.dsl.bind
 import org.koin.dsl.module
 
@@ -30,8 +32,10 @@ import org.koin.dsl.module
  * 所有需要 MySQL 写入/读取的服务现在都通过 [com.nebula.repository.dao.JpaTxRunner] 承载事务。
  */
 val serviceKoinModule = module {
-    single { UserService(get(), get(), get(), get()) }
-    single { UserPrivacyService(get(), get()) }
+    single { UserServiceImpl(get(), get(), get(), get()) }                             // 用户业务实现
+    single { UserService(get()) }                                                      // 聚合 Facade：by 委托 UserServiceImpl，Handler 零改动
+    single { UserPrivacyServiceImpl(get(), get()) }                                 // 隐私设置实现
+    single { UserPrivacyService(get()) }                                           // 聚合 Facade：by 委托 UserPrivacyServiceImpl，Handler 零改动
     single { OnlineStatusServiceImpl(get()) }                                  // 在线状态实现
     single { OnlineStatusService(get()) }                                       // 聚合 Facade：by 委托 OnlineStatusServiceImpl，Handler 零改动
     single { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) } // 消息业务实现
