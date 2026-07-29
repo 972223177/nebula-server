@@ -38,7 +38,7 @@ interface DeadLetterCallback {
      * [com.nebula.repository.entity.MessageEntity] 时调用。
      *
      * 因关键字段缺失，无法可靠还原为完整消息，故不再重试（重试必败），而是将原始
-     * body 落地到死信表并标记为 [com.nebula.service.admin.DeadLetterService.STATUS_PERMANENT_FAILED]，
+     * body 落地到死信表并标记为 [com.nebula.service.admin.DeadLetterServiceImpl.STATUS_PERMANENT_FAILED]，
      * 以便人工排查数据损坏来源，同时 XACK 释放 pending 避免 Stream 无限堆积。
      *
      * @param rawBody 原始 Stream 条目 body（Map，字段可能缺失或非法）

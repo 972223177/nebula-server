@@ -3,6 +3,7 @@ package com.nebula.service.init
 import com.nebula.common.init.DeadLetterCallback
 import com.nebula.common.init.ModuleInitializer
 import com.nebula.service.admin.DeadLetterService
+import com.nebula.service.admin.DeadLetterServiceImpl
 import com.nebula.service.chat.MessageService
 import com.nebula.service.chat.MessageServiceImpl
 import com.nebula.service.conversation.ConversationQueryService
@@ -46,7 +47,8 @@ val serviceKoinModule = module {
     single { FriendRequestService(get(), get(), get(), get(), get(), get(), get()) } // 好友申请子域（FriendService 子服务）
     single { FriendshipService(get(), get(), get(), get(), get(), get()) }            // 好友关系/查询子域（FriendService 子服务）
     single { FriendService(get(), get()) }                                            // 聚合服务：by 委托两子服务，Handler 零改动
-    single { DeadLetterService(get(), get(), get(), get()) }
+    single { DeadLetterServiceImpl(get(), get(), get(), get()) }                         // 死信业务实现（同时实现 DeadLetterCallback）
+    single { DeadLetterService(get()) }                                                   // 聚合 Facade：by 委托 DeadLetterServiceImpl + DeadLetterCallback，桥接零改动
     single<DeadLetterCallback> { get<DeadLetterService>() }
     single { SeqServiceImpl(get()) }                                          // 序列号实现
     single { SeqService(get()) }                                               // 聚合 Facade：by 委托 SeqServiceImpl，Handler 零改动
@@ -57,9 +59,12 @@ val serviceKoinModule = module {
     single { ExternalServiceCache(get(), get()) }                       // ExternalServiceCacheConfig + Redis 连接
     single { PerUserQuotaStore(get()) }                                 // Redis 连接（每用户防御子限）
     single { QuotaManager(get(), get()) }                               // ExternalServiceQuotaConfig + Redis 连接
-    single { WeatherService(get(), get()) }                            // ExternalServiceConfig + ExternalServiceCache（GeoAPI 缓存）
-    single { SearchService(get()) }                                     // ExternalServiceConfig
-    single { GeoIpService(get()) }                                      // ExternalServiceConfig（ipGeo 段）
+    single { WeatherServiceImpl(get(), get()) }                                      // 天气实现
+    single { WeatherService(get()) }                                                 // 聚合 Facade：by 委托 WeatherServiceImpl，Handler 零改动
+    single { SearchServiceImpl(get()) }                                              // 搜索实现
+    single { SearchService(get()) }                                                  // 聚合 Facade：by 委托 SearchServiceImpl，Handler 零改动
+    single { GeoIpServiceImpl(get()) }                                               // IP 地理实现
+    single { GeoIpService(get()) }                                                   // 聚合 Facade：by 委托 GeoIpServiceImpl，Handler 零改动
     // 外部服务执行体：每个服务一个 ExternalServiceInvoker 实现，Koin 按类型 getAll 聚合，
     // ExternalServiceOrchestrator 仅做注册表 + 通用 invoke 入口，文件不随服务数增长
     single { ExternalServicePipeline(get(), get(), get(), get(), get()) }
