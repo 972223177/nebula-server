@@ -4,7 +4,6 @@ import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.gateway.admin.DeadLetterCompensator
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.delivery.RedisDeliveryTracker
-import com.nebula.gateway.handler.admin.AdminHandlerCollector
 import com.nebula.gateway.handler.admin.DeadLetterQueryHandler
 import com.nebula.gateway.handler.admin.RetryDeadLetterHandler
 import com.nebula.repository.dao.DeadLetterDao
@@ -86,15 +85,4 @@ class MessageReliabilityModuleTest {
         assertNotNull(koin.get<RetryDeadLetterHandler>())
     }
 
-    /**
-     * 验证 AdminHandlerCollector 可从已解析的 Handler 构造。
-     */
-    @Test
-    fun messageReliabilityModuleShouldConstructAdminHandlerCollector() {
-        startKoin { modules(messageReliabilityModule, buildExternalModule()) }
-        val deadLetterQueryHandler = GlobalContext.get().get<DeadLetterQueryHandler>()
-        val retryDeadLetterHandler = GlobalContext.get().get<RetryDeadLetterHandler>()
-        val collector = AdminHandlerCollector(deadLetterQueryHandler, retryDeadLetterHandler)
-        assertNotNull(collector)
-    }
 }

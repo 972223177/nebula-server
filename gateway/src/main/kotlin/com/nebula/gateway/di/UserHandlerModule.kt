@@ -1,8 +1,8 @@
 package com.nebula.gateway.di
 
-import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.user.*
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 /**
@@ -13,18 +13,14 @@ import org.koin.dsl.module
  */
 val userHandlerModule = module {
     // Phase 5: User Handler — 依赖 Service 层
-    single { LoginHandler(get(), get()) }                     // UserService + SessionRegistry
-    single { LogoutHandler(get()) }                            // SessionRegistry（AUTH-06 主动下线）
-    single { RegisterHandler(get(), get()) }                   // SensitiveWordService + UserService
-    single { SearchUserHandler(get()) }                       // UserService
-    single { GetProfileHandler(get()) }                       // UserService
-    single { BatchGetUserHandler(get()) }                     // UserService
-    single { BatchGetStatusHandler(get(), get()) }            // OnlineStatusService + UserPrivacyService
-    single { SetPrivacyHandler(get(), get(), get(), get(), get(named("serverScope"))) }   // UserPrivacyService + OnlineStatusService + PushService + FriendService + serverScope
-    single { GetPrivacyHandler(get()) }                       // UserPrivacyService
+    single { LoginHandler(get(), get()) } bind com.nebula.gateway.handler.Handler::class                     // UserService + SessionRegistry
+    single { LogoutHandler(get()) } bind com.nebula.gateway.handler.Handler::class                            // SessionRegistry（AUTH-06 主动下线）
+    single { RegisterHandler(get(), get()) } bind com.nebula.gateway.handler.Handler::class                   // SensitiveWordService + UserService
+    single { SearchUserHandler(get()) } bind com.nebula.gateway.handler.Handler::class                       // UserService
+    single { GetProfileHandler(get()) } bind com.nebula.gateway.handler.Handler::class                       // UserService
+    single { BatchGetUserHandler(get()) } bind com.nebula.gateway.handler.Handler::class                     // UserService
+    single { BatchGetStatusHandler(get(), get()) } bind com.nebula.gateway.handler.Handler::class            // OnlineStatusService + UserPrivacyService
+    single { SetPrivacyHandler(get(), get(), get(), get(), get(named("serverScope"))) } bind com.nebula.gateway.handler.Handler::class   // UserPrivacyService + OnlineStatusService + PushService + FriendService + serverScope
+    single { GetPrivacyHandler(get()) } bind com.nebula.gateway.handler.Handler::class                       // UserPrivacyService
 
-    // HandlerCollector 注册
-    single<HandlerCollector>(named("user")) { UserHandlerCollector(
-        get(), get(), get(), get(), get(), get(), get(), get(), get()
-    ) }
 }

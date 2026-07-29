@@ -1,7 +1,5 @@
 package com.nebula.gateway.di
 
-import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.handler.external.ExternalHandlerCollector
 import com.nebula.gateway.handler.external.IpLocationHandler
 import com.nebula.gateway.handler.external.QueryWeatherHandler
 import com.nebula.gateway.handler.external.WebSearchHandler
@@ -24,9 +22,9 @@ import org.koin.dsl.module
  * 各内置服务以 [ServiceDefinitionProvider] 注册，[ServiceRegistry] 经 getAll() 自动聚合，新增服务只加一行。
  */
 val externalHandlerModule = module {
-    single { QueryWeatherHandler(get()) }
-    single { WebSearchHandler(get()) }
-    single { IpLocationHandler(get()) }
+    single { QueryWeatherHandler(get()) } bind com.nebula.gateway.handler.Handler::class
+    single { WebSearchHandler(get()) } bind com.nebula.gateway.handler.Handler::class
+    single { IpLocationHandler(get()) } bind com.nebula.gateway.handler.Handler::class
     // Phase 10：服务发现 + 通用调用（复用既有 Orchestrator 作为执行体）
     // 内置服务逐个注册为 ServiceDefinitionProvider，注册表聚合，文件不再随服务数增长
     // 注意：同接口多实现必须用 bind 显式绑定接口类型，否则三个 single<ServiceDefinitionProvider>
@@ -37,10 +35,7 @@ val externalHandlerModule = module {
     single { WebSearchServiceProvider() } bind ServiceDefinitionProvider::class
     single { GeoIpServiceProvider() } bind ServiceDefinitionProvider::class
     single { ServiceRegistry(get(), getAll()) }
-    single { ListServicesHandler(get()) }
-    single { CallServiceHandler(get()) }
+    single { ListServicesHandler(get()) } bind com.nebula.gateway.handler.Handler::class
+    single { CallServiceHandler(get()) } bind com.nebula.gateway.handler.Handler::class
 
-    single<HandlerCollector>(named("external")) {
-        ExternalHandlerCollector(get(), get(), get(), get(), get())
-    }
 }

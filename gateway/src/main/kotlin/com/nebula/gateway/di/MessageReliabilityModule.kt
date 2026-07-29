@@ -1,14 +1,12 @@
 package com.nebula.gateway.di
 
 import com.nebula.gateway.admin.DeadLetterCompensator
-import com.nebula.gateway.delivery.DeliveryHandlerCollector
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.delivery.RedisDeliveryTracker
-import com.nebula.gateway.handler.HandlerCollector
-import com.nebula.gateway.handler.admin.AdminHandlerCollector
 import com.nebula.gateway.handler.admin.DeadLetterQueryHandler
 import com.nebula.gateway.handler.admin.RetryDeadLetterHandler
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 /**
@@ -21,7 +19,7 @@ import org.koin.dsl.module
  * - [DeadLetterService]：死信记录服务
  * - [DeadLetterCompensator]：死信补偿定时任务
  * - [DeadLetterQueryHandler]、[RetryDeadLetterHandler]：Admin 管理 Handler
- * - [DeliveryHandlerCollector]、[AdminHandlerCollector]：Handler 注册收集器
+ * - Admin Handler 经 [handlerCollectorModule] 的 [com.nebula.gateway.handler.AllHandlerCollector] 统一注册（getAll 自动发现）
  */
 val messageReliabilityModule = module {
     // 投递跟踪
@@ -32,10 +30,7 @@ val messageReliabilityModule = module {
     single { DeadLetterCompensator(get(), get(named("serverScope"))) }
 
     // Admin 管理 Handler
-    single { DeadLetterQueryHandler(get()) }
-    single { RetryDeadLetterHandler(get()) }
+    single { DeadLetterQueryHandler(get()) } bind com.nebula.gateway.handler.Handler::class
+    single { RetryDeadLetterHandler(get()) } bind com.nebula.gateway.handler.Handler::class
 
-    // HandlerCollector 注册
-    single<HandlerCollector>(named("delivery")) { DeliveryHandlerCollector() }
-    single<HandlerCollector>(named("admin")) { AdminHandlerCollector(get(), get()) }
 }

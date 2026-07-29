@@ -11,7 +11,7 @@
  * 分组约定：每个嵌套 object 对应 method 字符串的 `group/` 段（如 Chat ↔ `chat/`），
  * 其下常量名去掉 group 前缀（如 `chat/send` → Chat.SEND），避免 Chat.CHAT_SEND 式冗余。
  * 常量值必须与 proto 中定义的 method 字符串**逐字符一致**（含大小写）。
- * 前缀类匹配（skipMethods 前缀白名单）以各分组下的 `*_PREFIX` 常量提供（如 Admin.PREFIX）。
+ * 前缀类匹配（skipMethods 前缀白名单）以各分组下的 `*_PREFIX` 常量提供（如 Admin.METHOD_PREFIX）。
  */
 package com.nebula.gateway.handler
 
@@ -93,6 +93,6 @@ object MethodNames {
         const val RETRY_DEAD_LETTER = "admin/retry_dead_letter"
         const val SENSITIVE_WORD_RELOAD = "admin/sensitive_word_reload"
         /** skipMethods 前缀白名单：匹配 `admin/` 全部方法（D-77）。 */
-        const val PREFIX = "admin/"
+        const val METHOD_PREFIX = "admin/"
     }
 }

@@ -6,9 +6,7 @@ import com.nebula.gateway.dispatcher.Dispatcher
 import com.nebula.gateway.dispatcher.HandlerEntry
 import com.nebula.gateway.dispatcher.HandlerRegistry
 import com.nebula.gateway.handler.Handler
-import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.handler.PingHandler
-import com.nebula.gateway.handler.system.SystemHandlerCollector
 import com.nebula.gateway.interceptor.*
 import com.nebula.gateway.service.ChatService
 import com.nebula.gateway.session.SessionRegistry
@@ -18,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 /**
@@ -52,7 +51,7 @@ val frameworkModule = module {
     // 使用前缀匹配：admin/ 覆盖所有 admin/* 管理接口，system/sensitive_word 覆盖客户端下载接口。
     single<Interceptor>(named("authInterceptor")) { AuthInterceptor(
         get(),
-        skipMethods = setOf(MethodNames.System.PING, MethodNames.Admin.PREFIX, MethodNames.System.SENSITIVE_WORD_PREFIX, MethodNames.User.LOGIN, MethodNames.User.REGISTER)
+        skipMethods = setOf(MethodNames.System.PING, MethodNames.Admin.METHOD_PREFIX, MethodNames.System.SENSITIVE_WORD_PREFIX, MethodNames.User.LOGIN, MethodNames.User.REGISTER)
     ) }
     single<Interceptor>(named("logInterceptor")) { LogInterceptor() }
     single<Interceptor>(named("rateLimitInterceptor")) { RateLimitInterceptor() }
@@ -73,8 +72,7 @@ val frameworkModule = module {
     single { ChatService(get(), get(), get(), get(), get(), get(), get(), get(), get(named("serverScope"))) }
 
     // 系统级组件
-    single { PingHandler() }
-    single<HandlerCollector>(named("system")) { SystemHandlerCollector(get()) }
+    single { PingHandler() } bind Handler::class
 }
 
 /**
