@@ -10,7 +10,6 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.ChatException
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.repository.dao.*
-import com.nebula.repository.entity.MessageEntity
 import com.nebula.repository.entity.isActive
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.service.conversation.toConversationBrief
@@ -36,6 +35,8 @@ class MessageService(
     private val idGenerator: SnowflakeIdGenerator,
     private val seqService: SeqService
 ) {
+    /** 落库辅助：幂等去重 / Redis Stream 落库 / 实体映射（P2 抽取，D-04/D-06/D-09） */
+    private val persistHelper = MessagePersistHelper(messageQueueRepository)
 
     companion object {
         /** 日志记录器 */
@@ -137,26 +138,12 @@ class MessageService(
             .setServerTs(now)
             .build()
 
-        // 写入 Redis Stream（key 必须与 MessageRepositoryImpl.parseToEntity() 对齐）
-        // 修复：parseToEntity 读取 body["id"]，此处原误用 "msgId" 导致消息 ID 为 null、
-        // DB INSERT 失败（PK not null），消息永久留在 Redis Stream 无法落库
-        val streamFields = mapOf(
-            "id" to msgId.toString(),
-            "conversationId" to conversationId,
-            "senderUid" to senderUid.toString(),
-            // 必须写枚举的数字值（messageTypeValue），不能写 req.messageType.toString()：
-            // req.messageType 是 proto 枚举 ChatContentType，其 toString() 返回枚举名（如 "TEXT"），
-            // 而 MessageRepositoryImpl.parseToEntity() 用 body["messageType"]?.toIntOrNull() 解析，
-            // "TEXT".toIntOrNull() == null 会使整条消息被判为「毒消息」→ 死信 + XACK，永不落库，
-            // 表现为「会话有概要、message/pull 却为空」。
-            "messageType" to req.messageTypeValue.toString(),
-            "content" to req.content,
-            "clientMessageId" to req.clientMessageId,
-            "clientTs" to req.clientTs.toString(),
-            "serverTs" to now.toString(),
-            "payload" to (if (req.payload.size() > 0) java.util.Base64.getEncoder().encodeToString(req.payload.toByteArray()) else "")
-        )
-        messageQueueRepository.enqueue(streamFields)
+        // 写入 Redis Stream（key 必须与 MessageRepositoryImpl.parseToEntity() 对齐）。
+        // 字段构造 + enqueue 下沉到 MessagePersistHelper，本方法仅做编排（D-04 落库入口）。
+        // 修复背景（详见 MessagePersistHelper.enqueueMessage）：parseToEntity 读取 body["id"] 须用 msgId；
+        // messageType 必须写枚举数字值，不能写枚举名，否则被判毒消息→死信 + XACK，永不落库，
+        // 表现为「会话有概要、message/pull 却为空」。
+        persistHelper.enqueueMessage(req, msgId, senderUid, now)
 
         // Step 5: 事务内更新会话元信息（消息已在 Stream，即使本事务失败消息仍会落库、可拉取）
         // 托管实体直接改字段，commit 时脏检查自动 flush
@@ -220,7 +207,7 @@ class MessageService(
 
         val builder = PullMessagesResp.newBuilder()
         result.forEach { entity ->
-            builder.addMessages(entity.toChatMessage())
+            builder.addMessages(persistHelper.toChatMessage(entity))
         }
         builder.setHasMore(hasMore)
         return builder.build()
@@ -276,12 +263,7 @@ class MessageService(
      * @return true 表示新消息，false 表示重复
      */
     suspend fun checkAndSetDedup(clientMessageId: String, senderUid: Long): Boolean {
-        val isNew = messageQueueRepository.checkAndSetDedup(clientMessageId, senderUid)
-        if (!isNew) {
-            // 重复消息是客户端重试的网络抖动场景，业务上正常；但频次异常高（如刷屏/重放）需关注
-            logger.warn { "检测到重复消息（clientMsgId 已存在）senderUid=$senderUid clientMsgId=$clientMessageId" }
-        }
-        return isNew
+        return persistHelper.checkAndSetDedup(clientMessageId, senderUid)
     }
 
     /**
@@ -317,27 +299,6 @@ class MessageService(
 
         val friendship = friendshipDao.findByUserIdAndFriendId(em, smaller, larger)
         return friendship != null && friendship.isActive
-    }
-
-    /**
-     * 将 MessageEntity 转换为 ChatMessage Protobuf。
-     *
-     * @return 转换后的 ChatMessage Protobuf 对象
-     */
-    private fun MessageEntity.toChatMessage(): ChatMessage {
-        val builder = ChatMessage.newBuilder()
-            .setMsgId(requireNotNull(id) { "MessageEntity.id 不应为null" })
-            .setConversationId(conversationId)
-            .setSenderUid(senderUid)
-            .setMessageTypeValue(messageType)
-            .setContent(content)
-            .setClientTs(clientTs)
-            .setServerTs(serverTs)
-        val payloadBytes = payload
-        if (payloadBytes != null && payloadBytes.isNotEmpty()) {
-            builder.setPayload(com.google.protobuf.ByteString.copyFrom(payloadBytes))
-        }
-        return builder.build()
     }
 }
 
