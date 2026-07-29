@@ -283,7 +283,7 @@ fun testFriendship(
  * 构造排序后的私聊会话 ID。
  *
  * 返回格式 `"private:$smaller:$larger"`，确保双方生成的 ID 一致。
- * 等价于 [com.nebula.gateway.handler.friend.FriendAddHandler.buildPrivateConvId]。
+ * 等价于 [com.nebula.service.friend.buildPrivateConvId]。
  *
  * @param uid1 用户 A
  * @param uid2 用户 B
