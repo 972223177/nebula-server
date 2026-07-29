@@ -117,7 +117,7 @@ object GatewayTestModules {
         single { com.nebula.gateway.handler.delivery.DeliveryAckHandler(get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
 
         // Phase 10: Message Reliability
-        single { com.nebula.service.sequence.SeqService(get()) }
+        single { com.nebula.service.sequence.SeqService(com.nebula.service.sequence.SeqServiceImpl(get())) }
         single { com.nebula.gateway.handler.message.MessageSeqHandler(get()) } bind com.nebula.gateway.handler.Handler::class
 
         // Phase 7: Conversation

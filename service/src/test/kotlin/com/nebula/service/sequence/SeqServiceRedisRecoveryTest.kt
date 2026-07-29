@@ -23,14 +23,14 @@ import kotlin.test.assertEquals
  */
 class SeqServiceRedisRecoveryTest : RedisTestBase() {
 
-    private lateinit var seqService: SeqService
+    private lateinit var seqService: SeqServiceImpl
     private val convId = "conv-recovery"
     private val uid = 1001L
 
     @BeforeEach
     fun setUp() {
-        // 通过基类提供的真实 Redis 连接构造 SeqService
-        seqService = SeqService(getConnection())
+        // 通过基类提供的真实 Redis 连接构造 SeqServiceImpl
+        seqService = SeqServiceImpl(getConnection())
     }
 
     /**

@@ -33,7 +33,7 @@ class SeqServiceTest {
 
     private val connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
     private lateinit var redis: RedisCoroutinesCommands<String, String>
-    private lateinit var seqService: SeqService
+    private lateinit var seqService: SeqServiceImpl
 
     /**
      * 每个测试用例前初始化 SeqService 并用反射注入 mock redis。
@@ -44,7 +44,7 @@ class SeqServiceTest {
     @BeforeEach
     fun setUp() {
         redis = mockk(relaxed = true)
-        seqService = SeqService(connection)
+        seqService = SeqServiceImpl(connection)
         injectRedisMock(redis)
     }
 
@@ -52,7 +52,7 @@ class SeqServiceTest {
      * 通过反射将 private 字段 `redis` 替换为指定的 mock 实例。
      */
     private fun injectRedisMock(mock: RedisCoroutinesCommands<String, String>) {
-        val field = SeqService::class.java.getDeclaredField("redis")
+        val field = SeqServiceImpl::class.java.getDeclaredField("redis")
         field.isAccessible = true
         field.set(seqService, mock)
     }
@@ -125,7 +125,7 @@ class SeqServiceTest {
         val uid = 4001L
         val redisKey = "seq:conv:conv-overflow:next_seq:uid:4001"
 
-        coEvery { redis.get(redisKey) } returns SeqService.MAX_SEQ_THRESHOLD.toString()
+        coEvery { redis.get(redisKey) } returns SeqServiceImpl.MAX_SEQ_THRESHOLD.toString()
         coEvery { redis.set(redisKey, "1") } returns "OK"
         coEvery { redis.incr(redisKey) } returns 2L
 

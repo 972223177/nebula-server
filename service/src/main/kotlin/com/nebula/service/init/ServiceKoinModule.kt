@@ -13,7 +13,9 @@ import com.nebula.service.friend.FriendRequestService
 import com.nebula.service.friend.FriendService
 import com.nebula.service.friend.FriendshipService
 import com.nebula.service.sequence.SeqService
+import com.nebula.service.sequence.SeqServiceImpl
 import com.nebula.service.user.OnlineStatusService
+import com.nebula.service.user.OnlineStatusServiceImpl
 import com.nebula.service.user.UserPrivacyService
 import com.nebula.service.user.UserService
 import org.koin.dsl.bind
@@ -30,7 +32,8 @@ import org.koin.dsl.module
 val serviceKoinModule = module {
     single { UserService(get(), get(), get(), get()) }
     single { UserPrivacyService(get(), get()) }
-    single { OnlineStatusService(get()) }
+    single { OnlineStatusServiceImpl(get()) }                                  // 在线状态实现
+    single { OnlineStatusService(get()) }                                       // 聚合 Facade：by 委托 OnlineStatusServiceImpl，Handler 零改动
     single { MessageServiceImpl(get(), get(), get(), get(), get(), get(), get(), get()) } // 消息业务实现
     single { MessageService(get()) }                                                        // 聚合 Facade：by 委托 MessageServiceImpl，Handler 零改动
     single { GroupService(get(), get(), get(), get()) }                 // 群生命周期 + 成员（ConversationService Facade 子服务）
@@ -41,7 +44,8 @@ val serviceKoinModule = module {
     single { FriendService(get(), get()) }                                            // 聚合服务：by 委托两子服务，Handler 零改动
     single { DeadLetterService(get(), get(), get(), get()) }
     single<DeadLetterCallback> { get<DeadLetterService>() }
-    single { SeqService(get()) }
+    single { SeqServiceImpl(get()) }                                          // 序列号实现
+    single { SeqService(get()) }                                               // 聚合 Facade：by 委托 SeqServiceImpl，Handler 零改动
 
     // ─── 外部服务（天气 / 搜索第三方 API 集成，见 external-service-backend.md） ───
     // 配置 bean（ExternalServiceConfig / QuotaConfig / CacheConfig）由 server 层在 startKoin 注册，
