@@ -13,6 +13,7 @@ import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
 import com.nebula.service.friend.FriendAddResult
 import com.nebula.service.friend.FriendService
+import com.nebula.service.friend.buildPrivateConvId
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -223,7 +224,7 @@ class FriendAddHandlerTest {
         val larger = 2001L
 
         // When: 构造会话 ID
-        val convId = FriendService.buildPrivateConvId(smaller, larger)
+        val convId = buildPrivateConvId(smaller, larger)
 
         // Then: 格式为 private:smaller:larger
         assertEquals("private:1001:2001", convId)
@@ -238,7 +239,7 @@ class FriendAddHandlerTest {
         val larger = maxOf(uid1, uid2)
 
         // When: 调用方负责排序后再传入
-        val convId = FriendService.buildPrivateConvId(smaller, larger)
+        val convId = buildPrivateConvId(smaller, larger)
 
         // Then: 返回确定性的 "private:smaller:larger" 格式
         assertEquals("private:1001:2001", convId)

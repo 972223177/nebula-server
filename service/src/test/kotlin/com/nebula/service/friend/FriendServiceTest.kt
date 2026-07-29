@@ -54,8 +54,14 @@ class FriendServiceTest {
         userPrivacyService = mockk(relaxed = true)
         em = mockk(relaxed = true)
         friendService = FriendService(
-            friendRequestDao, friendshipDao, conversationDao,
-            conversationMemberDao, userDao, txRunner, onlineStatusRepository, userPrivacyService
+            FriendRequestService(
+                friendRequestDao, friendshipDao, conversationDao,
+                conversationMemberDao, userDao, txRunner, userPrivacyService
+            ),
+            FriendshipService(
+                friendshipDao, friendRequestDao, userDao,
+                txRunner, onlineStatusRepository, userPrivacyService
+            )
         )
         coEvery { txRunner.execute<Any>(any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")

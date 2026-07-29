@@ -8,7 +8,9 @@ import com.nebula.service.conversation.ConversationQueryService
 import com.nebula.service.conversation.ConversationService
 import com.nebula.service.conversation.GroupService
 import com.nebula.service.external.*
+import com.nebula.service.friend.FriendRequestService
 import com.nebula.service.friend.FriendService
+import com.nebula.service.friend.FriendshipService
 import com.nebula.service.sequence.SeqService
 import com.nebula.service.user.OnlineStatusService
 import com.nebula.service.user.UserPrivacyService
@@ -32,7 +34,9 @@ val serviceKoinModule = module {
     single { GroupService(get(), get(), get(), get()) }                 // 群生命周期 + 成员（ConversationService Facade 子服务）
     single { ConversationQueryService(get(), get(), get(), get(), get()) } // 会话查询/列表/删除/私聊（ConversationService Facade 子服务）
     single { ConversationService(get(), get()) }                          // 聚合服务：by 委托 Group/Query 子服务，Handler 零改动
-    single { FriendService(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { FriendRequestService(get(), get(), get(), get(), get(), get(), get()) } // 好友申请子域（FriendService 子服务）
+    single { FriendshipService(get(), get(), get(), get(), get(), get()) }            // 好友关系/查询子域（FriendService 子服务）
+    single { FriendService(get(), get()) }                                            // 聚合服务：by 委托两子服务，Handler 零改动
     single { DeadLetterService(get(), get(), get(), get()) }
     single<DeadLetterCallback> { get<DeadLetterService>() }
     single { SeqService(get()) }
