@@ -3,6 +3,7 @@ package com.nebula.gateway.dispatcher
 import com.nebula.chat.Response
 import com.nebula.chat.conversation.*
 import com.nebula.chat.group.GroupMember
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.common.BizCode
 import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.conversation.*
@@ -99,9 +100,9 @@ class ConversationSmokeTest {
         // ---- 查看成员 ----
         coEvery { conversationService.getGroupMembers(any(), any()) } returns GroupMembersResp.newBuilder()
             .addAllMembers(listOf(
-                GroupMember.newBuilder().setUid(1001L).setRole("owner").build(),
-                GroupMember.newBuilder().setUid(2001L).setRole("member").build(),
-                GroupMember.newBuilder().setUid(3001L).setRole("member").build()
+                GroupMember.newBuilder().setUid(1001L).setRole(GroupMemberRole.OWNER).build(),
+                GroupMember.newBuilder().setUid(2001L).setRole(GroupMemberRole.MEMBER).build(),
+                GroupMember.newBuilder().setUid(3001L).setRole(GroupMemberRole.MEMBER).build()
             ))
             .build()
 
@@ -115,7 +116,7 @@ class ConversationSmokeTest {
         coEvery { conversationService.kickMember(any(), any()) } returns 2001L
 
         // ---- 退群 ----
-        coEvery { conversationService.getMemberRole(any(), any()) } returns ConversationMemberInfo(userId = 1001L, role = "owner")
+        coEvery { conversationService.getMemberRole(any(), any()) } returns ConversationMemberInfo(userId = 1001L, role = GroupMemberRole.OWNER)
         coEvery { conversationService.dissolveGroup(any()) } returns Unit
         coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 

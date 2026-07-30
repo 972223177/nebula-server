@@ -1,6 +1,7 @@
 package com.nebula.service.conversation
 
 import com.nebula.chat.conversation.*
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.repository.dao.*
@@ -188,7 +189,7 @@ class ConversationQueryService(
         val entities = txRunner.execute { em ->
             conversationMemberDao.findByConversationId(em, conversationId)
         }
-        return entities.map { ConversationMemberInfo(userId = it.userId, role = it.role) }
+        return entities.map { ConversationMemberInfo(userId = it.userId, role = it.role.toGroupMemberRole()) }
     }
 
     /**
@@ -272,8 +273,8 @@ class ConversationQueryService(
                     val member = conversationMemberDao.findByConversationIdAndUserId(em, convId, userId)
                         ?: throw ConversationException(BizCode.NOT_MEMBER)
 
-                    when (member.role) {
-                        ROLE_OWNER -> {
+                    when (member.role.toGroupMemberRole()) {
+                        GroupMemberRole.OWNER -> {
                             // 群主：解散群
                             if (conv.status == STATUS_DISSOLVED) {
                                 // 已解散：仅软隐藏群主自己，幂等返回

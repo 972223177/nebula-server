@@ -9,6 +9,8 @@ import com.nebula.chat.message.ReadReceiptPayload
 import com.nebula.gateway.delivery.DeliveryTrackingService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.service.conversation.ConversationMemberInfo
+
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.service.conversation.ConversationService
 import io.grpc.stub.StreamObserver
 import io.mockk.*
@@ -140,8 +142,8 @@ class PushServiceTest {
     fun pushConversationEventExcludesSpecifiedUidsFromPushTargets() = runTest {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberInfo(userId = receiverUid, role = "member"),
-            ConversationMemberInfo(userId = otherUid, role = "member")
+            ConversationMemberInfo(userId = receiverUid, role = GroupMemberRole.MEMBER),
+            ConversationMemberInfo(userId = otherUid, role = GroupMemberRole.MEMBER)
         )
         coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
@@ -169,7 +171,7 @@ class PushServiceTest {
     fun pushConversationEventExcludesAllUidsWithEmptySetAsDefault() = runTest {
         val observer = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberInfo(userId = receiverUid, role = "member")
+            ConversationMemberInfo(userId = receiverUid, role = GroupMemberRole.MEMBER)
         )
         coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer)
@@ -189,7 +191,7 @@ class PushServiceTest {
         val observer1 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val observer2 = mockk<StreamObserver<Envelope>>(relaxed = true)
         val members = listOf(
-            ConversationMemberInfo(userId = receiverUid, role = "member")
+            ConversationMemberInfo(userId = receiverUid, role = GroupMemberRole.MEMBER)
         )
         coEvery { conversationService.getConversationMembers(convId) } returns members
         every { userStreamRegistry.getStreams(receiverUid) } returns listOf(observer1, observer2)

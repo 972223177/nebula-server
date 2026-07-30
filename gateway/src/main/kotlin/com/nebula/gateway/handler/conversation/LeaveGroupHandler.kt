@@ -3,6 +3,7 @@ import com.nebula.gateway.handler.MethodNames
 
 import com.nebula.chat.PushEventType
 import com.nebula.chat.Response
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.chat.conversation.GroupDissolvedPayload
 import com.nebula.chat.conversation.LeaveGroupReq
 import com.nebula.chat.conversation.MemberLeftPayload
@@ -34,11 +35,6 @@ class LeaveGroupHandler(
 
     override val method: String = MethodNames.Conversation.LEAVE_GROUP
 
-    companion object {
-        /** 群主角色常量 */
-        private const val ROLE_OWNER = "owner"
-    }
-
     override suspend fun handle(req: LeaveGroupReq): Response {
         val session = currentCoroutineContext().requireSession()
         val convId = req.conversationId
@@ -46,7 +42,7 @@ class LeaveGroupHandler(
         // 判断是否是群主退群
         val selfMember = conversationService.getMemberRole(convId, session.userId)
 
-        if (selfMember != null && selfMember.role == ROLE_OWNER) {
+        if (selfMember != null && selfMember.role == GroupMemberRole.OWNER) {
             // 群主退群 → 解散群（D-09）
             // 会话级锁 + Service 内置事务
             lockManager.withLock(convId) {

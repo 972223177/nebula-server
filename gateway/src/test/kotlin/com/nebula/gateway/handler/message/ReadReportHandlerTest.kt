@@ -11,6 +11,8 @@ import com.nebula.gateway.session.Session
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationInfo
 import com.nebula.service.conversation.ConversationMemberInfo
+
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -103,10 +105,10 @@ class ReadReportHandlerTest {
         coEvery { conversationService.getConversation("conv-001") } returns convEntity
 
         // 当前用户是会话成员（由 messageService.readReport 内部处理）
-        val member = ConversationMemberInfo(userId = 2001L, role = "member")
+        val member = ConversationMemberInfo(userId = 2001L, role = GroupMemberRole.MEMBER)
 
         // 私聊另一方成员（用于 pushReadReceiptToSender）
-        val senderMember = ConversationMemberInfo(userId = 1001L, role = "member")
+        val senderMember = ConversationMemberInfo(userId = 1001L, role = GroupMemberRole.MEMBER)
         coEvery {
             conversationService.getConversationMembers("conv-001")
         } returns listOf(member, senderMember)
@@ -167,7 +169,7 @@ class ReadReportHandlerTest {
         // 当前用户是会话成员（由 messageService.readReport 处理）
 
         // 私聊成员查询——只有读者自己，无发送者
-        val member = ConversationMemberInfo(userId = 2001L, role = "member")
+        val member = ConversationMemberInfo(userId = 2001L, role = GroupMemberRole.MEMBER)
         coEvery {
             conversationService.getConversationMembers("conv-003")
         } returns listOf(member)

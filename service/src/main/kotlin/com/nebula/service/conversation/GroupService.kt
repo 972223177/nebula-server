@@ -2,6 +2,7 @@ package com.nebula.service.conversation
 
 import com.nebula.chat.conversation.*
 import com.nebula.chat.group.GroupMember
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.common.util.toEpochMillis
@@ -344,7 +345,7 @@ class GroupService(
                 .setUsername(user?.username ?: "")
                 .setDisplayName(user?.nickname ?: "")
                 .setAvatarUrl(user?.avatar ?: "")
-                .setRole(m.role)
+                .setRole(m.role.toGroupMemberRole())
                 .setJoinedAt(m.joinedAt?.toEpochMillis() ?: 0)
                 .build())
         }
@@ -365,7 +366,7 @@ class GroupService(
         val entity = txRunner.execute { em ->
             conversationMemberDao.findByConversationIdAndUserId(em, conversationId, userId)
         } ?: return null
-        return ConversationMemberInfo(userId = entity.userId, role = entity.role)
+        return ConversationMemberInfo(userId = entity.userId, role = entity.role.toGroupMemberRole())
     }
 
     /**

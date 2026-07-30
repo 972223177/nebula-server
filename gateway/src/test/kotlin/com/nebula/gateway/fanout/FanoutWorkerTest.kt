@@ -5,6 +5,8 @@ import com.nebula.common.init.DeadLetterCallback
 import com.nebula.common.redis.RedisStreamQueue
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationMemberInfo
+
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.service.conversation.ConversationService
 import io.mockk.*
 import kotlinx.coroutines.CoroutineScope
@@ -50,7 +52,7 @@ class FanoutWorkerTest {
         "chatMessage" to Base64.getEncoder().encodeToString(chatMessage.toByteArray())
     )
 
-    private fun members(vararg uids: Long) = uids.map { ConversationMemberInfo(userId = it, role = "member") }
+    private fun members(vararg uids: Long) = uids.map { ConversationMemberInfo(userId = it, role = GroupMemberRole.MEMBER) }
 
     @Test
     fun happyPathIncrementsUnreadAndPushes_excludingSender() = runTest {

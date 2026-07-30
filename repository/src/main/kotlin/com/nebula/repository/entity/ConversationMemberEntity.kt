@@ -1,5 +1,6 @@
 package com.nebula.repository.entity
 
+import com.nebula.chat.group.GroupMemberRole
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -24,7 +25,7 @@ class ConversationMemberEntity(
 
     /** 成员角色：owner=群主, member=普通成员（D-17） */
     @Column(nullable = false, length = 16)
-    var role: String = "member",
+    var role: String = GroupMemberRole.MEMBER.name.lowercase(),
 
     /** 最后已读消息 ID */
     @Column(nullable = false)
@@ -48,7 +49,7 @@ class ConversationMemberEntity(
     protected constructor() : this(
         conversationId = "",
         userId = 0,
-        role = "member",
+        role = GroupMemberRole.MEMBER.name.lowercase(),
         lastReadMessageId = 0,
         unreadCount = 0,
         deleted = 0

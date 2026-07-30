@@ -1,6 +1,8 @@
 package com.nebula.gateway.testutil
 import com.nebula.gateway.handler.MethodNames
 
+import com.nebula.chat.group.GroupMemberRole
+
 import com.google.protobuf.ByteString
 import com.google.protobuf.MessageLite
 import com.nebula.chat.Request
@@ -259,7 +261,7 @@ fun testConversation(
  * @param role 成员角色："owner" 或 "member"
  * @return 测试用的 ConversationMemberInfo
  */
-fun testMember(convId: String, userId: Long, role: String = "member"): ConversationMemberInfo {
+fun testMember(convId: String, userId: Long, role: GroupMemberRole = GroupMemberRole.MEMBER): ConversationMemberInfo {
     return ConversationMemberInfo(userId = userId, role = role)
 }
 

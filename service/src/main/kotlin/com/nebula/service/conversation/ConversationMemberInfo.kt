@@ -1,5 +1,7 @@
 package com.nebula.service.conversation
 
+import com.nebula.chat.group.GroupMemberRole
+
 /**
  * 会话成员信息 DTO — 供 gateway 层查询会话成员，替代 [com.nebula.repository.entity.ConversationMemberEntity]。
  *
@@ -10,5 +12,5 @@ package com.nebula.service.conversation
  */
 data class ConversationMemberInfo(
     val userId: Long,
-    val role: String
+    val role: GroupMemberRole
 )

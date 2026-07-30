@@ -3,6 +3,7 @@ package com.nebula.gateway.handler.conversation
 import com.nebula.chat.conversation.GroupMembersReq
 import com.nebula.chat.conversation.GroupMembersResp
 import com.nebula.chat.group.GroupMember
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.common.BizCode
 import com.nebula.common.exception.ConversationException
 import com.nebula.gateway.handler.SessionKey
@@ -51,7 +52,7 @@ class GroupMembersHandlerTest {
             .setUsername("alice")
             .setDisplayName("爱丽丝")
             .setAvatarUrl("http://a.com/1.png")
-            .setRole("owner")
+            .setRole(GroupMemberRole.OWNER)
             .setJoinedAt(now.minusDays(7).atZone(ZoneOffset.UTC).toInstant().toEpochMilli())
             .build()
         val member1 = GroupMember.newBuilder()
@@ -59,7 +60,7 @@ class GroupMembersHandlerTest {
             .setUsername("bob")
             .setDisplayName("鲍勃")
             .setAvatarUrl("http://a.com/2.png")
-            .setRole("member")
+            .setRole(GroupMemberRole.MEMBER)
             .setJoinedAt(now.minusDays(3).atZone(ZoneOffset.UTC).toInstant().toEpochMilli())
             .build()
         val mockResp = GroupMembersResp.newBuilder()
@@ -82,14 +83,14 @@ class GroupMembersHandlerTest {
         assertEquals("alice", firstMember.username)
         assertEquals("爱丽丝", firstMember.displayName)
         assertEquals("http://a.com/1.png", firstMember.avatarUrl)
-        assertEquals("owner", firstMember.role)
+        assertEquals(GroupMemberRole.OWNER, firstMember.role)
 
         val secondMember = resp.membersList[1]
         assertEquals(1002L, secondMember.uid)
         assertEquals("bob", secondMember.username)
         assertEquals("鲍勃", secondMember.displayName)
         assertEquals("http://a.com/2.png", secondMember.avatarUrl)
-        assertEquals("member", secondMember.role)
+        assertEquals(GroupMemberRole.MEMBER, secondMember.role)
     }
 
     @Test
@@ -130,7 +131,7 @@ class GroupMembersHandlerTest {
             .setUsername("testuser")
             .setDisplayName("测试用户")
             .setAvatarUrl("http://a.com/3.png")
-            .setRole("owner")
+            .setRole(GroupMemberRole.OWNER)
             .setJoinedAt(expectedMillis)
             .build()
         val mockResp = GroupMembersResp.newBuilder().addMembers(member).build()

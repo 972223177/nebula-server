@@ -9,6 +9,8 @@ import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.mockLockManager
 import com.nebula.service.conversation.ConversationMemberInfo
+
+import com.nebula.chat.group.GroupMemberRole
 import com.nebula.service.conversation.ConversationService
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -57,7 +59,7 @@ class LeaveGroupHandlerTest {
         coEvery { conversationService.dissolveGroup(any()) } returns Unit
 
         // Handle 直接查询当前用户成员信息，判断角色
-        val ownerMember = ConversationMemberInfo(userId = 1001L, role = "owner")
+        val ownerMember = ConversationMemberInfo(userId = 1001L, role = GroupMemberRole.OWNER)
         coEvery {
             conversationService.getMemberRole("conv-001", 1001L)
         } returns ownerMember
@@ -84,7 +86,7 @@ class LeaveGroupHandlerTest {
     fun memberLeaveShouldSoftDeleteAndPushMemberLeft() = runTest {
         coEvery { conversationService.leaveGroup(any(), any()) } returns Unit
 
-        val normalMember = ConversationMemberInfo(userId = 1001L, role = "member")
+        val normalMember = ConversationMemberInfo(userId = 1001L, role = GroupMemberRole.MEMBER)
         coEvery {
             conversationService.getMemberRole("conv-001", 1001L)
         } returns normalMember
@@ -146,7 +148,7 @@ class LeaveGroupHandlerTest {
 
     @Test
     fun leaveDissolvedGroupShouldThrowGroupDissolved() = runTest {
-        val normalMember = ConversationMemberInfo(userId = 1001L, role = "member")
+        val normalMember = ConversationMemberInfo(userId = 1001L, role = GroupMemberRole.MEMBER)
         coEvery {
             conversationService.getMemberRole("conv-001", 1001L)
         } returns normalMember
