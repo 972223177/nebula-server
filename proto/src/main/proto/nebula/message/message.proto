@@ -13,7 +13,9 @@ message PullMessagesReq {
   string conversation_id = 1;         // 会话ID
   int64 cursor = 2;                   // 游标，基于消息 ID 的分页
   int32 limit = 3;                    // 拉取条数上限
-  string direction = 4;               // 拉取方向："forward" 新消息 / "backward" 历史消息
+  // direction(=4) 已移除：服务端 pullMessages 从不读取该字段（恒走 findMessagesBackward），
+  // 历史消息经游标分页(cursor=最旧msg_id)拉取、新消息经 PUSH 推送，方向字段无对应语义（proto 债清理）。
+  reserved 4;
 }
 
 // 拉取消息响应
