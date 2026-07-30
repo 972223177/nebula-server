@@ -7,4 +7,4 @@ ALTER TABLE conversations
 
 -- Phase 7: 为 conversation_members 表新增角色列（D-17）
 ALTER TABLE conversation_members
-    ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'member' COMMENT '角色：owner=群主, member=普通成员，D-17';
+    ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'member' COMMENT '角色：协议层枚举 GroupMemberRole 的存储值（小写 snake_case），DB 仅持久化 owner/member，admin 为协议预留位（写入路径未启用），D-17';
