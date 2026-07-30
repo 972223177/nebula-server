@@ -4,6 +4,7 @@ import com.nebula.gateway.handler.MethodNames
 import com.nebula.chat.admin.DeadLetterItem
 import com.nebula.chat.admin.DeadLetterQueryReq
 import com.nebula.chat.admin.DeadLetterQueryResp
+import com.nebula.chat.admin.DeadLetterStatus
 import com.nebula.gateway.handler.Handler
 import com.nebula.service.admin.DeadLetterDTO
 import com.nebula.service.admin.DeadLetterService
@@ -25,7 +26,8 @@ class DeadLetterQueryHandler(
     override suspend fun handle(req: DeadLetterQueryReq): DeadLetterQueryResp {
         val page = if (req.page <= 0) 1 else req.page
         val pageSize = req.pageSize.coerceIn(1, 100)
-        val status = req.status.ifBlank { null }
+        // 枚举 UNKNOWN（proto3 默认值）等价于"不过滤"，转为 null 交给 service
+        val status = if (req.status == DeadLetterStatus.DEAD_LETTER_STATUS_UNKNOWN) null else req.status
 
         val result = deadLetterService.query(page, pageSize, status)
 

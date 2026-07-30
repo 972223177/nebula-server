@@ -1,5 +1,6 @@
 package com.nebula.repository.entity
 
+import com.nebula.chat.admin.DeadLetterStatus
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -60,7 +61,7 @@ class DeadLetterEntity(
     var failCount: Int = 0,
 
     @Column(length = 32, nullable = false)
-    var status: String = "pending"
+    var status: String = DeadLetterStatus.PENDING.name.lowercase()
 ) {
     /**
      * JPA 必需的受保护无参构造函数。
@@ -79,7 +80,7 @@ class DeadLetterEntity(
         clientTs = 0,
         failReason = "",
         failCount = 0,
-        status = "pending"
+        status = DeadLetterStatus.PENDING.name.lowercase()
     )
 
     @Id

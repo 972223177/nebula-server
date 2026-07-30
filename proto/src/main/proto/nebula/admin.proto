@@ -5,12 +5,21 @@ package com.nebula.chat.admin;
 option java_multiple_files = true;
 option java_package = "com.nebula.chat.admin";
 
+// 死信状态（封闭集合，审批/查询唯一裁决源，禁止用 string 表达避免拼写漂移）。
+enum DeadLetterStatus {
+  DEAD_LETTER_STATUS_UNKNOWN = 0;     // 未知/未设置（proto3 哑值，查询过滤时代表"不过滤"）
+  PENDING = 1;                        // 待处理：等待补偿任务扫描重试
+  RETRYING = 2;                       // 重试中：已重新入队，等待结果
+  PERMANENT_FAILED = 3;               // 永久失败：超过最大重试次数，不再自动重试
+  RETRY_SUCCESS = 4;                  // 重试成功：已成功重新投递
+}
+
 // ---- admin/dead_letters 死信查询 ----
 // 死信查询请求：分页查询死信记录，可选按状态过滤
 message DeadLetterQueryReq {
   int32 page = 1;                     // 页码，从 1 开始
   int32 page_size = 2;                // 每页条数
-  string status = 3;                  // 过滤状态（pending / retrying / permanent_failed / retry_success），空表示查全部
+  DeadLetterStatus status = 3;        // 过滤状态，DEAD_LETTER_STATUS_UNKNOWN 表示查全部
 }
 
 // 死信查询响应
@@ -27,7 +36,7 @@ message DeadLetterItem {
   int64 sender_uid = 4;               // 发送者 UID
   string fail_reason = 5;             // 失败原因
   int32 fail_count = 6;               // 失败次数
-  string status = 7;                  // 状态: pending / retrying / permanent_failed / retry_success
+  DeadLetterStatus status = 7;        // 状态（枚举值见 DeadLetterStatus）
   int64 created_at = 8;               // 创建时间戳（毫秒）
 }
 

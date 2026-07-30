@@ -1,5 +1,6 @@
 package com.nebula.service.admin
 
+import com.nebula.chat.admin.DeadLetterStatus
 import com.nebula.common.idgen.SnowflakeIdGenerator
 import com.nebula.common.init.DeadLetterCallback
 import com.nebula.repository.dao.DeadLetterDao
@@ -38,8 +39,8 @@ interface DeadLetterOperations {
     /** 手动重试单条死信记录 */
     suspend fun retry(id: Long): Boolean
 
-    /** 分页查询死信记录 */
-    suspend fun query(page: Int, pageSize: Int, status: String?): ListPage<DeadLetterDTO>
+    /** 分页查询死信记录（status 为 null 或 DEAD_LETTER_STATUS_UNKNOWN 时查全部） */
+    suspend fun query(page: Int, pageSize: Int, status: DeadLetterStatus?): ListPage<DeadLetterDTO>
 
     /** 标记失败次数超过阈值的死信为永久失败 */
     suspend fun markPermanentFailed()
@@ -82,17 +83,15 @@ class DeadLetterServiceImpl(
         /** 补偿查询每批大小 */
         private const val BATCH_SIZE = 100
 
-        /** 死信状态：待处理 */
-        const val STATUS_PENDING = "pending"
-
-        /** 死信状态：重试中 */
-        const val STATUS_RETRYING = "retrying"
-
-        /** 死信状态：永久失败 */
-        const val STATUS_PERMANENT_FAILED = "permanent_failed"
-
-        /** 死信状态：重试成功 */
-        const val STATUS_RETRY_SUCCESS = "retry_success"
+        /**
+         * 死信状态 DB 存储值（小写 snake_case），统一由枚举名推导，
+         * 与 [com.nebula.service.admin.toDbValue] / [DeadLetterEntity] 默认值的来源完全一致，
+         * 避免手填字符串与枚举名漂移。
+         */
+        val STATUS_PENDING = DeadLetterStatus.PENDING.name.lowercase()
+        val STATUS_RETRYING = DeadLetterStatus.RETRYING.name.lowercase()
+        val STATUS_PERMANENT_FAILED = DeadLetterStatus.PERMANENT_FAILED.name.lowercase()
+        val STATUS_RETRY_SUCCESS = DeadLetterStatus.RETRY_SUCCESS.name.lowercase()
     }
 
     /**
@@ -342,13 +341,15 @@ class DeadLetterServiceImpl(
      * @param status 过滤状态（为空时查询全部）
      * @return DTO 分页结果
      */
-    override suspend fun query(page: Int, pageSize: Int, status: String?): ListPage<DeadLetterDTO> {
+    override suspend fun query(page: Int, pageSize: Int, status: DeadLetterStatus?): ListPage<DeadLetterDTO> {
         val actualPage = maxOf(1, page)
         val actualPageSize = pageSize.coerceIn(1, 100)
         val offset = (actualPage - 1) * actualPageSize
+        // 枚举 → DB 存储值；UNKNOWN（含 null）视为不过滤
+        val statusFilter = if (status == null || status == DeadLetterStatus.DEAD_LETTER_STATUS_UNKNOWN) null else status.toDbValue()
 
         return txRunner.execute { em ->
-            if (status.isNullOrBlank()) {
+            if (statusFilter == null) {
                 // 全量查询：使用 DAO 统一入口（避免 Service 内嵌 JPQL）
                 val allItems = deadLetterDao.findAllOrderByCreatedAtAsc(em, offset, actualPageSize)
                 val total = deadLetterDao.countAll(em)
@@ -356,9 +357,9 @@ class DeadLetterServiceImpl(
             } else {
                 // M15: 使用 countByStatus 获取精确的过滤后总数，而非未过滤的 findAll().totalElements
                 val items = deadLetterDao.findByStatusOrderByCreatedAtAsc(
-                    em, status, offset = offset, limit = actualPageSize
+                    em, statusFilter, offset = offset, limit = actualPageSize
                 )
-                val total = deadLetterDao.countByStatus(em, status)
+                val total = deadLetterDao.countByStatus(em, statusFilter)
                 ListPage(items.map { it.toDeadLetterDTO() }, total)
             }
         }

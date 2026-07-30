@@ -1,5 +1,7 @@
 package com.nebula.service.admin
 
+import com.nebula.chat.admin.DeadLetterStatus
+
 /**
  * 死信数据传输对象 — 用于 service 层对外暴露死信数据，
  * 避免 gateway 层直接依赖 repository 层的实体类。
@@ -19,8 +21,8 @@ data class DeadLetterDTO(
     val failReason: String,
     /** 重试次数 */
     val failCount: Int,
-    /** 当前状态 */
-    val status: String,
+    /** 当前状态（proto 枚举，与 DB 存储值经 `toDeadLetterStatus` 互转） */
+    val status: DeadLetterStatus,
     /** 创建时间 — 毫秒时间戳 */
     val createdAt: Long
 )

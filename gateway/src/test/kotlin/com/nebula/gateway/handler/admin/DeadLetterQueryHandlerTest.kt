@@ -1,6 +1,7 @@
 package com.nebula.gateway.handler.admin
 
 import com.nebula.chat.admin.DeadLetterQueryReq
+import com.nebula.chat.admin.DeadLetterStatus
 import com.nebula.service.admin.DeadLetterDTO
 import com.nebula.service.admin.DeadLetterService
 import com.nebula.service.admin.ListPage
@@ -43,7 +44,7 @@ class DeadLetterQueryHandlerTest {
             senderUid = 1L,
             failReason = "超时",
             failCount = 3,
-            status = "pending",
+            status = DeadLetterStatus.PENDING,
             createdAt = 1705314600000L
         )
     }
@@ -81,7 +82,7 @@ class DeadLetterQueryHandlerTest {
         assertEquals(1L, item.senderUid, "发送者 UID 应映射正确")
         assertEquals("超时", item.failReason, "失败原因应映射正确")
         assertEquals(3, item.failCount, "失败次数应映射正确")
-        assertEquals("pending", item.status, "状态应映射正确")
+        assertEquals(DeadLetterStatus.PENDING, item.status, "状态应映射正确")
         assertEquals(1705314600000L, item.createdAt, "创建时间应正确转换为毫秒时间戳")
     }
 
@@ -125,21 +126,21 @@ class DeadLetterQueryHandlerTest {
         val req = DeadLetterQueryReq.newBuilder()
             .setPage(1)
             .setPageSize(20)
-            .setStatus("pending")
+            .setStatus(DeadLetterStatus.PENDING)
             .build()
         handler.handle(req)
 
         // 验证：service.query 携带状态参数
-        coVerify { deadLetterService.query(1, 20, "pending") }
+        coVerify { deadLetterService.query(1, 20, DeadLetterStatus.PENDING) }
     }
 
     @Test
-    fun handleShouldConvertBlankStatusToNull() = runTest {
-        // 执行：传入空字符串状态
+    fun handleShouldTreatUnknownStatusAsNoFilter() = runTest {
+        // 执行：传入 UNKNOWN（proto3 默认值，等价于不过滤）
         val req = DeadLetterQueryReq.newBuilder()
             .setPage(1)
             .setPageSize(20)
-            .setStatus("")
+            .setStatus(DeadLetterStatus.DEAD_LETTER_STATUS_UNKNOWN)
             .build()
         handler.handle(req)
 
@@ -157,7 +158,7 @@ class DeadLetterQueryHandlerTest {
             senderUid = 1L,
             failReason = "timeout",
             failCount = 3,
-            status = "pending",
+            status = DeadLetterStatus.PENDING,
             createdAt = 0L
         )
         val page = ListPage(
