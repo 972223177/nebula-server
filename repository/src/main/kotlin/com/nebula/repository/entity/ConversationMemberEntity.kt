@@ -23,7 +23,12 @@ class ConversationMemberEntity(
     @Column(nullable = false)
     var userId: Long,
 
-    /** 成员角色：owner=群主, member=普通成员（D-17） */
+    /**
+     * 成员角色（DB 存储值，小写 snake_case）。
+     * 取值范围与协议层 [com.nebula.chat.group.GroupMemberRole] 一致，但 DB 列仅持久化 owner/member；
+     * admin 为协议预留位，当前写入路径未启用，历史脏数据读取时由 `String.toGroupMemberRole()` 回落 UNKNOWN。
+     * 默认值由枚举名推导，杜绝与枚举拼写漂移（D-17）。
+     */
     @Column(nullable = false, length = 16)
     var role: String = GroupMemberRole.MEMBER.name.lowercase(),
 
