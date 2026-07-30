@@ -1,5 +1,8 @@
 package com.nebula.gateway.di
 
+import com.nebula.common.init.ModuleInitializer
+import com.nebula.gateway.fanout.FanoutModuleInitializer
+import com.nebula.gateway.fanout.FanoutWorker
 import com.nebula.gateway.handler.chat.send.SendMessageHandler
 import com.nebula.gateway.handler.delivery.DeliveryAckHandler
 import com.nebula.gateway.handler.message.MessageSeqHandler
@@ -21,10 +24,14 @@ val chatHandlerModule = module {
     single { PushService(get(), get(), get()) }
 
     // Handler 注册 — 依赖 Service 层
-    single { SendMessageHandler(get(), get(), get(), get(), get(), get(named("serverScope"))) } bind com.nebula.gateway.handler.Handler::class
+    single { SendMessageHandler(get(), get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
     single { PullMessagesHandler(get()) } bind com.nebula.gateway.handler.Handler::class
-    single { ReadReportHandler(get(), get(), get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
+    single { ReadReportHandler(get(), get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
     single { MessageSeqHandler(get()) } bind com.nebula.gateway.handler.Handler::class
     single { DeliveryAckHandler(get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
+
+    // §七 Durable Outbox：fan-out 事件消费者（跑在 serverScope，由 FanoutModuleInitializer 启动）
+    single { FanoutWorker(get(), get(), get(), get(), get(), get(named("serverScope"))) }
+    single<ModuleInitializer>(named("fanout")) { FanoutModuleInitializer() }
 
 }

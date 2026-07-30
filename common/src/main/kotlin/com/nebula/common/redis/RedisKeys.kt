@@ -47,6 +47,10 @@ object RedisKeys {
     /** Redis Stream 消息队列 key */
     const val QUEUE_STREAM_KEY = "queue:messages"
 
+    // ==================== fan-out 未读推送（§七 Durable Outbox） ====================
+    /** fan-out 事件 Redis Stream key（独立于 queue:messages，避免与消息持久化争用消费者组） */
+    const val FANOUT_STREAM_KEY = "fanout:stream"
+
     // ==================== 消息去重 ====================
     /** dedup:msg:{clientMsgId} */
     const val DEDUP_PREFIX = "dedup:msg:"

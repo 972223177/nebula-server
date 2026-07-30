@@ -15,6 +15,7 @@ import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
 import com.nebula.repository.dao.*
+import com.nebula.common.redis.RedisStreamQueue
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
@@ -73,6 +74,7 @@ class KoinVerificationTest {
         single<ConversationMemberDao> { mockk() }
         single<MessageDao> { mockk() }
         single<MessageQueueRepository> { mockk() }
+        single<RedisStreamQueue> { mockk() }
         single<FriendshipDao> { mockk() }
         single<FriendRequestDao> { mockk() }
         single<DeadLetterDao> { mockk() }

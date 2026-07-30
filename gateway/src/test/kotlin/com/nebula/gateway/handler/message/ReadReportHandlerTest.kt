@@ -12,11 +12,7 @@ import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationInfo
 import com.nebula.service.conversation.ConversationMemberInfo
 import com.nebula.service.conversation.ConversationService
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.api.StatefulRedisConnection
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
@@ -33,19 +29,16 @@ import kotlin.test.assertNotNull
  * 覆盖场景：
  * - 会话不存在 → 抛出 ConversationException(BizCode.CONV_NOT_FOUND)（D-27）
  * - 非会话成员 → 抛出 ConversationException(BizCode.NOT_MEMBER)（REVIEW-MEDIUM-10）
- * - 私聊且读者是会话成员 → 更新已读进度 + DEL unread key + 推送 READ_RECEIPT（D-23, D-24, D-28）
- * - 群聊 → 更新已读进度 + DEL unread key + 不推送（D-23）
+ * - 私聊且读者是会话成员 → 更新已读进度 + 推送 READ_RECEIPT（D-23, D-24, D-28）
+ * - 群聊 → 更新已读进度 + 不推送（D-23）
  * - 私聊另一方已离线/退出 → 不推送（不抛异常）
  */
-@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class ReadReportHandlerTest {
 
     private lateinit var messageService: MessageService
     private lateinit var conversationService: ConversationService
     private lateinit var pushService: PushService
     private lateinit var deliveryTrackingService: DeliveryTrackingService
-    private lateinit var connection: StatefulRedisConnection<String, String>
-    private lateinit var redis: RedisCoroutinesCommands<String, String>
     private lateinit var handler: ReadReportHandler
 
     private val session = Session(2001L, "token-y", "MOBILE", "dev-2", "conn-2")
@@ -56,16 +49,12 @@ class ReadReportHandlerTest {
         conversationService = mockk()
         pushService = mockk(relaxed = true)
         deliveryTrackingService = mockk(relaxed = true)
-        connection = mockk(relaxed = true)
-        redis = mockk(relaxed = true)
 
         handler = ReadReportHandler(
             messageService,
             conversationService,
             pushService,
-            deliveryTrackingService,
-            connection,
-            redis
+            deliveryTrackingService
         )
 
         // MessageService 已读报告默认返回成功（handler 先委托 messageService，再执行自有的 gateway 逻辑）
@@ -134,12 +123,7 @@ class ReadReportHandlerTest {
         assertEquals(200, resp.code)
         assertEquals("message/read", resp.method)
 
-        // 验证 updateReadReceipt 已被 messageService.readReport 内部调用
-
-        // 验证 Redis DEL 被调用
-        coVerify {
-            redis.del("conversation:conv-001:unread:2001")
-        }
+        // 验证 updateReadReceipt 已被 messageService.readReport 内部调用（未读清零在 DB 层统一处理）
 
         // 验证 pushReadReceipt 被调用（私聊场景）
         verify {
@@ -166,12 +150,7 @@ class ReadReportHandlerTest {
         assertNotNull(resp)
         assertEquals(200, resp.code)
 
-        // 验证 updateReadReceipt 已被 messageService.readReport 内部调用
-
-        // 验证 Redis DEL 被调用
-        coVerify {
-            redis.del("conversation:conv-002:unread:2001")
-        }
+        // 验证 updateReadReceipt 已被 messageService.readReport 内部调用（未读清零在 DB 层统一处理）
 
         // 验证 pushReadReceipt 不被调用（群聊不推送）
         verify(exactly = 0) {

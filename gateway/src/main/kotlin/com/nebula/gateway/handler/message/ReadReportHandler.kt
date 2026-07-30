@@ -14,36 +14,29 @@ import com.nebula.gateway.push.PushService
 import com.nebula.service.chat.MessageService
 import com.nebula.service.conversation.ConversationService
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.api.StatefulRedisConnection
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
 import kotlinx.coroutines.currentCoroutineContext
 
 /**
  * 已读报告 Handler — method = "message/read"（D-23 ~ D-28, D-71）。
  *
  * 职责：
- * - 委托 MessageService 处理已读报告业务逻辑（成员验证、更新已读进度）
- * - 删除 Redis 未读计数键（gateway 层 Redis 操作）
+ * - 委托 MessageService 处理已读报告业务逻辑（成员验证、更新已读进度、清零 unreadCount）
  * - 更新投递跟踪状态为 read（D-71 sent/delivered → read）
  * - 私聊场景推送已读回执给原发送者（gateway 层推送）
+ *
+ * 注：未读计数权威源是 DB [com.nebula.repository.entity.ConversationMemberEntity.unreadCount]
+ * （由 MessageService 在已读上报与 fan-out 未读自增两路径统一维护），不再维护冗余的 Redis 未读键。
  *
  * @param messageService 消息业务服务
  * @param conversationService 会话业务服务（会话查询 + 成员查询）
  * @param pushService 推送服务
  * @param deliveryTrackingService 投递三态跟踪服务（D-71）
- * @param connection Lettuce Redis 连接
- * @param redis Lettuce Redis 协程命令接口，默认由 connection.reactive() 构建（D-15-03：可注入用于测试）
  */
-@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class ReadReportHandler(
     private val messageService: MessageService,
     private val conversationService: ConversationService,
     private val pushService: PushService,
     private val deliveryTrackingService: DeliveryTrackingService,
-    private val connection: StatefulRedisConnection<String, String>,
-    private val redis: RedisCoroutinesCommands<String, String> = RedisCoroutinesCommandsImpl(connection.reactive())
 ) : Handler<ReadReportReq, Response> {
 
     override val method: String = MethodNames.Message.READ
@@ -56,18 +49,11 @@ class ReadReportHandler(
     override suspend fun handle(req: ReadReportReq): Response {
         val session = currentCoroutineContext().requireSession()
 
-        // 委托 MessageService 处理业务逻辑
+        // 委托 MessageService 处理业务逻辑（含未读清零：updateReadReceipt 将 unreadCount 置 0）
         messageService.readReport(req, session.userId)
 
         // D-71: 更新投递跟踪状态为 read（sent/delivered → read）
         deliveryTrackingService.markRead(req.lastReadMsgId, session.userId)
-
-        // D-28: 删除 Redis 未读计数键（gateway 层 Redis 操作）
-        try {
-            redis.del("conversation:${req.conversationId}:unread:${session.userId}")
-        } catch (e: Exception) {
-            logger.warn(e) { "清除读上报 Redis Key 失败: conversation:${req.conversationId}:unread:${session.userId}" }
-        }
 
         // D-27: 获取会话并判断类型
         val conversation = conversationService.getConversation(req.conversationId) ?: throw ConversationException(BizCode.CONV_NOT_FOUND, "会话不存在")

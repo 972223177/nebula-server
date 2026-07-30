@@ -110,6 +110,48 @@ class ConversationMemberDao : EntityDao<ConversationMemberEntity>(ConversationMe
     )
 
     /**
+     * 幂等递增会话中除发送者外所有成员的未读计数（§七 Durable Outbox）。
+     *
+     * 通过 [unread_dedup] 表（PK(conv_id, msg_id)）的 INSERT IGNORE 保证每条消息的未读自增
+     * 在进程崩溃 / PEL 重投下最多生效一次：
+     * - INSERT IGNORE 返回 1 → 首次处理，执行未读 +1；
+     * - INSERT IGNORE 返回 0 → 已处理过，跳过（避免双计）。
+     * 两步在同一事务内（调用方 [JpaTxRunner]），若 UPDATE 抛异常整体回滚，重试时可重新 claim。
+     *
+     * @param em 当前事务的 [EntityManager]
+     * @param conversationId 会话 ID
+     * @param msgId 消息 ID（幂等键组成部分）
+     * @param senderId 消息发送者用户 ID（不递增其未读计数）
+     * @return true 表示本次实际执行了未读自增，false 表示已处理过（幂等跳过）
+     */
+    fun incrementUnreadCountIdempotent(
+        em: EntityManager,
+        conversationId: String,
+        msgId: Long,
+        senderId: Long
+    ): Boolean {
+        val claimed = em.createNativeQuery(
+            "INSERT IGNORE INTO unread_dedup(conv_id, msg_id) VALUES(:convId, :msgId)"
+        ).setParameter("convId", conversationId)
+            .setParameter("msgId", msgId)
+            .executeUpdate()
+        if (claimed == 1) {
+            executeUpdate(
+                em,
+                """
+                UPDATE ConversationMemberEntity cm
+                SET cm.unreadCount = cm.unreadCount + 1
+                WHERE cm.conversationId = :convId AND cm.userId <> :senderId
+                """.trimIndent(),
+                "convId" to conversationId,
+                "senderId" to senderId
+            )
+            return true
+        }
+        return false
+    }
+
+    /**
      * 更新已读回执：设置 last_read_message_id 并清零 unread_count（DB-07）。
      *
      * @param em 当前事务的 [EntityManager]

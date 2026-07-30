@@ -171,6 +171,35 @@ class ConversationAndFriendshipDaoIntegrationTest : DatabaseTestBase() {
     }
 
     @Test
+    fun `incrementUnreadCountIdempotent does not double count on retry`() = runTest {
+        val convId = nextConvId()
+        val senderId = nextId()
+        val userA = nextId()
+        val userB = nextId()
+
+        txRunner.execute { em ->
+            conversationDao.insert(em, newConversation(convId, type = 2, name = "Unread", memberCount = 3))
+            memberDao.insert(em, newMember(convId, senderId))
+            memberDao.insert(em, newMember(convId, userA))
+            memberDao.insert(em, newMember(convId, userB))
+        }
+
+        val msgId = nextId()
+        // 首次计入
+        val first = txRunner.execute { em -> memberDao.incrementUnreadCountIdempotent(em, convId, msgId, senderId) }
+        // PEL 重投同一条消息 → 应被 unread_dedup 幂等跳过（§七 Durable Outbox）
+        val second = txRunner.execute { em -> memberDao.incrementUnreadCountIdempotent(em, convId, msgId, senderId) }
+
+        assertEquals(true, first, "首次应实际自增")
+        assertEquals(false, second, "重投应被幂等跳过")
+
+        val a = txRunner.execute { em -> memberDao.findByConversationIdAndUserId(em, convId, userA) }
+        val b = txRunner.execute { em -> memberDao.findByConversationIdAndUserId(em, convId, userB) }
+        assertEquals(1, a?.unreadCount, "重投不应双计")
+        assertEquals(1, b?.unreadCount, "重投不应双计")
+    }
+
+    @Test
     fun `updateReadReceipt resets unread to zero`() = runTest {
         val convId = nextConvId()
         val userId = nextId()

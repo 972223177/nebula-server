@@ -39,8 +39,8 @@ interface MessageOperations {
     /** 消息去重检查（Redis SETNX） */
     suspend fun checkAndSetDedup(clientMessageId: String, senderUid: Long): Boolean
 
-    /** 递增会话中除发送者外的所有成员的未读计数 */
-    suspend fun incrementUnreadCount(conversationId: String, senderUid: Long)
+    /** 幂等递增会话中除发送者外的所有成员的未读计数（§七 Durable Outbox，幂等键含 msgId） */
+    suspend fun incrementUnreadCount(conversationId: String, msgId: Long, senderUid: Long)
 }
 
 /**
@@ -297,14 +297,19 @@ class MessageServiceImpl(
     }
 
     /**
-     * 递增会话中除发送者外的所有成员的未读计数。
+     * 幂等递增会话中除发送者外的所有成员的未读计数（§七 Durable Outbox）。
+     *
+     * 经 [com.nebula.repository.dao.ConversationMemberDao.incrementUnreadCountIdempotent]
+     * 以 unread_dedup 表保证 PEL 重投 / 崩溃重启下不双计（详见 DAO KDoc）。
+     * 失败抛异常由 FanoutWorker 留 PEL 重试，不静默吞没。
      *
      * @param conversationId 会话 ID
+     * @param msgId 消息 ID（幂等键组成部分）
      * @param senderUid 发送者用户 ID（该用户不递增未读）
      */
-    override suspend fun incrementUnreadCount(conversationId: String, senderUid: Long) {
+    override suspend fun incrementUnreadCount(conversationId: String, msgId: Long, senderUid: Long) {
         txRunner.execute { em ->
-            conversationMemberDao.incrementUnreadCount(em, conversationId, senderUid)
+            conversationMemberDao.incrementUnreadCountIdempotent(em, conversationId, msgId, senderUid)
         }
     }
 

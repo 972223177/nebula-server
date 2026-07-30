@@ -8,53 +8,38 @@ import com.nebula.common.exception.BizException
 import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.requireSession
-import com.nebula.gateway.push.PushService
+import com.nebula.common.redis.RedisStreamQueue
 import com.nebula.service.chat.MessageService
 import com.nebula.service.chat.SendMessageResult
 import com.nebula.service.conversation.ConversationService
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.api.StatefulRedisConnection
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommands
-import io.lettuce.core.api.coroutines.RedisCoroutinesCommandsImpl
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.launch
+import java.util.Base64
 
 /**
  * chat/send Handler（D-04, D-05, D-06, D-09, D-11, D-13, D-72）。
  *
  * 职责：
  * - 委托 MessageService 处理核心业务逻辑（参数校验、成员验证、好友检查、去重、写入 Redis Stream）
- * - 写入后异步 fire-and-forget 执行未读计数递增和推送
+ * - 写入后发布 fan-out 事件到 fanout:stream，由 [com.nebula.gateway.fanout.FanoutWorker] 后台消费执行未读计数递增和推送
  *
- * D-72：Redis SETNX 去重逻辑已下沉到 MessageService.checkAndSetDedup() 中，
- * handler 层不再处理去重。
+ * D-72：Redis SETNX 去重逻辑已下沉到 MessageService.checkAndSetDedup() 中，handler 层不再处理去重。
+ *
+ * 2026-07-30（§七 Durable Outbox）：原 fire-and-forget（serverScope.launch + asyncUnreadAndPush）
+ * 不可重放（server 中途崩 / 重启丢未读与推送）。改为入队持久事件，由 FanoutWorker 消费并 XACK，
+ * 重启可重放（幂等锁防未读双计）。入队 fail-open：Redis 不可用时宁可暂不推送，也不让发送失败。
  *
  * @param sensitiveWordService 敏感词服务（发送前内容脱敏，含敏感词则替换为 * 后照常发送）
  * @param messageService 消息业务服务（去重 + 写入 + 未读计数）
- * @param pushService 推送服务（异步 fire-and-forget）
- * @param conversationService 会话业务服务（成员查询）
- * @param connection Redis 连接（未读计数 INCR 操作）
- * @param serverScope 服务级后台作用域，用于 fire-and-forget 推送，独立于请求上下文（不受 10s 超时/断连取消）
- *
- * 2026-07 review P1 修复：恢复 asyncUnreadAndPush 的 fire-and-forget 语义，挂到 serverScope。
- * 原 D-85 改为内联 suspend 调用，会使响应耗时包含推送 fan-out，且被 Dispatcher 的 10s withTimeout
- * 取消链波及（连接断开/超时直接中断推送），收件人收不到消息。serverScope 不在该取消链上。
+ * @param conversationService 会话业务服务（成员查询，供懒加载）
+ * @param fanoutQueue fan-out 事件队列（持久化未读 / 推送意图）
  */
-@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandler(
     private val sensitiveWordService: SensitiveWordService,
     private val messageService: MessageService,
-    private val pushService: PushService,
     private val conversationService: ConversationService,
-    private val connection: StatefulRedisConnection<String, String>,
-    private val serverScope: CoroutineScope
+    private val fanoutQueue: RedisStreamQueue
 ) : Handler<SendMessageReq, SendMessageResp> {
-
-    /** Lettuce Redis 协程命令接口，由 connection.reactive() 构建 */
-    private val redis: RedisCoroutinesCommands<String, String> =
-        RedisCoroutinesCommandsImpl(connection.reactive())
 
     override val method: String = MethodNames.Chat.SEND
 
@@ -129,9 +114,14 @@ class SendMessageHandler(
 
             val response = responseBuilder.build()
 
-            // Step 3: 未读计数 + 推送。2026-07 review P1：挂到 serverScope 做 fire-and-forget，
-            // 与响应解耦，且不随请求上下文的 10s 超时 / 连接断开被取消。
-            serverScope.launch { asyncUnreadAndPush(result) }
+            // Step 3: 未读计数 + 推送 — 发布持久化 fan-out 事件（§七 Durable Outbox）。
+            // 事件入 fanout:stream 后由 FanoutWorker 后台消费，server 重启 / 处理中途崩溃可重放。
+            // fail-open：Redis 不可用时宁可暂不推送（消息已持久化，client 拉历史可补偿），不让发送失败。
+            try {
+                fanoutQueue.enqueue(buildFanoutEvent(result))
+            } catch (e: Exception) {
+                logger.error(e) { "fanout 事件入队失败，跳过（消息已持久化）: msgId=${result.msgId}" }
+            }
 
             response
         } catch (e: BizException) {
@@ -145,47 +135,19 @@ class SendMessageHandler(
     }
 
     /**
-     * 异步执行未读计数递增和消息推送。
+     * 构造 fan-out 事件 payload（§七 Durable Outbox）。
      *
-     * M29: 合并 pushMessage 和 incrementUnreadCount 的两次成员查询为一次（通过 conversationService）。
-     * M24: 同步调用 messageService.incrementUnreadCount() 将未读计数持久化到 DB。
+     * 将「待推送 / 待加未读」意图持久化到 fanout:stream，由 [com.nebula.gateway.fanout.FanoutWorker] 后台消费。
+     * chatMessage 以 proto 二进制 Base64 编码入队，消费端解析还原。
      *
-     * @param result 消息发送结果，包含 conversationId、chatMessage、senderUid 等信息
+     * @param result 消息发送结果
+     * @return fan-out 事件字段表
      */
-    private suspend fun asyncUnreadAndPush(result: SendMessageResult) {
-        try {
-            // M29: 一次查询获取成员列表，复用给未读计数和推送
-            val members = conversationService.getConversationMembers(result.conversationId)
-            val targetUids = members.filter { it.userId != result.senderUid }.map { it.userId }
-
-            // M24: 未读计数持久化到 DB（JPQL 批量 UPDATE）
-            try {
-                messageService.incrementUnreadCount(result.conversationId, result.senderUid)
-            } catch (e: Exception) {
-                logger.error(e) { "DB unread count increment failed for conv=${result.conversationId}" }
-            }
-
-            // Redis 未读计数递增
-            for (uid in targetUids) {
-                try {
-                    redis.incr("conversation:${result.conversationId}:unread:$uid")
-                } catch (e: Exception) {
-                    logger.error(e) { "INCR unread failed for userId=$uid" }
-                }
-            }
-
-            // M29: 使用预查询的 userId 列表推送，避免 pushMessage 二次查询 DB
-            pushService.pushMessageToMembers(targetUids, result.chatMessage)
-        } catch (e: Exception) {
-            logger.error(e) {
-                "未读计数或推送异步操作失败: msgId=${result.msgId}, convId=${result.conversationId}, " +
-                    "senderUid=${result.senderUid}"
-            }
-            // REVIEW: 消息已写入 Stream 但推送/未读可能未完成。
-            // DeadLetterCallback 当前仅处理消息持久化失败，不处理推送异常。
-            // TODO: 扩展死信接口支持 fire-and-forget 异步操作补偿（如 onPushFailed），
-            //       或在此处写入 Redis 补偿标记键供后台 Job 扫描。
-        }
+    private fun buildFanoutEvent(result: SendMessageResult): Map<String, String> = buildMap {
+        put("conversationId", result.conversationId)
+        put("msgId", result.msgId.toString())
+        put("senderUid", result.senderUid.toString())
+        put("chatMessage", Base64.getEncoder().encodeToString(result.chatMessage.toByteArray()))
     }
 
     /**

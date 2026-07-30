@@ -3,10 +3,12 @@ package com.nebula.repository.init
 import com.nebula.common.config.ApplicationConfig
 import com.nebula.common.datasource.DataSourceProvider
 import com.nebula.common.init.ModuleInitializer
+import com.nebula.common.redis.RedisStreamQueue
 import com.nebula.common.session.SessionStore
 import com.nebula.repository.config.JpaConfig
 import com.nebula.repository.config.RedisConfig
 import com.nebula.repository.dao.*
+import com.nebula.repository.redis.FanoutQueueRepositoryImpl
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
 import com.nebula.repository.redis.PrivacyRepository
@@ -61,10 +63,16 @@ class RepositoryModuleInitializer : ModuleInitializer, KoinComponent {
         // 初始化 Redis Repository
         val sessionRepo = SessionRepository(redisConfig.connection)
         val messageQueueRepo = MessageQueueRepository(redisConfig.messageQueueConnection)
+        val fanoutQueueRepo = FanoutQueueRepositoryImpl(redisConfig.messageQueueConnection)
         val onlineStatusRepo = OnlineStatusRepository(redisConfig.connection)
 
         // 确保 Redis Stream 消费者组就绪
         runBlocking { redisConfig.initializeRedisInfra(messageQueueRepo) }
+        // §七 Durable Outbox：先 declare fan-out 队列端口，再确保消费者组就绪，
+        // 使「RedisStreamQueue 已注册」先于 FanoutModuleInitializer 成为不变量（审查 #3）
+        koin.declare<RedisStreamQueue>(fanoutQueueRepo)
+        // fan-out 事件 Stream 消费者组就绪
+        runBlocking { fanoutQueueRepo.ensureConsumerGroup() }
 
         // 消息写入路径：Redis Stream → 异步批量刷入 MySQL
         val messageWriteRepo = MessageRepositoryImpl(

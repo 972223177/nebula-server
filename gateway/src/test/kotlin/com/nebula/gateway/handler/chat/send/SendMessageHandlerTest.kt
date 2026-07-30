@@ -6,45 +6,47 @@ import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
 import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.gateway.handler.SessionKey
-import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.Session
 import com.nebula.gateway.testutil.sessionContext
+import com.nebula.common.redis.RedisStreamQueue
 import com.nebula.service.chat.MessageService
 import com.nebula.service.chat.SendMessageResult
 import com.nebula.service.conversation.ConversationService
-import io.lettuce.core.ExperimentalLettuceCoroutinesApi
-import io.lettuce.core.api.StatefulRedisConnection
 import io.mockk.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import java.util.Base64
 
 /**
- * SendMessageHandler 单元测试（D-04, D-13, D-72）。
+ * SendMessageHandler 单元测试（D-04, D-13, D-72, §七 Durable Outbox）。
  *
  * D-72：Redis SETNX 去重逻辑已下沉到 MessageService.checkAndSetDedup() 中，
  * handler 层不再处理去重。
+ *
+ * 2026-07-30（§七）：原 fire-and-forget（serverScope.launch + asyncUnreadAndPush）改为
+ * 发布持久化 fan-out 事件到 fanoutQueue，由 FanoutWorker 后台消费。本测试覆盖 handler 层
+ * 的入队语义（含 fail-open），未读自增与推送的真实执行由 FanoutWorkerTest 覆盖。
  *
  * 覆盖场景：
  * - 正常发送 → MessageService 返回 SendMessageResult，返回 SendMessageResp
  * - Step 链 SendMessageException → 直接传播（D-09）
  * - 非预期异常 → 包装为 BizException(INTERNAL_ERROR)（REVIEW-HIGH-2）
+ * - fan-out 事件入队与调用方取消解耦（§七）
+ * - fan-out 入队 payload 完整性
+ * - 入队失败 fail-open（Redis 抖动不导致发送失败）
  */
-@OptIn(ExperimentalLettuceCoroutinesApi::class)
 class SendMessageHandlerTest {
 
     private lateinit var sensitiveWordService: SensitiveWordService
     private lateinit var messageService: MessageService
-    private lateinit var pushService: PushService
     private lateinit var conversationService: ConversationService
-    private lateinit var connection: StatefulRedisConnection<String, String>
-    private lateinit var scope: CoroutineScope
+    private lateinit var fanoutQueue: RedisStreamQueue
     private lateinit var handler: SendMessageHandler
 
     private val session = Session(1001L, "token-x", "MOBILE", "dev-1", "conn-1")
@@ -53,58 +55,45 @@ class SendMessageHandlerTest {
     fun setUp() {
         sensitiveWordService = mockk<SensitiveWordService>()
         messageService = mockk()
-        pushService = mockk<PushService>(relaxed = true)
         conversationService = mockk<ConversationService>(relaxed = true)
-        connection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
-        scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        fanoutQueue = mockk<RedisStreamQueue>()
 
         // 默认不脱敏，filter 返回原文本，避免影响既有用例；敏感词用例单独 stub
         every { sensitiveWordService.filter(any()) } returnsArgument 0
         coEvery { messageService.checkAndSetDedup(any(), any()) } returns true
+        // fan-out 入队默认成功返回 id；失败场景由专门用例 stub
+        coEvery { fanoutQueue.enqueue(any()) } returns "mock-stream-id"
 
-        handler = SendMessageHandler(sensitiveWordService, messageService, pushService, conversationService, connection, scope)
+        handler = SendMessageHandler(sensitiveWordService, messageService, conversationService, fanoutQueue)
     }
 
-    /**
-     * 取消 CoroutineScope，释放 Dispatchers.Default 线程，避免非守护线程阻止 JVM 退出。
-     */
-    @AfterEach
-    fun tearDown() {
-        scope.cancel()
-    }
+    private fun buildSendResult(msgId: Long, convId: String): SendMessageResult = SendMessageResult(
+        msgId = msgId,
+        serverTs = 1700000000000L,
+        conversationId = convId,
+        senderUid = 1001L,
+        chatMessage = ChatMessage.newBuilder()
+            .setMsgId(msgId)
+            .setConversationId(convId)
+            .setSenderUid(1001L)
+            .build(),
+        conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
+        conversationCreated = false
+    )
+
+    private fun buildReq(convId: String, clientMsgId: String, content: String = "Hello") = SendMessageReq.newBuilder()
+        .setConversationId(convId)
+        .setContent(content)
+        .setClientMessageId(clientMsgId)
+        .build()
 
     @Test
     fun sendShouldReturnSendMessageResp() = runTest {
-        // MessageService 返回成功结果
-        // 注：使用真实 SendMessageResult 实例而非 mockk mock ——
-        // mockk 对 data class.copy() 会生成子 mock 而不继承父 stub，
-        // 导致 handler 的 result.copy(conversationCreated=...) 拿不到 msgId 等字段值。
-        // 2026-07 改造：SendMessageResult 多了 conversationCreated/conversationBrief 字段，
-        // 真实实例更稳定，未来再加字段不会回归。
-        val chatMsg = ChatMessage.newBuilder()
-            .setMsgId(50001L)
-            .setConversationId("conv-001")
-            .setSenderUid(1001L)
-            .build()
-        val sendResult = SendMessageResult(
-            msgId = 50001L,
-            serverTs = 1700000000000L,
-            conversationId = "conv-001",
-            senderUid = 1001L,
-            chatMessage = chatMsg,
-            conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
-            conversationCreated = false
-        )
+        val sendResult = buildSendResult(50001L, "conv-001")
         coEvery { messageService.sendMessage(any(), any()) } returns sendResult
 
-        val req = SendMessageReq.newBuilder()
-            .setConversationId("conv-001")
-            .setContent("Hello")
-            .setClientMessageId("msg-001")
-            .build()
-
         val resp = withContext(SessionKey(session)) {
-            handler.handle(req)
+            handler.handle(buildReq("conv-001", "msg-001"))
         }
 
         assertNotNull(resp)
@@ -120,31 +109,12 @@ class SendMessageHandlerTest {
     fun sensitiveContentShouldBeMaskedAndSent() = runTest(sessionContext()) {
         every { sensitiveWordService.filter("你是个傻逼") } returns "你是个***"
 
-        val chatMsg = ChatMessage.newBuilder()
-            .setMsgId(50001L)
-            .setConversationId("conv-001")
-            .setSenderUid(1001L)
-            .build()
-        val sendResult = SendMessageResult(
-            msgId = 50001L,
-            serverTs = 1700000000000L,
-            conversationId = "conv-001",
-            senderUid = 1001L,
-            chatMessage = chatMsg,
-            conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
-            conversationCreated = false
-        )
+        val sendResult = buildSendResult(50001L, "conv-001")
         val reqSlot = slot<SendMessageReq>()
         coEvery { messageService.sendMessage(req = capture(reqSlot), senderUid = any()) } returns sendResult
 
-        val req = SendMessageReq.newBuilder()
-            .setConversationId("conv-001")
-            .setContent("你是个傻逼")
-            .setClientMessageId("msg-sensitive")
-            .build()
-
         withContext(SessionKey(session)) {
-            handler.handle(req)
+            handler.handle(buildReq("conv-001", "msg-sensitive", "你是个傻逼"))
         }
         assertEquals("你是个***", reqSlot.captured.content, "落库/推送内容应为脱敏后结果")
     }
@@ -159,15 +129,9 @@ class SendMessageHandlerTest {
             messageService.sendMessage(any(), any())
         } throws BizException(BizCode.SEND_FAILED, "发送失败")
 
-        val req = SendMessageReq.newBuilder()
-            .setConversationId("conv-001")
-            .setContent("Hello")
-            .setClientMessageId("msg-001")
-            .build()
-
         val exception = assertFailsWith<BizException> {
             withContext(SessionKey(session)) {
-                handler.handle(req)
+                handler.handle(buildReq("conv-001", "msg-001"))
             }
         }
         assertEquals(BizCode.SEND_FAILED, exception.bizCode)
@@ -184,15 +148,9 @@ class SendMessageHandlerTest {
             messageService.sendMessage(any(), any())
         } throws RuntimeException("Redis connection timeout")
 
-        val req = SendMessageReq.newBuilder()
-            .setConversationId("conv-001")
-            .setContent("Hello")
-            .setClientMessageId("msg-002")
-            .build()
-
         val exception = assertFailsWith<BizException> {
             withContext(SessionKey(session)) {
-                handler.handle(req)
+                handler.handle(buildReq("conv-001", "msg-002"))
             }
         }
         assertEquals(BizCode.INTERNAL_ERROR, exception.bizCode)
@@ -200,56 +158,69 @@ class SendMessageHandlerTest {
     }
 
     /**
-     * F5（2026-07 review）：推送必须挂在 serverScope 上，不随调用方请求上下文（连接断开 / 10s 超时取消）丢失。
-     * 验证：即使发送方协程被取消，pushService.pushMessageToMembers 仍被调用。
+     * F5（2026-07-30 §七 Durable Outbox）：发送响应与未读/推送 fan-out 解耦。
+     * handle() 将「待推送/待加未读」作为持久事件同步入队 fanoutQueue，
+     * 无论调用方请求上下文（连接断开/取消）如何，入队都已完成 —— 推送由 FanoutWorker 后台执行，
+     * 与调用方取消链彻底隔离（对应原 P1「推送挂 serverScope」语义的新实现）。
+     * 验证：handle() 完成后 fanoutQueue.enqueue 被精确调用 1 次，且 callerScope 取消不阻止入队。
      */
     @Test
-    fun pushSurvivesCallerContextCancellation() = runTest {
-        val chatMsg = ChatMessage.newBuilder()
-            .setMsgId(50001L)
-            .setConversationId("conv-001")
-            .setSenderUid(1001L)
-            .build()
-        val sendResult = SendMessageResult(
-            msgId = 50001L,
-            serverTs = 1700000000000L,
-            conversationId = "conv-001",
-            senderUid = 1001L,
-            chatMessage = chatMsg,
-            conversationBrief = com.nebula.chat.conversation.ConversationBrief.getDefaultInstance(),
-            conversationCreated = false
-        )
+    fun fanoutEventEnqueuedDecoupledFromCallerContext() = runTest {
+        val sendResult = buildSendResult(50001L, "conv-001")
         coEvery { messageService.sendMessage(any(), any()) } returns sendResult
-        // 返回空成员列表：刻意跳过 redis.incr 循环与 userId 过滤，使推送路径不依赖 Redis 副作用，
-        // 从而精准验证「推送是否挂在 serverScope 上、不随调用方请求上下文取消而丢失」这一 P1 语义
-        // （真实多成员 + Redis 写入路径由集成测试覆盖）。
-        coEvery { conversationService.getConversationMembers("conv-001") } returns emptyList()
-
-        // 使用 TestScope 作为 serverScope（推送挂在其上），使推送确定性推进，
-        // 消除原实现依赖 Dispatchers.Default 线程池 + 固定 1s 等待的顺序相关偶发（FLAKE-2026-07）。
-        val testHandler = SendMessageHandler(
-            sensitiveWordService, messageService, pushService, conversationService, connection, this
-        )
 
         // 调用方协程（模拟发送方连接上下文，仍用真实 Dispatchers.Default 代表真实调用方）
         val callerScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         callerScope.launch(SessionKey(session)) {
-            testHandler.handle(
-                SendMessageReq.newBuilder()
-                    .setConversationId("conv-001")
-                    .setContent("Hello")
-                    .setClientMessageId("msg-f5")
-                    .build()
-            )
+            handler.handle(buildReq("conv-001", "msg-f5"))
         }.join()
         // 模拟发送方连接断开 / 请求上下文被取消
         callerScope.cancel()
 
-        // 推送挂在 TestScope（this）上，不随 callerScope 取消而丢失；runCurrent 确定性驱动推送执行。
-        // 若 P1 回归（推送错误绑在 callerScope），callerScope.cancel() 会取消它，
-        // pushMessageToMembers 不会被调用，coVerify 将失败。
-        testScheduler.runCurrent()
-        coVerify(exactly = 1) { pushService.pushMessageToMembers(any(), any()) }
+        // 入队是 handle() 内同步动作，与 callerScope 取消无关，必被调用且精确 1 次
+        coVerify(exactly = 1) { fanoutQueue.enqueue(any()) }
         callerScope.cancel()
+    }
+
+    /**
+     * fan-out 入队 payload 正确性：conversationId / msgId / senderUid / chatMessage(Base64 proto) 完整。
+     * 推送与未读自增的真实执行由 FanoutWorkerTest 覆盖。
+     */
+    @Test
+    fun fanoutEventPayloadIsComplete() = runTest {
+        val sendResult = buildSendResult(70001L, "conv-payload")
+        coEvery { messageService.sendMessage(any(), any()) } returns sendResult
+
+        val eventSlot = slot<Map<String, String>>()
+        coEvery { fanoutQueue.enqueue(capture(eventSlot)) } returns "id-1"
+
+        withContext(SessionKey(session)) {
+            handler.handle(buildReq("conv-payload", "msg-payload"))
+        }
+
+        val event = eventSlot.captured
+        assertEquals("conv-payload", event["conversationId"])
+        assertEquals("70001", event["msgId"])
+        assertEquals("1001", event["senderUid"])
+        val decoded = ChatMessage.parseFrom(Base64.getDecoder().decode(event["chatMessage"]))
+        assertEquals(70001L, decoded.msgId)
+        assertEquals("conv-payload", decoded.conversationId)
+    }
+
+    /**
+     * fail-open：fanoutQueue.enqueue 抛异常（Redis 抖动）时，发送响应仍正常返回，不冒泡为发送失败。
+     * 消息已持久化（经 messageService.sendMessage 落库），client 拉历史可补偿缺失的推送。
+     */
+    @Test
+    fun fanoutEnqueueFailureIsFailOpen() = runTest {
+        val sendResult = buildSendResult(80001L, "conv-fo")
+        coEvery { messageService.sendMessage(any(), any()) } returns sendResult
+        coEvery { fanoutQueue.enqueue(any()) } throws RuntimeException("Redis down")
+
+        val resp = withContext(SessionKey(session)) {
+            handler.handle(buildReq("conv-fo", "msg-fo"))
+        }
+        // 发送成功，未因 fan-out 入队失败而失败
+        assertEquals(80001L, resp.msgId)
     }
 }

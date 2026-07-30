@@ -1,13 +1,18 @@
 package com.nebula.gateway.di
 
 import com.nebula.common.idgen.SnowflakeIdGenerator
+import com.nebula.common.init.DeadLetterCallback
+import com.nebula.common.init.ModuleInitializer
 import com.nebula.common.sensitiveword.SensitiveWordService
 import com.nebula.common.session.SessionStore
 import com.nebula.gateway.delivery.DeliveryTrackingService
+import com.nebula.gateway.fanout.FanoutModuleInitializer
+import com.nebula.gateway.fanout.FanoutWorker
 import com.nebula.gateway.handler.AllHandlerCollector
 import com.nebula.gateway.handler.HandlerCollector
 import com.nebula.gateway.push.PushService
 import com.nebula.gateway.session.UserStreamRegistry
+import com.nebula.common.redis.RedisStreamQueue
 import com.nebula.repository.dao.*
 import com.nebula.repository.redis.MessageQueueRepository
 import com.nebula.repository.redis.OnlineStatusRepository
@@ -49,6 +54,7 @@ object GatewayTestModules {
         val privacyRepo = mockk<PrivacyRepository>()
         val redisConnection = mockk<StatefulRedisConnection<String, String>>(relaxed = true)
         val messageQueueRepo = mockk<MessageQueueRepository>()
+        val fanoutQueueRepo = mockk<RedisStreamQueue>()
         val txRunner = mockk<JpaTxRunner>()
         val userDao = mockk<UserDao>()
         val conversationDao = mockk<ConversationDao>()
@@ -65,6 +71,7 @@ object GatewayTestModules {
         single { idGenerator }
         single { redisConnection as StatefulRedisConnection<String, String> }
         single { messageQueueRepo }
+        single { fanoutQueueRepo }
         single { txRunner }
         single { userDao }
         single { conversationDao }
@@ -83,6 +90,7 @@ object GatewayTestModules {
         val conversationService = mockk<ConversationService>()
         val friendService = mockk<FriendService>()
         val onlineStatusService = mockk<OnlineStatusService>()
+        val pushService = mockk<PushService>(relaxed = true)
         val sensitiveWordService = mockk<SensitiveWordService>()
         val externalOrchestrator = mockk<ExternalServiceOrchestrator>()
 
@@ -111,9 +119,13 @@ object GatewayTestModules {
         single { deliveryTrackingService }
         single { UserStreamRegistry() }
         single { PushService(get(), get(), get()) }
-        single { com.nebula.gateway.handler.chat.send.SendMessageHandler(sensitiveWordService, messageService, get(), get(), get(), get(named("serverScope"))) } bind com.nebula.gateway.handler.Handler::class
+        single { com.nebula.gateway.handler.chat.send.SendMessageHandler(sensitiveWordService, messageService, conversationService, get()) } bind com.nebula.gateway.handler.Handler::class
+
+        // §七 Durable Outbox：fan-out 事件消费者（跑在 serverScope，由 FanoutModuleInitializer 启动）
+        single { FanoutWorker(get(), get(), get(), get(), get(), get(named("serverScope"))) }
+        single<ModuleInitializer>(named("fanout")) { FanoutModuleInitializer() }
         single { com.nebula.gateway.handler.message.PullMessagesHandler(messageService) } bind com.nebula.gateway.handler.Handler::class
-        single { com.nebula.gateway.handler.message.ReadReportHandler(messageService, get(), get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
+        single { com.nebula.gateway.handler.message.ReadReportHandler(messageService, get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
         single { com.nebula.gateway.handler.delivery.DeliveryAckHandler(get(), get(), get()) } bind com.nebula.gateway.handler.Handler::class
 
         // Phase 10: Message Reliability
@@ -151,6 +163,7 @@ object GatewayTestModules {
         // Phase 10: Admin 死信（无需认证，admin/ 前缀白名单）
         val deadLetterService = mockk<DeadLetterService>()
         single { deadLetterService }
+        single<DeadLetterCallback> { deadLetterService }
         single { com.nebula.gateway.handler.admin.DeadLetterQueryHandler(get()) } bind com.nebula.gateway.handler.Handler::class
         single { com.nebula.gateway.handler.admin.RetryDeadLetterHandler(get()) } bind com.nebula.gateway.handler.Handler::class
 
