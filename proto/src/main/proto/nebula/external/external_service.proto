@@ -109,6 +109,14 @@ message IpLocationResponse {
 //     → INVALID_PARAM(1000)；上游配额用尽 / 不可用 / 限流 → 复用既有 SERVICE_UNAVAILABLE / QUOTA_EXCEEDED / RATE_LIMITED 段。
 // ============================================================================
 
+// 服务风险等级，审批唯一裁决源（封闭集合，禁止用 string 表达，避免拼写漂移）。
+enum RiskLevel {
+  RISK_LEVEL_UNKNOWN = 0;           // 未知/未设置（proto3 哑值，不应在业务中出现）
+  LOW = 1;                          // 低风险：只读、无副作用（如天气/搜索/地理定位）
+  MID = 2;                          // 中风险：可能产生可回滚的副作用
+  HIGH = 3;                         // 高风险：不可回滚的副作用或敏感操作
+}
+
 // 单个可被 LLM 调用的外部服务描述（工具定义）。
 message ServiceDescriptor {
   string id = 1;                    // 稳定唯一 id（snake_case），等于 LLM tool name，如 "weather"
@@ -117,9 +125,9 @@ message ServiceDescriptor {
   string category = 4;              // 分类，如 "weather" / "web_search" / "utility"
   string input_schema_json = 5;     // 合法 JSON Schema 字符串，描述 params_json 结构（须与实际一致）
   string output_schema_json = 6;    // 合法 JSON Schema 字符串，描述 result_json 结构（须与实际一致）
-  string risk_level = 7;            // 风险等级 low / mid / high（审批唯一裁决源）
+  RiskLevel risk_level = 7;         // 风险等级（审批唯一裁决源），须 = (requires_user_consent == false ? LOW : 非 LOW)
   string version = 8;               // 描述版本，变更时客户端可据此判断兼容性
-  bool requires_user_consent = 9;   // 是否需要用户确认，须 = (risk_level != "low")（冗余一致性）
+  bool requires_user_consent = 9;   // 是否需要用户确认，须与 risk_level 一致：LOW 时恒 false，非 LOW 时恒 true（冗余一致性）
 }
 
 // external/list_services 请求。

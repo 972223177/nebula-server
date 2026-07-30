@@ -1,6 +1,7 @@
 package com.nebula.gateway.handler.external.agent
 
 import com.nebula.chat.external.IpLocationResponse
+import com.nebula.chat.external.RiskLevel
 import com.nebula.chat.external.ServiceDescriptor
 import com.nebula.service.external.ExternalServiceOrchestrator
 import com.nebula.service.external.GeoIpInvoker
@@ -28,7 +29,7 @@ class GeoIpServiceProvider : ServiceDefinitionProvider {
             .setCategory("utility")
             .setInputSchemaJson(INPUT_SCHEMA)
             .setOutputSchemaJson(OUTPUT_SCHEMA)
-            .setRiskLevel("low")
+            .setRiskLevel(RiskLevel.LOW)
             .setVersion(VERSION)
             .setRequiresUserConsent(false)
             .build()

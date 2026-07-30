@@ -2,6 +2,7 @@ package com.nebula.gateway.handler.external.agent
 
 import com.nebula.chat.external.IpLocationResponse
 import com.nebula.chat.external.ListServicesRequest
+import com.nebula.chat.external.RiskLevel
 import com.nebula.chat.external.SearchResponse
 import com.nebula.chat.external.SearchResultItem
 import com.nebula.chat.external.WeatherResponse
@@ -88,7 +89,7 @@ class ServiceRegistryTest {
     @Test
     fun allDescriptorsShouldBeLowRiskAndNoConsent() {
         registry.listDescriptors(ListServicesRequest.getDefaultInstance()).forEach {
-            assertEquals("low", it.riskLevel)
+            assertEquals(RiskLevel.LOW, it.riskLevel)
             assertFalse(it.requiresUserConsent)
         }
     }

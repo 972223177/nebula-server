@@ -1,5 +1,6 @@
 package com.nebula.gateway.handler.external.agent
 
+import com.nebula.chat.external.RiskLevel
 import com.nebula.chat.external.SearchResponse
 import com.nebula.chat.external.ServiceDescriptor
 import com.nebula.service.external.ExternalServiceOrchestrator
@@ -26,7 +27,7 @@ class WebSearchServiceProvider : ServiceDefinitionProvider {
             .setCategory("web_search")
             .setInputSchemaJson(INPUT_SCHEMA)
             .setOutputSchemaJson(OUTPUT_SCHEMA)
-            .setRiskLevel("low")
+            .setRiskLevel(RiskLevel.LOW)
             .setVersion(VERSION)
             .setRequiresUserConsent(false)
             .build()
