@@ -1,3 +1,6 @@
+-- ⚠️ 此迁移已 applied，禁止回改：连注释变更也会触发 Flyway checksum mismatch（FlywayValidateException）。
+--    如需演进 schema，新增 V{n+1}__*.sql；老库 checksum 不符时执行 `flyway repair`
+--    或 `UPDATE flyway_schema_history SET checksum=<本地计算值> WHERE version='2'`（前提列已存在）。
 -- Phase 7: 为 conversations 表新增会话状态、最后消息信息列（D-17, D-21）
 ALTER TABLE conversations
     ADD COLUMN status INT NOT NULL DEFAULT 0 COMMENT '0=正常, 1=已解散，D-17',
