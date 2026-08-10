@@ -1,8 +1,8 @@
 package com.nebula.service.external
 
 import com.nebula.chat.external.WeatherResponse
-import com.nebula.common.BizCode
-import com.nebula.common.exception.BizException
+import com.nebula.common.external.MissingParamException
+import com.nebula.common.external.ParamIssue
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -22,10 +22,14 @@ class WeatherInvoker(
     override val serviceId: String = SERVICE_ID
 
     override suspend fun invoke(userId: Long, clientIp: String, paramsJson: String): WeatherResponse {
-        val city = (parseParams(paramsJson)["city"] as? JsonPrimitive)?.content
-            ?: throw BizException(BizCode.INVALID_PARAM, "缺少必填参数 city")
-        if (city.isBlank()) throw BizException(BizCode.INVALID_PARAM, "city 不能为空")
-        val cacheKey = "weather:${city.trim().lowercase()}"
+        // city 为可选参数：缺省时不自动 geo 定位（不按 clientIp 触达上游），以结构化 param_issues 告知前端补参
+        val city = (parseParams(paramsJson)["city"] as? JsonPrimitive)?.content?.trim() ?: ""
+        if (city.isEmpty()) {
+            throw MissingParamException(listOf(
+                ParamIssue(param = "city", reason = "missing", hint = "请指定城市名，如 北京")
+            ))
+        }
+        val cacheKey = "weather:${city.lowercase()}"
         return pipeline.run(
             userId = userId,
             cacheKey = cacheKey,

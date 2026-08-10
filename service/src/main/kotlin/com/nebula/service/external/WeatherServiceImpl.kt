@@ -3,6 +3,8 @@ package com.nebula.service.external
 import com.nebula.chat.external.WeatherResponse
 import com.nebula.common.external.ExternalServiceConfig
 import com.nebula.common.external.ExternalServiceExceptions
+import com.nebula.common.external.MissingParamException
+import com.nebula.common.external.ParamIssue
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -41,7 +43,11 @@ data class WeatherData(
  * 所有公开方法声明在此接口；[WeatherServiceImpl] 实现之，聚合 Facade [WeatherService] 经 `by` 委托暴露。
  */
 interface WeatherOperations {
-    /** 查询天气：优先和风天气（有 Key），超时/报错/无 Key 整体降级 wttr.in */
+    /**
+     * 查询天气：优先和风天气（有 Key），超时/报错/无 Key 整体降级 wttr.in。
+     *
+     * @param city 城市名；**可选**，为空时不自动 geo 定位（不按 clientIp 触达上游），直接返回"未指定城市"提示文本（零上游调用、不消耗配额）。
+     */
     suspend fun queryWeather(city: String): WeatherResponse
 }
 
@@ -52,7 +58,7 @@ interface WeatherOperations {
  * - GeoAPI 城市搜索：城市名 → 经纬度 + LocationID；**结果本地缓存（TTL 24h）**，避免每次请求多发一次上游调用
  * - 实况天气 + 逐天预报（7d）+ 逐小时预报（24h）+ 分钟降水 + 空气质量 + 天气预警 + 生活指数 + 天文
  * - 合并格式化为**精简**纯文本（当前实况 + 3 天预报为主），控制 LLM token 成本
- * - 城市不存在时抛 [com.nebula.common.exception.BizException](INVALID_CITY)
+ * - 城市不存在（GeoAPI 未匹配到 LocationID）整体降级 wttr.in（而非向客户端暴露硬错误）
  * - 和风超时/报错时整体降级为 wttr.in（免费，无需 Key，支持 lang 中文描述，返回简易格式）
  *
  * 缓存策略：本服务**只缓存 GeoAPI 的 LocationID**（§4.2），天气结果缓存由 Orchestrator 统一负责，
@@ -92,7 +98,10 @@ class WeatherServiceImpl(
      */
     override suspend fun queryWeather(city: String): WeatherResponse {
         val c = city.trim()
-        if (c.isEmpty()) throw ExternalServiceExceptions.invalidCity(c)
+        // city 缺省时不自动 geo 定位（避免按 clientIp 触达上游、消耗配额），以结构化 param_issues 告知前端补参
+        if (c.isEmpty()) throw MissingParamException(listOf(
+            ParamIssue(param = "city", reason = "missing", hint = "请指定城市名，如 北京")
+        ))
 
         val formatted = if (config.qweather.apiKey.isNotBlank()) {
             try {
@@ -102,7 +111,13 @@ class WeatherServiceImpl(
                     queryWttr(c)
                 }
             } catch (e: com.nebula.common.exception.BizException) {
-                throw e
+                // 城市不存在（GeoAPI 未匹配到 LocationID）属上游数据缺失，降级 wttr.in 而非向客户端暴露硬错误
+                if (e.bizCode == com.nebula.common.BizCode.INVALID_CITY) {
+                    log.warn { "和风城市解析失败(${e.message})，降级 wttr.in: $c" }
+                    queryWttr(c)
+                } else {
+                    throw e
+                }
             } catch (e: Exception) {
                 log.warn { "和风天气查询失败，降级 wttr.in: ${e.message}" }
                 queryWttr(c)
@@ -153,9 +168,13 @@ class WeatherServiceImpl(
             if (parts.size == 2) return parts[0] to parts[1]
         }
         val obj = getQWJson("/v2/city/lookup", city)
-            ?: throw ExternalServiceExceptions.invalidCity(city)
+            ?: throw ExternalServiceExceptions.invalidCity(city).also {
+                log.warn { "和风 GeoAPI 未返回城市数据（city=$city），将降级 wttr.in" }
+            }
         val arr = obj["location"]?.jsonArray
-        if (arr.isNullOrEmpty()) throw ExternalServiceExceptions.invalidCity(city)
+        if (arr.isNullOrEmpty()) throw ExternalServiceExceptions.invalidCity(city).also {
+            log.warn { "和风 GeoAPI 返回空 location 数组（city=$city），将降级 wttr.in" }
+        }
         val loc = arr[0].jsonObject
         val id = loc["id"]?.jsonPrimitive?.content
             ?: throw ExternalServiceExceptions.invalidCity(city)
@@ -188,7 +207,7 @@ class WeatherServiceImpl(
                 if (code in AUTH_ERROR_CODES) {
                     throw QWeatherAuthException("和风天气鉴权/限流失败(code=$code)")
                 }
-                log.warn { "和风 API $path code=$code" }
+                log.warn { "和风 API $path 业务码异常 code=$code（location=$location），视为无数据" }
                 return@withContext null
             }
             obj

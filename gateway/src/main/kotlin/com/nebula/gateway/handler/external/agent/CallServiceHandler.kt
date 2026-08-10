@@ -4,6 +4,8 @@ import com.nebula.chat.external.CallServiceRequest
 import com.nebula.chat.external.CallServiceResponse
 import com.nebula.common.BizCode
 import com.nebula.common.exception.BizException
+import com.nebula.common.external.MissingParamException
+import com.nebula.common.external.ParamIssue
 import com.nebula.gateway.handler.ClientIpKey
 import com.nebula.gateway.handler.Handler
 import com.nebula.gateway.handler.MethodNames
@@ -19,7 +21,9 @@ import kotlinx.coroutines.currentCoroutineContext
  *
  * 错误语义（复用 BizCode，与 Dispatcher 既有映射一致）：
  * - 未知 `service_id` → [BizCode.NOT_FOUND]；
- * - `params_json` 缺失必填项或非法 → [BizCode.INVALID_PARAM]（由注册表执行体抛出）。
+ * - `params_json` 缺失必填项或类型非法 → 不报错，而是在 [CallServiceResponse.paramIssues] 中以
+ *   结构化方式告知前端（[com.nebula.common.external.MissingParamException] 由执行体抛出，
+ *   此处捕获后保持成功码，弱模型场景下前端可程序化识别"需引导用户补参"）。
  *
  * @param registry 外部服务注册表
  */
@@ -45,9 +49,23 @@ class CallServiceHandler(
         // service_id 统一小写，免疫 LLM 工具调用的大小写漂移（如 Web_Search）→ NOT_FOUND（见审查发现 2）
         val def = registry.get(req.serviceId.lowercase())
             ?: throw BizException(BizCode.NOT_FOUND, "未知 service_id: ${req.serviceId}")
-        val resultJson = def.invoke(userId, clientIp, req.paramsJson)
+        // 参数约束未满足（缺参/类型错/空值）由执行体抛出 MissingParamException：保持外层成功码，
+        // 仅在 param_issues 中结构化告知前端"需引导用户补参"，弱模型场景下前端可程序化识别。
+        val (resultJson, issues) = try {
+            def.invoke(userId, clientIp, req.paramsJson) to emptyList<ParamIssue>()
+        } catch (e: MissingParamException) {
+            // 缺参时不再调用上游、不计配额；result_json 回落为空对象，约束信息全在 param_issues
+            "{}" to e.issues
+        }
         return CallServiceResponse.newBuilder()
             .setResultJson(resultJson)
+            .addAllParamIssues(issues.map {
+                com.nebula.chat.external.ParamIssue.newBuilder()
+                    .setParam(it.param)
+                    .setReason(it.reason)
+                    .setHint(it.hint)
+                    .build()
+            })
             .build()
     }
 }

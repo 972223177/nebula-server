@@ -44,6 +44,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-root123}
       # 外部服务 Key：从 host 环境变量 / 本地 .env 注入（与 DB_PASSWORD 同模式，不写死在仓库）
       QWEATHER_API_KEY: ${QWEATHER_API_KEY}
+      # 和风专属实例域名（RE 版 host，如 n336xa4jrv.re.qweatherapi.com），覆盖 conf 默认的 devapi。
+      # 不配则用默认 devapi.qweather.com，GeoAPI 等接口可能因 host 与 Key 不匹配而失败。
+      QWEATHER_BASE_URL: ${QWEATHER_BASE_URL}
       SERPER_API_KEY: ${SERPER_API_KEY}
       # 开发环境，自动加载 config/dev.conf 的默认密码
       ENV: dev

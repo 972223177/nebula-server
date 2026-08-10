@@ -46,7 +46,7 @@ class WeatherServiceProvider : ServiceDefinitionProvider {
          */
         const val VERSION = "1.0.0"
         const val INPUT_SCHEMA =
-            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市名，如 北京\"}},\"required\":[\"city\"]}"
+            "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"城市名，如 北京。可选：缺省时不自动按 IP 定位，返回提示文本\"}}}"
         const val OUTPUT_SCHEMA =
             "{\"type\":\"object\",\"properties\":{\"formatted\":{\"type\":\"string\",\"description\":\"格式化天气文本\"}}}"
     }

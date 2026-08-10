@@ -2,8 +2,8 @@ package com.nebula.service.external
 
 import com.nebula.chat.external.SearchResponse
 import com.nebula.chat.external.SearchResultItem
-import com.nebula.common.BizCode
-import com.nebula.common.exception.BizException
+import com.nebula.common.external.MissingParamException
+import com.nebula.common.external.ParamIssue
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -24,13 +24,16 @@ class WebSearchInvoker(
 
     override suspend fun invoke(userId: Long, clientIp: String, paramsJson: String): SearchResponse {
         val obj = parseParams(paramsJson)
-        val query = (obj["query"] as? JsonPrimitive)?.content
-            ?: throw BizException(BizCode.INVALID_PARAM, "缺少必填参数 query")
-        if (query.isBlank()) throw BizException(BizCode.INVALID_PARAM, "query 不能为空")
+        val query = (obj["query"] as? JsonPrimitive)?.content?.trim()
+        if (query.isNullOrBlank()) throw MissingParamException(listOf(
+            ParamIssue(param = "query", reason = if (query == null) "missing" else "empty", hint = "请填写搜索关键词，如 最新 AI 新闻")
+        ))
         // 搜索类型白名单校验（未知类型拒绝，禁止透传客户端任意字符串）
         val typeRaw = (obj["search_type"] as? JsonPrimitive)?.content ?: "search"
         val type = SearchService.SearchType.fromApi(typeRaw)
-            ?: throw BizException(BizCode.INVALID_PARAM, "不支持的搜索类型: $typeRaw")
+            ?: throw MissingParamException(listOf(
+                ParamIssue(param = "search_type", reason = "invalid_value", hint = "仅支持 search / news / images 之一")
+            ))
         val maxResults = (obj["max_results"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 5
         val normalized = query.trim().lowercase().replace(Regex("\\s+"), " ")
         val cacheKey = "search:$normalized"

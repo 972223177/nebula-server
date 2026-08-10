@@ -26,7 +26,9 @@ option java_package = "com.nebula.chat.external";
 
 // external/query_weather 请求。
 message WeatherRequest {
-  string city = 1;          // 城市名，如 "北京"
+  // 城市名，如 "北京"。可选：缺省时不自动 geo 定位（不按 clientIp 触达上游），
+  // 直接返回"未指定城市"提示文本，不消耗天气配额。
+  string city = 1;
 }
 
 // external/query_weather 响应。
@@ -154,4 +156,16 @@ message CallServiceRequest {
 // external/call_service 响应。
 message CallServiceResponse {
   string result_json = 1;           // 调用结果 JSON，须符合该服务 output_schema_json
+  // 参数约束未满足时的结构化提示（如缺必填/类型不符/空值）。
+  // 非空表示本次调用未真正执行外部上游，前端应据此引导用户补全参数，而非当作成功结果展示。
+  // 此时外层 Response.code 仍为 0（成功），param_issues 非空即代表"需补参"约束信号，
+  // 与 result_json 中的文本提示形成双保险（弱模型场景下前端可程序化识别）。
+  repeated ParamIssue param_issues = 2;
+}
+
+// 单个参数约束问题（缺参/类型错/空值等），供前端程序化识别并引导用户补全。
+message ParamIssue {
+  string param = 1;     // 出问题的参数名，如 "city" / "query" / "search_type"
+  string reason = 2;    // 问题类型：missing（缺省未提供）/ empty（空串）/ invalid_type（类型不符）/ invalid_value（值不合法）
+  string hint = 3;      // 给前端的引导文案，如 "请指定城市名，如 北京"
 }
